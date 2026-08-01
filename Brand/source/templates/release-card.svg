@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <title>Lerro release card</title>
+  <rect width="1200" height="630" fill="#1C1C1E"/>
+  <rect x="48" y="48" width="1104" height="534" rx="34" fill="#242426" stroke="#545458"/>
+  <g transform="translate(96 82) scale(1.45)">
+    <path d="M8 10V42C8 49 12 52 19 52H20V38C20 30 24 26 30 26C36 26 40 30 40 38V52V38C40 30 44 26 50 26C56 26 60 30 60 38V52" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M78.34 35.24A11 11 0 1 0 78.34 42.76" stroke="#FFFFFF" stroke-width="7" stroke-linecap="butt"/>
+  </g>
+  <text x="96" y="250" fill="#FFFFFF" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif" font-size="72" font-weight="650" letter-spacing="-2.8">Lerro</text>
+  <text x="96" y="304" fill="#EBEBF5" fill-opacity="0.68" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="26">Speak freely. Write clearly.</text>
+  <rect x="96" y="430" width="166" height="48" rx="24" fill="#F2F2F2"/>
+  <text x="179" y="461" text-anchor="middle" fill="#292929" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="18" font-weight="600">VERSION 0.0.0</text>
+  <text x="96" y="528" fill="#EBEBF5" fill-opacity="0.52" font-family="'SF Mono', ui-monospace, monospace" font-size="16">SIGNED · NOTARIZED · OPEN SOURCE</text>
+  <g transform="translate(704 112) scale(5.5)" opacity="0.92">
+    <path d="M8 10V42C8 49 12 52 19 52H20V38C20 30 24 26 30 26C36 26 40 30 40 38V52V38C40 30 44 26 50 26C56 26 60 30 60 38V52" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M78.34 35.24A11 11 0 1 0 78.34 42.76" stroke="#FFFFFF" stroke-width="7" stroke-linecap="butt"/>
+  </g>
+</svg>

@@ -1,0 +1,56 @@
+name: Feature request
+description: Propose a focused improvement to Lerro.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: Describe the workflow and who benefits.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include the smallest useful interaction and its success criteria.
+    validations:
+      required: true
+  - type: dropdown
+    id: boundary
+    attributes:
+      label: Main boundary affected
+      options:
+        - Product interface
+        - Audio or Speech
+        - Accessibility or text delivery
+        - Global shortcuts
+        - Local model
+        - Local data or migration
+        - Build or release
+        - Documentation
+        - Unsure
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy, permission, and network impact
+      description: List new data, permissions, network calls, or logging. Enter “None identified” when applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and discussions.
+          required: true
+        - label: My examples contain synthetic data and licensed assets.
+          required: true

@@ -1,0 +1,8 @@
+# Exact paths that may name a previous product identity. Each path is dedicated
+# to executable migration logic, migration tests, or an explicit compatibility
+# statement reviewed for public release.
+Sources/LerroCore/Support/ApplicationPaths.swift
+Tests/LerroCoreTests/ApplicationDataMigratorTests.swift
+docs/decisions/0002-lerro-product-identity.md
+docs/identity.md
+docs/troubleshooting.md

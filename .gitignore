@@ -1,0 +1,14 @@
+.DS_Store
+.build/
+.swiftpm/
+dist/
+clean-public/
+outputs/
+work/
+xcuserdata/
+*.xcuserstate
+*.log
+config/local.json
+.env
+.env.*
+!.env.example

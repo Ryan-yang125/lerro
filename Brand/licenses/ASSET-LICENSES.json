@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "project": "Lerro",
+  "generatedAt": "2026-07-30",
+  "assets": [
+    {
+      "glob": "source/logo/**, source/app-icon/**, source/menu-bar/**, exports/logo/**, exports/app-icon/**, exports/menu-bar/**",
+      "origin": "Original deterministic artwork created for Lerro",
+      "creator": "Lerro project contributors",
+      "license": "LicenseRef-Lerro-Trademark",
+      "notes": "Name and logo usage follows the project trademark policy when that policy is added to the public repository."
+    },
+    {
+      "glob": "source/templates/**, templates/**, source/validation/**, validation/**, guidelines/**",
+      "origin": "Original deterministic artwork and documentation created for Lerro",
+      "creator": "Lerro project contributors",
+      "license": "CC-BY-4.0"
+    },
+    {
+      "glob": "tokens/**, scripts/**",
+      "origin": "Original implementation files created for Lerro",
+      "creator": "Lerro project contributors",
+      "license": "Apache-2.0"
+    }
+  ],
+  "fonts": [
+    {
+      "family": "SF Pro",
+      "distribution": "Provided by macOS; referenced through the system font stack",
+      "bundled": false
+    },
+    {
+      "family": "PingFang SC",
+      "distribution": "Provided by macOS; referenced through the system font stack",
+      "bundled": false
+    },
+    {
+      "family": "SF Mono",
+      "distribution": "Provided by Apple developer tools where available; referenced through a fallback stack",
+      "bundled": false
+    }
+  ],
+  "thirdPartyRasterOrVectorAssets": []
+}

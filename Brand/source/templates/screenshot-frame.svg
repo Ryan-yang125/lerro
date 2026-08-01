@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" fill="none">
+  <title>Lerro screenshot frame</title>
+  <defs>
+    <filter id="shadow" x="20" y="20" width="1560" height="1060" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="32" stdDeviation="36" flood-color="#000000" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="1100" fill="#F5F5F7"/>
+  <g filter="url(#shadow)">
+    <rect x="100" y="70" width="1400" height="940" rx="28" fill="#FFFFFF" stroke="#C7C7CC"/>
+    <path d="M100 126H1500" stroke="#D1D1D6"/>
+    <circle cx="138" cy="98" r="8" fill="#FF5F57"/>
+    <circle cx="166" cy="98" r="8" fill="#FEBC2E"/>
+    <circle cx="194" cy="98" r="8" fill="#28C840"/>
+    <rect x="124" y="150" width="1352" height="826" rx="12" fill="#E5E5EA"/>
+    <g transform="translate(650 466) scale(3.75)">
+      <path d="M8 10V42C8 49 12 52 19 52H20V38C20 30 24 26 30 26C36 26 40 30 40 38V52V38C40 30 44 26 50 26C56 26 60 30 60 38V52" stroke="#111113" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M78.34 35.24A11 11 0 1 0 78.34 42.76" stroke="#111113" stroke-width="7" stroke-linecap="butt"/>
+    </g>
+    <text x="800" y="614" text-anchor="middle" fill="#6E6E73" font-family="'SF Mono', ui-monospace, monospace" font-size="18">PLACE PRODUCT SCREENSHOT 1352 × 826</text>
+  </g>
+  <text x="100" y="1060" fill="#6E6E73" font-family="'SF Mono', ui-monospace, monospace" font-size="14">LERRO / SCREENSHOT FRAME / LIGHT</text>
+</svg>
