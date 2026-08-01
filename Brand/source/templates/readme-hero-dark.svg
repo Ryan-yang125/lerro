@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" fill="none">
+  <title>Lerro README hero dark</title>
+  <defs>
+    <filter id="shadow" x="240" y="210" width="1120" height="620" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="28" stdDeviation="36" flood-color="#000000" flood-opacity="0.46"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="#1C1C1E"/>
+  <g transform="translate(664 86) scale(3.4)">
+    <path d="M8 10V42C8 49 12 52 19 52H20V38C20 30 24 26 30 26C36 26 40 30 40 38V52V38C40 30 44 26 50 26C56 26 60 30 60 38V52" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M78.34 35.24A11 11 0 1 0 78.34 42.76" stroke="#FFFFFF" stroke-width="7" stroke-linecap="butt"/>
+  </g>
+  <text x="800" y="334" text-anchor="middle" fill="#FFFFFF" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif" font-size="82" font-weight="550" letter-spacing="-2.4">lerro</text>
+  <text x="800" y="394" text-anchor="middle" fill="#EBEBF5" fill-opacity="0.72" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="28" font-weight="500">自在说，清楚写。</text>
+  <g filter="url(#shadow)">
+    <rect x="278" y="468" width="1044" height="224" rx="32" fill="#2C2C2E" stroke="#545458"/>
+    <rect x="310" y="500" width="122" height="160" rx="22" fill="#242426"/>
+    <circle cx="344" cy="540" r="8" fill="#F2F2F2"/>
+    <rect x="366" y="533" width="44" height="14" rx="7" fill="#545458"/>
+    <rect x="326" y="574" width="90" height="12" rx="6" fill="#545458"/>
+    <rect x="326" y="606" width="68" height="12" rx="6" fill="#3A3A3C"/>
+    <text x="480" y="535" fill="#EBEBF5" fill-opacity="0.6" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="18" font-weight="600">RECENT DICTATION</text>
+    <text x="480" y="588" fill="#FFFFFF" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="30" font-weight="500">把自然表达整理成清晰、可编辑的文字。</text>
+    <path d="M482 630H1162" stroke="#545458" stroke-width="2"/>
+    <rect x="1176" y="614" width="6" height="32" rx="2" fill="#F2F2F2"/>
+  </g>
+  <text x="800" y="790" text-anchor="middle" fill="#EBEBF5" fill-opacity="0.55" font-family="'SF Mono', ui-monospace, monospace" font-size="16">LOCAL-FIRST macOS VOICE WRITING</text>
+</svg>

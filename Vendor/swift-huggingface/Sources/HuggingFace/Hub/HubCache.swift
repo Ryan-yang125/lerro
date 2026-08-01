@@ -1,0 +1,724 @@
+import Foundation
+
+#if canImport(FoundationNetworking)
+    import FoundationNetworking
+#endif
+
+/// A cache manager for Hugging Face Hub files.
+///
+/// `HubCache` implements a Python-compatible cache structure
+/// that allows sharing cached files between Swift and Python Hugging Face clients.
+/// The cache uses content-addressed storage with symlinks
+/// to efficiently store and share files across multiple revisions.
+///
+/// ## Cache Structure
+///
+/// The cache follows the Python `huggingface_hub` layout:
+///
+/// ```
+/// ~/.cache/huggingface/hub/
+/// ├── models--<namespace>--<repo>/
+/// │   ├── blobs/
+/// │   │   └── <etag>           # actual file content
+/// │   ├── refs/
+/// │   │   └── main             # contains commit hash
+/// │   └── snapshots/
+/// │       └── <commit_hash>/
+/// │           └── <filename>   # symlink → ../../blobs/<etag>
+/// ```
+///
+/// ## Cache Location
+///
+/// The cache location is determined by `CacheLocationProvider`, which by default
+/// checks in the following order:
+/// 1. `HF_HUB_CACHE` environment variable
+/// 2. `HF_HOME` environment variable + `/hub`
+/// 3. `~/.cache/huggingface/hub` (non-sandboxed macOS) or
+///    `Library/Caches/huggingface/hub` (sandboxed Apple apps and other platforms)
+///
+/// ## Usage
+///
+/// ```swift
+/// // Use default cache (auto-detected location)
+/// let cache = HubCache.default
+///
+/// // Use a custom cache location
+/// let customCache = HubCache(location: .fixed(directory: myCustomURL))
+///
+/// // Or with a path string
+/// let pathCache = HubCache(location: .init(path: "~/my-hf-cache"))
+///
+/// // Check if a file is cached
+/// if let cachedPath = cache.cachedFilePath(
+///     repo: "openai-community/gpt2",
+///     kind: .model,
+///     revision: "main",
+///     filename: "config.json"
+/// ) {
+///     let data = try Data(contentsOf: cachedPath)
+/// }
+///
+/// // Store a file in cache
+/// try cache.storeFile(
+///     at: downloadedFileURL,
+///     repo: "openai-community/gpt2",
+///     kind: .model,
+///     revision: "abc123...",
+///     filename: "config.json",
+///     etag: "abc123def456"
+/// )
+/// ```
+public struct HubCache: Sendable {
+    /// The default cache instance using auto-detected cache directory.
+    public static let `default` = HubCache()
+
+    /// The root directory of the cache.
+    public let cacheDirectory: URL
+
+    /// The location provider used to determine the cache directory.
+    public let locationProvider: CacheLocationProvider
+
+    /// Creates a cache manager with the specified location provider.
+    ///
+    /// - Parameter location: The location provider for determining the cache directory.
+    ///   Defaults to `.environment` for auto-detection from environment variables.
+    public init(location: CacheLocationProvider = .environment) {
+        self.locationProvider = location
+        self.cacheDirectory = location.resolve() ?? Self.fallbackDirectory
+    }
+
+    /// Creates a cache manager with the specified cache directory.
+    ///
+    /// - Parameter cacheDirectory: The root directory for the cache.
+    public init(cacheDirectory: URL) {
+        self.locationProvider = .fixed(directory: cacheDirectory)
+        self.cacheDirectory = cacheDirectory
+    }
+
+    /// The fallback cache directory when resolution fails.
+    private static var fallbackDirectory: URL {
+        CacheLocationProvider.defaultCacheDirectory()
+    }
+
+    // MARK: - Repository Path
+
+    /// Returns the cache directory for a specific repository.
+    ///
+    /// The directory name follows the Python format: `<kind>--<namespace>--<repo>`
+    /// For example: `models--openai-community--gpt2`
+    ///
+    /// - Parameters:
+    ///   - repo: The repository identifier (e.g., "openai-community/gpt2").
+    ///   - kind: The kind of repository.
+    /// - Returns: The URL to the repository's cache directory.
+    public func repoDirectory(repo: Repo.ID, kind: Repo.Kind) -> URL {
+        let repoName = repo.description.replacingOccurrences(of: "/", with: "--")
+        let dirName = "\(kind.pluralized)--\(repoName)"
+        return cacheDirectory.appendingPathComponent(dirName)
+    }
+
+    /// Returns the blobs directory for a repository.
+    public func blobsDirectory(repo: Repo.ID, kind: Repo.Kind) -> URL {
+        repoDirectory(repo: repo, kind: kind).appendingPathComponent("blobs")
+    }
+
+    /// Returns the metadata directory for a repository.
+    ///
+    /// Metadata files are stored outside snapshot directories so snapshots only
+    /// contain repository files.
+    public func metadataDirectory(repo: Repo.ID, kind: Repo.Kind) -> URL {
+        let repoName = repo.description.replacingOccurrences(of: "/", with: "--")
+        let dirName = "\(kind.pluralized)--\(repoName)"
+        return
+            cacheDirectory
+            .appendingPathComponent(".metadata")
+            .appendingPathComponent(dirName)
+    }
+
+    /// Returns the refs directory for a repository.
+    public func refsDirectory(repo: Repo.ID, kind: Repo.Kind) -> URL {
+        repoDirectory(repo: repo, kind: kind).appendingPathComponent("refs")
+    }
+
+    /// Returns the snapshots directory for a repository.
+    public func snapshotsDirectory(repo: Repo.ID, kind: Repo.Kind) -> URL {
+        repoDirectory(repo: repo, kind: kind).appendingPathComponent("snapshots")
+    }
+
+    /// Returns the lock-file base path in the `.locks` hierarchy for a cache path.
+    ///
+    /// For paths within `cacheDirectory`, this mirrors the relative layout under
+    /// `<cacheDirectory>/.locks/...`.
+    /// For paths outside the cache directory, the original path is returned.
+    public func lockPath(for path: URL) -> URL {
+        let cachePath = cacheDirectory.standardizedFileURL.path
+        let targetPath = path.standardizedFileURL.path
+        let cachePrefix = cachePath.hasSuffix("/") ? cachePath : cachePath + "/"
+        guard targetPath.hasPrefix(cachePrefix) else {
+            return path
+        }
+
+        let relativePath = String(targetPath.dropFirst(cachePrefix.count))
+        return
+            cacheDirectory
+            .appendingPathComponent(".locks")
+            .appendingPathComponent(relativePath)
+    }
+
+    // MARK: - Revision Resolution
+
+    /// Resolves a reference (branch/tag) to its commit hash.
+    ///
+    /// Reads the refs file to get the commit hash for a given reference.
+    ///
+    /// - Parameters:
+    ///   - repo: The repository identifier.
+    ///   - kind: The kind of repository.
+    ///   - ref: The reference name (e.g., "main").
+    /// - Returns: The commit hash if found, `nil` otherwise.
+    public func resolveRevision(repo: Repo.ID, kind: Repo.Kind, ref: String) -> String? {
+        let refFile = refsDirectory(repo: repo, kind: kind).appendingPathComponent(ref)
+        guard let contents = try? String(contentsOf: refFile, encoding: .utf8) else {
+            return nil
+        }
+        return contents.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Updates the reference file with a new commit hash.
+    ///
+    /// - Parameters:
+    ///   - repo: The repository identifier.
+    ///   - kind: The kind of repository.
+    ///   - ref: The reference name (e.g., "main", "refs/pr/5").
+    ///   - commit: The commit hash to store.
+    public func updateRef(repo: Repo.ID, kind: Repo.Kind, ref: String, commit: String) throws {
+        let refsDir = refsDirectory(repo: repo, kind: kind)
+        let refFile = refsDir.appendingPathComponent(ref)
+
+        // Create parent directories for nested refs (e.g., "refs/pr/5")
+        try FileManager.default.createDirectory(
+            at: refFile.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        try commit.write(to: refFile, atomically: true, encoding: .utf8)
+    }
+
+    // MARK: - Cache Lookup
+
+    /// Returns the path to a cached file if it exists.
+    ///
+    /// This method checks if a file is cached for the given repository and revision.
+    /// It first resolves the revision (if it's a branch name) to a commit hash,
+    /// then looks for the file in the snapshots directory.
+    ///
+    /// - Parameters:
+    ///   - repo: The repository identifier.
+    ///   - kind: The kind of repository.
+    ///   - revision: The revision (commit hash or branch name).
+    ///   - filename: The filename within the repository.
+    /// - Returns: The URL to the cached file if found, `nil` otherwise.
+    public func cachedFilePath(
+        repo: Repo.ID,
+        kind: Repo.Kind,
+        revision: String,
+        filename: String
+    ) -> URL? {
+        // Try to resolve the revision if it looks like a branch name
+        let commitHash: String
+        if isCommitHash(revision) {
+            commitHash = revision
+        } else if let resolved = resolveRevision(repo: repo, kind: kind, ref: revision) {
+            commitHash = resolved
+        } else {
+            // Can't resolve revision, not cached
+            return nil
+        }
+
+        let snapshotFile = snapshotsDirectory(repo: repo, kind: kind)
+            .appendingPathComponent(commitHash)
+            .appendingPathComponent(filename)
+
+        // Check if the snapshot file exists (could be symlink or regular file)
+        if FileManager.default.fileExists(atPath: snapshotFile.path) {
+            return snapshotFile
+        }
+
+        return nil
+    }
+
+    /// Returns the path to a cached blob by its etag.
+    ///
+    /// - Parameters:
+    ///   - repo: The repository identifier.
+    ///   - kind: The kind of repository.
+    ///   - etag: The normalized etag of the blob.
+    /// - Returns: The URL to the blob if it exists, `nil` otherwise.
+    public func cachedBlobPath(repo: Repo.ID, kind: Repo.Kind, etag: String) -> URL? {
+        let normalizedEtag = normalizeEtag(etag)
+        let blobPath = blobsDirectory(repo: repo, kind: kind)
+            .appendingPathComponent(normalizedEtag)
+
+        if FileManager.default.fileExists(atPath: blobPath.path) {
+            return blobPath
+        }
+
+        return nil
+    }
+
+    /// Returns a validated blob path for an etag.
+    ///
+    /// - Parameters:
+    ///   - repo: The repository identifier.
+    ///   - kind: The kind of repository.
+    ///   - etag: The etag used for content addressing.
+    /// - Returns: The URL to the blob path.
+    /// - Throws: `HubCacheError.invalidPathComponent` when etag is unsafe.
+    public func blobPath(repo: Repo.ID, kind: Repo.Kind, etag: String) throws -> URL {
+        let normalizedEtag = normalizeEtag(etag)
+        try validatePathComponent(normalizedEtag)
+        return blobsDirectory(repo: repo, kind: kind)
+            .appendingPathComponent(normalizedEtag)
+    }
+
+    /// Returns a validated path for an incomplete blob download.
+    ///
+    /// - Parameters:
+    ///   - repo: The repository identifier.
+    ///   - kind: The kind of repository.
+    ///   - etag: The etag used for content addressing.
+    /// - Returns: The URL to the incomplete blob path (`<etag>.incomplete`).
+    /// - Throws: `HubCacheError.invalidPathComponent` when etag is unsafe.
+    public func incompleteBlobPath(repo: Repo.ID, kind: Repo.Kind, etag: String) throws -> URL {
+        let normalizedEtag = normalizeEtag(etag)
+        try validatePathComponent(normalizedEtag)
+        return blobsDirectory(repo: repo, kind: kind)
+            .appendingPathComponent("\(normalizedEtag).incomplete")
+    }
+
+    /// Returns a validated snapshot directory path for a commit hash.
+    ///
+    /// - Parameters:
+    ///   - repo: The repository identifier.
+    ///   - kind: The kind of repository.
+    ///   - commitHash: The commit hash directory name under snapshots.
+    /// - Returns: The URL to the snapshot directory for that commit.
+    /// - Throws: `HubCacheError.invalidPathComponent` when commit hash is unsafe.
+    public func snapshotPath(repo: Repo.ID, kind: Repo.Kind, commitHash: String) throws -> URL {
+        try validatePathComponent(commitHash)
+        return snapshotsDirectory(repo: repo, kind: kind)
+            .appendingPathComponent(commitHash)
+    }
+
+    // MARK: - File Storage
+
+    /// Stores a file in the cache.
+    ///
+    /// This method:
+    /// 1. Copies the file to the blobs directory (content-addressed by etag)
+    /// 2. Creates a symlink in the snapshots directory pointing to the blob
+    /// 3. Updates the refs file if the revision is a branch name
+    ///
+    /// On platforms that don't support symlinks (like some Windows configurations),
+    /// the file is copied directly to the snapshots directory instead.
+    ///
+    /// File locking is used to coordinate concurrent access to blob files,
+    /// preventing race conditions when multiple processes download the same file.
+    ///
+    /// - Parameters:
+    ///   - sourceURL: The URL of the file to store.
+    ///   - repo: The repository identifier.
+    ///   - kind: The kind of repository.
+    ///   - revision: The commit hash for this file.
+    ///   - filename: The filename within the repository.
+    ///   - etag: The etag of the file (used for content addressing).
+    ///   - ref: Optional reference name to update (e.g., "main").
+    ///   - consumeSource: Remove a temporary source after the blob, snapshot,
+    ///     and optional ref have all been committed. Keep this disabled for
+    ///     caller-owned files.
+    public func storeFile(
+        at sourceURL: URL,
+        repo: Repo.ID,
+        kind: Repo.Kind,
+        revision: String,
+        filename: String,
+        etag: String,
+        ref: String? = nil,
+        consumeSource: Bool = false
+    ) async throws {
+        let normalizedEtag = normalizeEtag(etag)
+
+        // Validate path components to prevent path traversal attacks
+        try validatePathComponent(normalizedEtag)
+        try validatePathComponent(revision)
+
+        // Create directories
+        let blobsDir = blobsDirectory(repo: repo, kind: kind)
+        let snapshotsDir = snapshotsDirectory(repo: repo, kind: kind)
+            .appendingPathComponent(revision)
+
+        // Validate filename before creating directories or writing files
+        try validateFilename(filename, withinDirectory: snapshotsDir)
+
+        try FileManager.default.createDirectory(at: blobsDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: snapshotsDir, withIntermediateDirectories: true)
+
+        // Store blob (content-addressed) with file locking
+        let blobPath = blobsDir.appendingPathComponent(normalizedEtag)
+        let shouldConsumeSource = consumeSource
+            && sourceURL.standardizedFileURL != blobPath.standardizedFileURL
+        let lock = FileLock(path: lockPath(for: blobPath))
+
+        try await lock.withLock {
+            let sourceSize = try fileSize(at: sourceURL)
+            let blobSize = try? fileSize(at: blobPath)
+            if blobSize != sourceSize {
+                try installBlobAtomically(
+                    from: sourceURL,
+                    sourceSize: sourceSize,
+                    to: blobPath
+                )
+            }
+        }
+
+        // Create snapshot entry (symlink or copy)
+        let snapshotPath = snapshotsDir.appendingPathComponent(filename)
+
+        // Create parent directories for nested filenames
+        let snapshotParent = snapshotPath.deletingLastPathComponent()
+        if snapshotParent != snapshotsDir {
+            try FileManager.default.createDirectory(
+                at: snapshotParent,
+                withIntermediateDirectories: true
+            )
+        }
+
+        // Remove existing snapshot entry if present
+        try? FileManager.default.removeItem(at: snapshotPath)
+
+        // Try to create symlink, fall back to copy
+        let relativeBlobPath = relativePathToBlob(from: snapshotPath, blobName: normalizedEtag)
+        if !createSymlink(at: snapshotPath, pointingTo: relativeBlobPath) {
+            // Symlinks not supported, copy the file instead
+            try FileManager.default.copyItem(at: blobPath, to: snapshotPath)
+        }
+
+        // Update ref if provided
+        if let ref = ref {
+            try updateRef(repo: repo, kind: kind, ref: ref, commit: revision)
+        }
+
+        if shouldConsumeSource,
+           FileManager.default.fileExists(atPath: sourceURL.path) {
+            try FileManager.default.removeItem(at: sourceURL)
+        }
+    }
+
+    /// Stores data directly in the cache.
+    ///
+    /// File locking is used to coordinate concurrent access to blob files,
+    /// preventing race conditions when multiple processes download the same file.
+    ///
+    /// - Parameters:
+    ///   - data: The data to store.
+    ///   - repo: The repository identifier.
+    ///   - kind: The kind of repository.
+    ///   - revision: The commit hash for this file.
+    ///   - filename: The filename within the repository.
+    ///   - etag: The etag of the file.
+    ///   - ref: Optional reference name to update.
+    public func storeData(
+        _ data: Data,
+        repo: Repo.ID,
+        kind: Repo.Kind,
+        revision: String,
+        filename: String,
+        etag: String,
+        ref: String? = nil
+    ) async throws {
+        let normalizedEtag = normalizeEtag(etag)
+
+        // Validate path components to prevent path traversal attacks
+        try validatePathComponent(normalizedEtag)
+        try validatePathComponent(revision)
+
+        // Create directories
+        let blobsDir = blobsDirectory(repo: repo, kind: kind)
+        let snapshotsDir = snapshotsDirectory(repo: repo, kind: kind)
+            .appendingPathComponent(revision)
+
+        // Validate filename before creating directories or writing files
+        try validateFilename(filename, withinDirectory: snapshotsDir)
+
+        try FileManager.default.createDirectory(at: blobsDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: snapshotsDir, withIntermediateDirectories: true)
+
+        // Store blob with file locking
+        let blobPath = blobsDir.appendingPathComponent(normalizedEtag)
+        let lock = FileLock(path: lockPath(for: blobPath))
+
+        try await lock.withLock {
+            if !FileManager.default.fileExists(atPath: blobPath.path) {
+                try data.write(to: blobPath, options: .atomic)
+            }
+        }
+
+        // Create snapshot entry
+        let snapshotPath = snapshotsDir.appendingPathComponent(filename)
+
+        // Create parent directories for nested filenames
+        let snapshotParent = snapshotPath.deletingLastPathComponent()
+        if snapshotParent != snapshotsDir {
+            try FileManager.default.createDirectory(
+                at: snapshotParent,
+                withIntermediateDirectories: true
+            )
+        }
+
+        // Remove existing snapshot entry if present
+        try? FileManager.default.removeItem(at: snapshotPath)
+
+        // Try to create symlink, fall back to copy
+        let relativeBlobPath = relativePathToBlob(from: snapshotPath, blobName: normalizedEtag)
+        if !createSymlink(at: snapshotPath, pointingTo: relativeBlobPath) {
+            try data.write(to: snapshotPath, options: .atomic)
+        }
+
+        // Update ref if provided
+        if let ref = ref {
+            try updateRef(repo: repo, kind: kind, ref: ref, commit: revision)
+        }
+    }
+
+    // MARK: -
+
+    /// Normalizes an etag by removing quotes and the "W/" prefix.
+    ///
+    /// Python's huggingface_hub strips these when using etags as blob names.
+    ///
+    /// - Parameter etag: The raw etag from the HTTP response.
+    /// - Returns: The normalized etag suitable for use as a filename.
+    public func normalizeEtag(_ etag: String) -> String {
+        var normalized = etag
+
+        // Remove weak validator prefix
+        if normalized.hasPrefix("W/") {
+            normalized = String(normalized.dropFirst(2))
+        }
+
+        // Remove surrounding quotes
+        normalized = normalized.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+
+        return normalized
+    }
+
+    /// Checks if a string looks like a commit hash (40 hex characters).
+    private func isCommitHash(_ string: String) -> Bool {
+        guard string.count == 40 else { return false }
+        return string.allSatisfy { $0.isHexDigit }
+    }
+
+    /// Validates that a path component is safe and does not allow path traversal.
+    ///
+    /// This prevents attacks where malicious servers could send crafted ETag,
+    /// revision, or filename values to write files outside the cache directory.
+    ///
+    /// - Parameters:
+    ///   - value: The path value to validate.
+    ///   - allowSlashes: Whether to allow forward slashes (for nested filenames).
+    ///   - baseDirectory: If provided, validates the resolved path stays within this directory.
+    /// - Throws: `HubCacheError.invalidPathComponent` if the value is unsafe.
+    private func validatePathValue(
+        _ value: String,
+        allowSlashes: Bool = false,
+        withinDirectory baseDirectory: URL? = nil
+    ) throws {
+        guard !value.trimmingCharacters(in: .whitespaces).isEmpty else {
+            throw HubCacheError.invalidPathComponent(value)
+        }
+
+        if value.contains("\0") {
+            throw HubCacheError.invalidPathComponent(value)
+        }
+
+        if value.contains("\\") {
+            throw HubCacheError.invalidPathComponent(value)
+        }
+
+        if allowSlashes {
+            if value.hasPrefix("/") {
+                throw HubCacheError.invalidPathComponent(value)
+            }
+            let components = value.split(separator: "/", omittingEmptySubsequences: false)
+            for component in components {
+                if component == ".." || component.isEmpty {
+                    throw HubCacheError.invalidPathComponent(value)
+                }
+            }
+        } else {
+            if value.contains("..") || value.contains("/") {
+                throw HubCacheError.invalidPathComponent(value)
+            }
+        }
+
+        if let baseDirectory = baseDirectory {
+            let resolvedPath = baseDirectory.appendingPathComponent(value).standardized
+            let basePath = baseDirectory.standardized.path
+            guard resolvedPath.path.hasPrefix(basePath + "/") || resolvedPath.path == basePath else {
+                throw HubCacheError.invalidPathComponent(value)
+            }
+        }
+    }
+
+    /// Validates that a path component (etag, revision) is safe.
+    private func validatePathComponent(_ component: String) throws {
+        try validatePathValue(component, allowSlashes: false)
+    }
+
+    /// Validates that a filename path is safe and remains within the base directory.
+    private func validateFilename(_ filename: String, withinDirectory baseDirectory: URL) throws {
+        try validatePathValue(filename, allowSlashes: true, withinDirectory: baseDirectory)
+    }
+
+    /// Calculates the relative path from a snapshot file to its blob.
+    ///
+    /// The path needs to go up to the repo directory, then into blobs.
+    /// For a file at `snapshots/<commit>/<filename>`, the path is `../../blobs/<etag>`.
+    /// For nested files like `snapshots/<commit>/path/to/file`, we need more `..`.
+    private func relativePathToBlob(from snapshotPath: URL, blobName: String) -> String {
+        // Count directory depth from snapshots/<commit>/ to the file
+        let snapshotComponents = snapshotPath.pathComponents
+        guard let snapshotsIndex = snapshotComponents.lastIndex(of: "snapshots") else {
+            return "../../blobs/\(blobName)"
+        }
+
+        // Components after "snapshots": commit hash + filename path components
+        let componentsAfterSnapshots = snapshotComponents.count - snapshotsIndex - 1
+        // We need to go up (componentsAfterSnapshots) levels to reach the repo root
+        let upPath = String(repeating: "../", count: componentsAfterSnapshots)
+
+        return "\(upPath)blobs/\(blobName)"
+    }
+
+    /// Attempts to create a symbolic link.
+    ///
+    /// - Parameters:
+    ///   - path: The path where the symlink should be created.
+    ///   - destination: The destination path the symlink points to.
+    /// - Returns: `true` if the symlink was created successfully, `false` otherwise.
+    private func createSymlink(at path: URL, pointingTo destination: String) -> Bool {
+        do {
+            try FileManager.default.createSymbolicLink(
+                atPath: path.path,
+                withDestinationPath: destination
+            )
+            return true
+        } catch {
+            // Symlinks not supported on this platform/configuration
+            return false
+        }
+    }
+
+    private func fileSize(at url: URL) throws -> UInt64 {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        guard let size = attributes[.size] as? NSNumber else {
+            throw HubCacheError.blobSizeUnavailable(url.path)
+        }
+        return size.uint64Value
+    }
+
+    private func installBlobAtomically(
+        from sourceURL: URL,
+        sourceSize: UInt64,
+        to blobPath: URL
+    ) throws {
+        let fileManager = FileManager.default
+        let blobsDirectory = blobPath.deletingLastPathComponent()
+        let stagingRoot = blobsDirectory.appendingPathComponent(".staging")
+        let stagingDirectory = stagingRoot.appendingPathComponent(blobPath.lastPathComponent)
+        let stagingURL = stagingDirectory.appendingPathComponent(
+            "\(UUID().uuidString).partial"
+        )
+
+        try fileManager.createDirectory(
+            at: stagingDirectory,
+            withIntermediateDirectories: true
+        )
+        if let existingEntries = try? fileManager.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        ) {
+            for entry in existingEntries where entry.pathExtension == "partial" {
+                try? fileManager.removeItem(at: entry)
+            }
+        }
+        defer {
+            try? fileManager.removeItem(at: stagingURL)
+            try? fileManager.removeItem(at: stagingDirectory)
+            try? fileManager.removeItem(at: stagingRoot)
+        }
+
+        do {
+            try fileManager.linkItem(at: sourceURL, to: stagingURL)
+        } catch {
+            try fileManager.copyItem(at: sourceURL, to: stagingURL)
+        }
+
+        let stagedSize = try fileSize(at: stagingURL)
+        guard stagedSize == sourceSize else {
+            throw HubCacheError.blobSizeMismatch(
+                expected: sourceSize,
+                actual: stagedSize
+            )
+        }
+
+        if fileManager.fileExists(atPath: blobPath.path) {
+            _ = try fileManager.replaceItemAt(blobPath, withItemAt: stagingURL)
+        } else {
+            try fileManager.moveItem(at: stagingURL, to: blobPath)
+        }
+
+        let installedSize = try fileSize(at: blobPath)
+        guard installedSize == sourceSize else {
+            throw HubCacheError.blobSizeMismatch(
+                expected: sourceSize,
+                actual: installedSize
+            )
+        }
+    }
+}
+
+/// Errors that can occur during cache operations.
+public enum HubCacheError: Error, LocalizedError {
+    /// A path component contains unsafe characters that could enable path traversal attacks.
+    case invalidPathComponent(String)
+    /// A file destination is invalid for a single-file download operation.
+    case invalidFileDestination(String)
+    /// A file was cached successfully, but its snapshot path could not be resolved.
+    case cachedPathResolutionFailed(String)
+    /// Snapshot download needs either a cache directory or an explicit destination.
+    case snapshotRequiresCacheOrDestination(String)
+    /// A cache blob size could not be inspected.
+    case blobSizeUnavailable(String)
+    /// A staged or installed blob differs from the completed source size.
+    case blobSizeMismatch(expected: UInt64, actual: UInt64)
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidPathComponent(let component):
+            return
+                "Invalid path component '\(component)': contains path traversal characters or is empty"
+        case .invalidFileDestination(let path):
+            return "Invalid file destination '\(path)': expected a file path, not a directory"
+        case .cachedPathResolutionFailed(let path):
+            return "Unable to resolve cached file path for '\(path)'"
+        case .snapshotRequiresCacheOrDestination(let repo):
+            return
+                "Downloading snapshot for '\(repo)' requires either a configured cache or a destination"
+        case .blobSizeUnavailable(let path):
+            return "Unable to inspect cache blob size at '\(path)'"
+        case .blobSizeMismatch(let expected, let actual):
+            return "Cache blob size mismatch: expected \(expected) bytes, found \(actual) bytes"
+        }
+    }
+}

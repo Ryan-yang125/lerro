@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 80 64" fill="none">
+  <title>Lerro Micro Mark 24</title>
+  <path d="M8 10V42C8 49 12 52 19 52H20V38C20 30 24 26 30 26C36 26 40 30 40 38V52V38C40 30 44 26 50 26C56 26 60 30 60 38V52" stroke="#000000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M78.34 35.24A11 11 0 1 0 78.34 42.76" stroke="#000000" stroke-width="7" stroke-linecap="butt"/>
+</svg>

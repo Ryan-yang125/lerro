@@ -1,0 +1,54 @@
+:root {
+  color-scheme: light dark;
+  --lerro-color-window: Canvas;
+  --lerro-color-surface: ButtonFace;
+  --lerro-color-label: CanvasText;
+  --lerro-color-secondary-label: GrayText;
+  --lerro-color-separator: color-mix(in srgb, CanvasText 18%, transparent);
+  --lerro-color-accent: AccentColor;
+  --lerro-color-brand-ink: #111113;
+  --lerro-color-brand-light: #f5f2ea;
+  --lerro-color-success: #34c759;
+  --lerro-color-warning: #ff9500;
+  --lerro-color-error: #ff3b30;
+
+  --lerro-font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+  --lerro-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif;
+  --lerro-font-mono: "SF Mono", ui-monospace, monospace;
+
+  --lerro-space-1: 0.25rem;
+  --lerro-space-2: 0.5rem;
+  --lerro-space-3: 0.75rem;
+  --lerro-space-4: 1rem;
+  --lerro-space-6: 1.5rem;
+  --lerro-space-8: 2rem;
+
+  --lerro-radius-control: 0.375rem;
+  --lerro-radius-surface: 0.625rem;
+  --lerro-radius-panel: 0.875rem;
+
+  --lerro-motion-feedback: 120ms;
+  --lerro-motion-crossfade: 160ms;
+  --lerro-motion-panel: 180ms;
+  --lerro-spring-response: 320ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --lerro-color-success: #30d158;
+    --lerro-color-warning: #ff9f0a;
+    --lerro-color-error: #ff453a;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --lerro-spring-response: var(--lerro-motion-crossfade);
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --lerro-color-separator: CanvasText;
+  }
+}

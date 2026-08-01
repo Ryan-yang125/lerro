@@ -1,0 +1,1092 @@
+import AppKit
+import SwiftUI
+import LerroCore
+
+private enum OnboardingStep: Int, CaseIterable, Identifiable {
+    case privacy
+    case localMode
+    case permissions
+    case shortcuts
+    case practice
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .privacy: "隐私从这台 Mac 开始"
+        case .localMode: "选择初始处理方式"
+        case .permissions: "连接 macOS 权限"
+        case .shortcuts: "设置听写快捷键"
+        case .practice: "完成一次语音输入"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .privacy:
+            "了解收音、历史与本地处理，再按自己的节奏完成设置。"
+        case .localMode:
+            "基础听写可直接使用 Apple 语音识别；本地 AI 可整理表达。完成引导后，也能在“智能处理”中配置自己的 API。"
+        case .permissions:
+            "四项权限分别负责收音、转写、全局快捷键和文字写入。您也可以稍后在设置中继续。"
+        case .shortcuts:
+            "选择顺手的按键和触发方式，实时确认这块键盘是否成功送出按下与松开事件。"
+        case .practice:
+            "将光标放进练习编辑器，使用刚设置的快捷键或下方按钮开始听写。"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .privacy: "hand.raised.fill"
+        case .localMode: "cpu.fill"
+        case .permissions: "lock.shield.fill"
+        case .shortcuts: "keyboard.fill"
+        case .practice: "waveform"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .privacy: "隐私"
+        case .localMode: "处理"
+        case .permissions: "权限"
+        case .shortcuts: "快捷键"
+        case .practice: "练习"
+        }
+    }
+}
+
+private enum OnboardingPermission: String, CaseIterable, Identifiable {
+    case microphone
+    case speechRecognition
+    case accessibility
+    case inputMonitoring
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .microphone: "麦克风"
+        case .speechRecognition: "语音识别"
+        case .accessibility: "辅助功能"
+        case .inputMonitoring: "输入监控"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .microphone: "录制您主动发起的语音"
+        case .speechRecognition: "通过 Apple Speech 转成文字"
+        case .accessibility: "读取有限上下文并写入当前应用"
+        case .inputMonitoring: "响应全局 Fn 快捷键"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .microphone: "mic.fill"
+        case .speechRecognition: "captions.bubble.fill"
+        case .accessibility: "accessibility"
+        case .inputMonitoring: "keyboard.fill"
+        }
+    }
+
+    var systemSettingsURLString: String {
+        switch self {
+        case .microphone:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        case .speechRecognition:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
+        case .accessibility:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        case .inputMonitoring:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+        }
+    }
+}
+
+private enum OnboardingAccessibilityFocus: Hashable {
+    case heading
+}
+
+struct OnboardingView: View {
+    @Bindable var session: AppSession
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @AccessibilityFocusState private var accessibilityFocus: OnboardingAccessibilityFocus?
+    @FocusState private var practiceEditorFocused: Bool
+
+    @State private var step: OnboardingStep = .privacy
+    @State private var sampleText = "把光标放在这里，然后按住 Fn 说一句话。"
+    @State private var showShortcutHelp = false
+    @State private var shortcutDraft: ShortcutBindingDraft?
+    @State private var shortcutActivation: ShortcutActivation = .hold
+    @State private var shortcutSaveError = ""
+    @State private var isShortcutSaving = false
+    @State private var shortcutConfigurationPrepared = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            progressHeader
+                .frame(height: 72)
+
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 28) {
+                            if step != .privacy {
+                                Button(action: previous) {
+                                    Label("返回", systemImage: "chevron.left")
+                                }
+                                .buttonStyle(.borderless)
+                                .controlSize(.regular)
+                                .accessibilityHint("返回上一步")
+                            }
+
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(step.title)
+                                    .font(LerroTheme.font(24, weight: .medium))
+                                    .tracking(LerroTheme.uiTracking)
+                                    .foregroundStyle(.primary)
+                                    .accessibilityAddTraits(.isHeader)
+                                    .accessibilityFocused($accessibilityFocus, equals: .heading)
+
+                                Text(step.detail)
+                                    .font(LerroTheme.font(14))
+                                    .foregroundStyle(.secondary)
+                                    .lineSpacing(3)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            pageContent
+                                .id(step)
+                                .transition(reduceMotion ? .identity : .opacity)
+
+                            HStack(spacing: 12) {
+                                if step == .permissions && !session.requiredPermissionsGranted {
+                                    Text("未完成的权限可稍后继续设置")
+                                        .font(LerroTheme.font(12))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button(primaryActionTitle, action: next)
+                                    .buttonStyle(LerroPillButtonStyle(prominent: true))
+                                    .controlSize(.large)
+                                    .keyboardShortcut(.defaultAction)
+                                    .disabled(isShortcutSaving)
+                            }
+                        }
+                        .frame(maxWidth: 620, minHeight: 520, alignment: .topLeading)
+                        .padding(.vertical, 30)
+                        .padding(.horizontal, 56)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                    .frame(width: geometry.size.width * 0.60, height: geometry.size.height)
+                    .background(LerroTheme.main)
+
+                    visualPanel
+                        .frame(width: geometry.size.width * 0.40, height: geometry.size.height)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(LerroTheme.main)
+        .task(id: step) {
+            switch step {
+            case .permissions:
+                await session.refreshPermissions(prompt: false)
+            case .practice:
+                await session.refreshPermissions(prompt: false)
+                await session.refreshAudioInputDevices()
+            case .shortcuts:
+                prepareShortcutDraftIfNeeded()
+                shortcutConfigurationPrepared = session.beginShortcutConfiguration()
+                if !shortcutConfigurationPrepared {
+                    shortcutSaveError = session.currentError ?? "请完成当前语音输入后再设置快捷键。"
+                }
+            case .privacy, .localMode:
+                break
+            }
+        }
+        .onChange(of: step) { oldStep, newStep in
+            if oldStep == .shortcuts {
+                session.endShortcutConfiguration()
+                shortcutConfigurationPrepared = false
+            }
+            if newStep != .practice {
+                session.stopOnboardingMicrophoneTest()
+            }
+            session.preferences.onboardingStepIndex = newStep.rawValue
+            session.savePreferences()
+            Task { @MainActor in
+                accessibilityFocus = .heading
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active, step == .permissions || step == .practice else { return }
+            Task { await session.refreshPermissions(prompt: false) }
+        }
+        .alert("快捷键没有反应", isPresented: $showShortcutHelp) {
+            Button("打开输入监控设置") {
+                openSystemSettings(for: .inputMonitoring)
+            }
+            Button("打开辅助功能设置") {
+                openSystemSettings(for: .accessibility)
+            }
+            Button("重新检查") {
+                Task { await session.refreshPermissions(prompt: false) }
+            }
+            Button("继续练习", role: .cancel) {}
+        } message: {
+            Text("开启输入监控和辅助功能后，回到 Lerro 即会自动刷新状态。部分系统权限在首次开启后需要重新启动应用。")
+        }
+        .onAppear {
+            if let index = session.preferences.onboardingStepIndex,
+               let restoredStep = OnboardingStep(rawValue: index) {
+                step = restoredStep
+            }
+            accessibilityFocus = .heading
+        }
+        .onDisappear {
+            session.stopOnboardingMicrophoneTest()
+            session.endShortcutConfiguration()
+        }
+    }
+
+    private var progressHeader: some View {
+        VStack(spacing: 9) {
+            HStack(spacing: 14) {
+                LerroBrandBadge(compact: true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(step.shortTitle)
+                        .font(LerroTheme.font(13, weight: .medium))
+                        .foregroundStyle(.primary)
+                    Text("第 \(step.rawValue + 1) 步，共 \(OnboardingStep.allCases.count) 步")
+                        .font(LerroTheme.font(12))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                HStack(spacing: 7) {
+                    ForEach(OnboardingStep.allCases) { item in
+                        Circle()
+                            .fill(item.rawValue <= step.rawValue ? LerroTheme.accent : LerroTheme.fillContainerTough)
+                            .frame(width: item == step ? 9 : 7, height: item == step ? 9 : 7)
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
+
+            ProgressView(
+                value: Double(step.rawValue + 1),
+                total: Double(OnboardingStep.allCases.count)
+            )
+            .progressViewStyle(.linear)
+            .accessibilityLabel("设置进度")
+            .accessibilityValue("第 \(step.rawValue + 1) 步，共 \(OnboardingStep.allCases.count) 步")
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 10)
+        .background(LerroTheme.topLayer)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+    }
+
+    @ViewBuilder
+    private var pageContent: some View {
+        switch step {
+        case .privacy:
+            privacyContent
+        case .localMode:
+            localModeContent
+        case .permissions:
+            permissionsContent
+        case .shortcuts:
+            shortcutsContent
+        case .practice:
+            practiceContent
+        }
+    }
+
+    private var privacyContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            informationRow(
+                title: "无需账户",
+                detail: "Lerro 可直接使用，个人资料保存在当前 Mac。",
+                icon: "person.crop.circle.badge.checkmark"
+            )
+            informationRow(
+                title: "本地数据保留在当前 Mac",
+                detail: "历史、词典、偏好与本地模型结果写入 Lerro 的 Application Support 目录。",
+                icon: "internaldrive.fill"
+            )
+            informationRow(
+                title: "API 模式由您控制",
+                detail: "启用后，只会按“智能处理”中的开关发送原始转写和允许的上下文。",
+                icon: "network"
+            )
+            informationRow(
+                title: "系统语音识别",
+                detail: "Apple Speech 按 macOS 当前语言资源与隐私设置处理语音。",
+                icon: "captions.bubble.fill"
+            )
+
+            Divider()
+                .padding(.vertical, 4)
+
+            Toggle(isOn: saveAudioBinding) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("保存原始录音")
+                        .font(LerroTheme.font(14, weight: .medium))
+                    Text("默认关闭；开启后，完成的录音会随历史保存在这台 Mac。")
+                        .font(LerroTheme.font(12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
+            .accessibilityHint("可以随时在设置中更改")
+        }
+        .padding(18)
+        .background(LerroTheme.fillContainerThin)
+        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
+                .stroke(LerroTheme.thinBorder)
+        }
+    }
+
+    private var localModeContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Picker("听写处理", selection: intelligenceModeBinding) {
+                Text("原始听写").tag(IntelligenceMode.raw)
+                Text("本地 AI").tag(IntelligenceMode.local)
+                Text("API 模型").tag(IntelligenceMode.remote)
+            }
+            .pickerStyle(.segmented)
+            .accessibilityHint("选择原始听写、本地 AI 或已配置的 API 模型")
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: onboardingIntelligenceIcon)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(LerroTheme.accent)
+                        .frame(width: 28)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(onboardingIntelligenceTitle)
+                            .font(LerroTheme.font(14, weight: .medium))
+                        Text(localModeDetail)
+                            .font(LerroTheme.font(13))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                if session.preferences.intelligenceMode == .local {
+                    Divider()
+
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("模型状态")
+                                .font(LerroTheme.font(12, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Text(localModelStatusText)
+                                .font(LerroTheme.font(13, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
+                        Spacer()
+                        Button(localModelActionTitle) {
+                            if session.preferences.hasApprovedModelDownload {
+                                session.activateIntelligenceMode(.local)
+                            } else {
+                                session.requestLocalModelPreparation()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(localModelActionDisabled)
+                    }
+
+                    if showsLocalModelProgress {
+                        ProgressView(value: min(1, max(0, session.modelStatus.progress)))
+                            .accessibilityLabel("本地模型准备进度")
+                    }
+
+                    Text("首次准备会在您确认后下载约 3.03 GB。翻译、问答和改写可以使用本地模型，也可以在设置中配置 API 模型。")
+                        .font(LerroTheme.font(12))
+                        .foregroundStyle(.secondary)
+                } else if session.preferences.intelligenceMode == .remote {
+                    Divider()
+                    Label(
+                        "\(session.preferences.remoteProvider.provider.lerroDisplayName) · \(session.preferences.remoteProvider.modelIdentifier)",
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .font(LerroTheme.font(13, weight: .medium))
+                    .foregroundStyle(LerroTheme.green)
+
+                    Text("API Key 与上下文发送项可在“设置 → 智能处理”中测试和调整。")
+                        .font(LerroTheme.font(12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(18)
+            .background(LerroTheme.fillContainerThin)
+            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
+                    .stroke(LerroTheme.thinBorder)
+            }
+        }
+    }
+
+    private var permissionsContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(OnboardingPermission.allCases) { permission in
+                permissionCard(permission, granted: permissionGranted(permission))
+            }
+
+            HStack(spacing: 10) {
+                if session.requiredPermissionsGranted {
+                    Label("四项权限均已就绪", systemImage: "checkmark.circle.fill")
+                        .font(LerroTheme.font(13, weight: .medium))
+                        .foregroundStyle(LerroTheme.green)
+                        .accessibilityLabel("四项权限均已授权")
+                } else {
+                    Button("请求系统权限") {
+                        Task { await session.refreshPermissions(prompt: true) }
+                    }
+                    .buttonStyle(LerroPillButtonStyle(prominent: true))
+                    .controlSize(.large)
+                    .help("由 macOS 依次显示尚未决定的权限提示")
+                }
+
+                Spacer()
+
+                Button("重新检查") {
+                    Task { await session.refreshPermissions(prompt: false) }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+            }
+        }
+    }
+
+    private var shortcutsContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if shortcutConfigurationPrepared {
+                ShortcutRecorderCard(
+                    shortcut: $shortcutDraft,
+                    activation: $shortcutActivation
+                )
+            } else {
+                ProgressView("正在准备按键检测…")
+                    .frame(maxWidth: .infinity, minHeight: 180)
+                    .accessibilityHint("正在暂停生产快捷键并准备录制")
+            }
+
+            if !shortcutSaveError.isEmpty {
+                Label(shortcutSaveError, systemImage: "exclamationmark.triangle.fill")
+                    .font(LerroTheme.font(12))
+                    .foregroundStyle(LerroTheme.orange)
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: "waveform")
+                    .foregroundStyle(LerroTheme.accent)
+                Text("这项设置用于听写。翻译与问答可稍后在设置中分别调整。")
+                    .font(LerroTheme.font(12))
+                    .foregroundStyle(.secondary)
+            }
+
+            Button("快捷键没有反应？") {
+                showShortcutHelp = true
+            }
+            .buttonStyle(.link)
+            .accessibilityHint("查看输入监控与辅助功能权限帮助")
+        }
+    }
+
+    private var practiceContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                Picker("输入设备", selection: microphoneSelection) {
+                    Text("系统默认麦克风").tag("")
+                    ForEach(session.audioInputDevices) { device in
+                        Text(device.isDefault ? "\(device.name)（默认）" : device.name)
+                            .tag(device.uid)
+                    }
+                }
+                .disabled(session.isOnboardingMicrophoneTestRunning)
+
+                Button(microphoneTestButtonTitle) {
+                    session.toggleOnboardingMicrophoneTest()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!session.microphonePermission)
+            }
+
+            WaveLevelMeter(
+                level: session.onboardingMicrophoneLevel,
+                reduceMotion: reduceMotion,
+                isRunning: session.isOnboardingMicrophoneTestRunning
+            )
+
+            HStack(spacing: 8) {
+                Image(systemName: microphoneTestStatusIcon)
+                    .foregroundStyle(microphoneTestStatusColor)
+                    .accessibilityHidden(true)
+                Text(microphoneTestStatusText)
+                    .font(LerroTheme.font(12))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("麦克风测试")
+            .accessibilityValue(microphoneTestStatusText)
+
+            if let error = session.onboardingMicrophoneTestError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(LerroTheme.font(12))
+                    .foregroundStyle(LerroTheme.red)
+                    .accessibilityLabel("麦克风测试错误：\(error)")
+            }
+
+            TextEditor(text: $sampleText)
+                .font(LerroTheme.font(14))
+                .scrollContentBackground(.hidden)
+                .padding(12)
+                .frame(minHeight: 132)
+                .background(LerroTheme.elevated)
+                .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                        .stroke(practiceEditorFocused ? LerroTheme.focusBorder : LerroTheme.border)
+                }
+                .focused($practiceEditorFocused)
+                .accessibilityLabel("练习编辑器")
+                .accessibilityHint("将光标放在这里，然后使用刚设置的快捷键听写")
+
+            HStack(spacing: 10) {
+                Button(practiceCaptureButtonTitle, action: togglePracticeCapture)
+                    .buttonStyle(LerroPillButtonStyle(prominent: true))
+                    .controlSize(.large)
+                    .disabled(practiceCaptureButtonDisabled)
+
+                Button("快捷键帮助") {
+                    showShortcutHelp = true
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+
+                Spacer()
+
+                Text(practicePhaseText)
+                    .font(LerroTheme.font(12, weight: .medium))
+                    .foregroundStyle(practicePhaseColor)
+                    .accessibilityLabel("听写状态：\(practicePhaseText)")
+            }
+        }
+    }
+
+    private var visualPanel: some View {
+        ZStack {
+            LerroTheme.fillContainerThin
+
+            VStack(spacing: 24) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(LerroTheme.accent)
+                    Image(systemName: step.icon)
+                        .font(.system(size: 48, weight: .medium))
+                        .symbolRenderingMode(.monochrome)
+                        .foregroundStyle(LerroTheme.pivotText)
+                        .accessibilityHidden(true)
+                }
+                .frame(width: 116, height: 116)
+                .shadow(color: .black.opacity(0.12), radius: 18, y: 9)
+
+                VStack(spacing: 6) {
+                    Text(visualTitle)
+                        .font(LerroTheme.font(14, weight: .medium))
+                        .foregroundStyle(.primary)
+                    Text(visualCaption)
+                        .font(LerroTheme.font(13))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(2)
+                        .frame(maxWidth: 250)
+                }
+            }
+            .padding(32)
+        }
+        .overlay(alignment: .leading) {
+            Divider()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(visualTitle)。\(visualCaption)")
+    }
+
+    private func informationRow(title: String, detail: String, icon: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
+                .foregroundStyle(LerroTheme.accent)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(LerroTheme.font(14, weight: .medium))
+                Text(detail)
+                    .font(LerroTheme.font(12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func permissionCard(_ permission: OnboardingPermission, granted: Bool) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: permission.icon)
+                .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
+                .foregroundStyle(granted ? LerroTheme.green : LerroTheme.accent)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
+                    Text(permission.title)
+                        .font(LerroTheme.font(14, weight: .medium))
+                    Label(granted ? "已授权" : "等待授权", systemImage: granted ? "checkmark.circle.fill" : "circle.dashed")
+                        .font(LerroTheme.font(12, weight: .medium))
+                        .foregroundStyle(granted ? LerroTheme.green : LerroTheme.orange)
+                }
+                Text(permission.detail)
+                    .font(LerroTheme.font(12))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button("系统设置") {
+                openSystemSettings(for: permission)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel("打开\(permission.title)系统设置")
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 62)
+        .background(LerroTheme.fillContainerThin)
+        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                .stroke(LerroTheme.thinBorder)
+        }
+    }
+
+    private func shortcutRow(
+        title: String,
+        detail: String,
+        icon: String,
+        shortcut: String
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
+                .foregroundStyle(LerroTheme.accent)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(LerroTheme.font(14, weight: .medium))
+                Text(detail)
+                    .font(LerroTheme.font(12))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            ShortcutBadge(title: shortcut)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 62)
+        .background(LerroTheme.fillContainerThin)
+        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                .stroke(LerroTheme.thinBorder)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title)，快捷键 \(shortcut)")
+        .accessibilityValue(detail)
+    }
+
+    private func permissionGranted(_ permission: OnboardingPermission) -> Bool {
+        switch permission {
+        case .microphone: session.microphonePermission
+        case .speechRecognition: session.speechPermission
+        case .accessibility: session.accessibilityPermission
+        case .inputMonitoring: session.inputMonitoringPermission
+        }
+    }
+
+    private func openSystemSettings(for permission: OnboardingPermission) {
+        guard let url = URL(string: permission.systemSettingsURLString),
+              NSWorkspace.shared.open(url) else {
+            session.currentError = "无法打开\(permission.title)设置，请在系统设置的隐私与安全性中手动打开。"
+            return
+        }
+    }
+
+    private func next() {
+        if step == .permissions {
+            guard session.beginShortcutConfiguration() else {
+                session.currentError = session.currentError ?? "暂时无法进入快捷键设置。"
+                return
+            }
+            shortcutConfigurationPrepared = true
+        }
+        if step == .shortcuts {
+            guard !isShortcutSaving else { return }
+            isShortcutSaving = true
+            Task { @MainActor in
+                guard await saveOnboardingShortcut() else {
+                    isShortcutSaving = false
+                    return
+                }
+                isShortcutSaving = false
+                advanceFromCurrentStep()
+            }
+            return
+        }
+        advanceFromCurrentStep()
+    }
+
+    private func advanceFromCurrentStep() {
+        session.savePreferences()
+        guard step != .practice else {
+            session.completeOnboarding()
+            return
+        }
+        guard let nextStep = OnboardingStep(rawValue: step.rawValue + 1) else { return }
+        navigate(to: nextStep)
+    }
+
+    private func previous() {
+        guard let previousStep = OnboardingStep(rawValue: step.rawValue - 1) else { return }
+        if previousStep == .shortcuts {
+            Task { @MainActor in
+                guard await session.prepareShortcutConfigurationAfterCancellingCapture() else {
+                    shortcutSaveError = session.currentError ?? "暂时无法进入快捷键设置。"
+                    return
+                }
+                shortcutConfigurationPrepared = true
+                navigate(to: previousStep)
+            }
+            return
+        }
+        navigate(to: previousStep)
+    }
+
+    private func navigate(to destination: OnboardingStep) {
+        if reduceMotion {
+            step = destination
+        } else {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                step = destination
+            }
+        }
+    }
+
+    private func prepareShortcutDraftIfNeeded() {
+        guard shortcutDraft == nil else { return }
+        guard let definition = session.preferences.hotkeys.first(where: { $0.action == .dictate }) else {
+            shortcutActivation = .hold
+            return
+        }
+        shortcutDraft = ShortcutBindingDraft(definition: definition)
+        shortcutActivation = definition.activation.resolved
+    }
+
+    private func saveOnboardingShortcut() async -> Bool {
+        guard let shortcutDraft else {
+            shortcutSaveError = "请按下一个快捷键后继续。"
+            return false
+        }
+        let existing = session.preferences.hotkeys.first(where: { $0.action == .dictate })
+        let saved = await session.commitHotkey(
+            for: .dictate,
+            replacing: existing,
+            keyCode: shortcutDraft.keyCode,
+            modifiers: shortcutDraft.modifiers,
+            usesFunctionKey: shortcutDraft.usesFunctionKey,
+            activation: shortcutActivation,
+            displayName: shortcutDraft.displayName
+        )
+        guard saved else {
+            shortcutSaveError = "这个按键已经分配给其他功能，请重新选择。"
+            return false
+        }
+        shortcutSaveError = ""
+        sampleText = shortcutActivation.resolved == .hold
+            ? "把光标放在这里，然后按住 \(shortcutDraft.displayName) 说一句话。"
+            : "把光标放在这里，按一下 \(shortcutDraft.displayName) 开始，再按一下完成。"
+        return true
+    }
+
+    private func togglePracticeCapture() {
+        practiceEditorFocused = true
+        Task { @MainActor in
+            await Task.yield()
+            session.toggleCapture(.dictation)
+        }
+    }
+
+    private var primaryActionTitle: String {
+        switch step {
+        case .shortcuts where isShortcutSaving:
+            "正在保存…"
+        case .permissions where !session.requiredPermissionsGranted:
+            "稍后继续"
+        case .practice:
+            "完成设置"
+        default:
+            "继续"
+        }
+    }
+
+    private var saveAudioBinding: Binding<Bool> {
+        Binding {
+            session.preferences.saveAudio
+        } set: { value in
+            session.preferences.saveAudio = value
+            session.savePreferences()
+        }
+    }
+
+    private var intelligenceModeBinding: Binding<IntelligenceMode> {
+        Binding {
+            session.preferences.intelligenceMode
+        } set: { mode in
+            if mode == .remote,
+               session.preferences.remoteProvider.apiKey
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                session.currentError = "请先在“设置 → 智能处理”中填写并测试 API 配置"
+                return
+            }
+            session.activateIntelligenceMode(mode)
+        }
+    }
+
+    private var microphoneSelection: Binding<String> {
+        Binding {
+            session.preferences.microphoneDeviceUID ?? ""
+        } set: { value in
+            session.stopOnboardingMicrophoneTest(resetResult: true)
+            session.preferences.microphoneDeviceUID = value.isEmpty ? nil : value
+            session.savePreferences()
+        }
+    }
+
+    private var localModeDetail: String {
+        switch session.preferences.intelligenceMode {
+        case .raw:
+            "完成语音识别后直接插入原始文字，无需准备语言模型。"
+        case .local:
+            "听写完成后在本机整理语句；同一模型也负责翻译、问答与改写。"
+        case .remote:
+            "使用您在设置中保存的 API 模型整理文字；发送内容由六项上下文开关控制。"
+        }
+    }
+
+    private var onboardingIntelligenceIcon: String {
+        switch session.preferences.intelligenceMode {
+        case .raw: "waveform"
+        case .local: "cpu.fill"
+        case .remote: "network"
+        }
+    }
+
+    private var onboardingIntelligenceTitle: String {
+        switch session.preferences.intelligenceMode {
+        case .raw: "Apple Speech 原始听写"
+        case .local: "Qwen3.5 4B 本地 AI"
+        case .remote: "自带 Key 的 API 模型"
+        }
+    }
+
+    private var localModelStatusText: String {
+        guard session.preferences.hasApprovedModelDownload else {
+            return "等待您的下载确认"
+        }
+        if !session.modelStatus.message.isEmpty {
+            return session.modelStatus.message
+        }
+        return switch session.modelStatus.state {
+        case .unavailable: "等待准备"
+        case .downloading: "正在下载"
+        case .ready: "已下载"
+        case .loading: "正在加载"
+        case .loaded: "已就绪"
+        case .failed: "准备失败"
+        }
+    }
+
+    private var localModelActionTitle: String {
+        guard session.preferences.hasApprovedModelDownload else { return "准备本地模型" }
+        return switch session.modelStatus.state {
+        case .loaded: "已就绪"
+        case .downloading, .loading: "准备中"
+        case .failed: "重试"
+        case .ready: "加载"
+        case .unavailable: "准备本地模型"
+        }
+    }
+
+    private var localModelActionDisabled: Bool {
+        switch session.modelStatus.state {
+        case .loaded, .downloading, .loading:
+            true
+        case .unavailable, .ready, .failed:
+            false
+        }
+    }
+
+    private var showsLocalModelProgress: Bool {
+        session.preferences.hasApprovedModelDownload
+            && (session.modelStatus.state == .downloading || session.modelStatus.state == .loading)
+    }
+
+    private var microphoneTestButtonTitle: String {
+        if session.isOnboardingMicrophoneTestRunning { return "停止测试" }
+        return session.onboardingMicrophoneTestPassed ? "重新测试" : "测试麦克风"
+    }
+
+    private var microphoneTestStatusIcon: String {
+        if !session.microphonePermission { return "exclamationmark.circle.fill" }
+        if session.onboardingMicrophoneTestPassed { return "checkmark.circle.fill" }
+        if session.isOnboardingMicrophoneTestRunning { return "waveform.circle.fill" }
+        return "circle"
+    }
+
+    private var microphoneTestStatusColor: Color {
+        if !session.microphonePermission { return LerroTheme.orange }
+        if session.onboardingMicrophoneTestPassed { return LerroTheme.green }
+        return session.isOnboardingMicrophoneTestRunning ? LerroTheme.accent : LerroTheme.tertiaryText
+    }
+
+    private var microphoneTestStatusText: String {
+        if !session.microphonePermission { return "开启麦克风权限后可以测试输入设备" }
+        if session.onboardingMicrophoneTestPassed { return "检测到清晰的麦克风输入" }
+        if session.isOnboardingMicrophoneTestRunning { return "请对着麦克风说几句话" }
+        return "可选：先测试麦克风，再完成一次真实听写"
+    }
+
+    private var practiceCaptureButtonTitle: String {
+        switch session.phase {
+        case .listening: "结束听写"
+        case .transcribing, .enhancing, .inserting: "正在处理"
+        default: "开始听写"
+        }
+    }
+
+    private var practiceCaptureButtonDisabled: Bool {
+        switch session.phase {
+        case .transcribing, .enhancing, .inserting:
+            true
+        case .idle, .listening, .success, .failed, .cancelled:
+            false
+        }
+    }
+
+    private var practicePhaseText: String {
+        switch session.phase {
+        case .idle: "准备就绪"
+        case .listening: "正在聆听"
+        case .transcribing: "正在转写"
+        case .enhancing: "正在整理"
+        case .inserting: "正在写入"
+        case .success: "已完成"
+        case .failed: "需要重试"
+        case .cancelled: "已取消"
+        }
+    }
+
+    private var practicePhaseColor: Color {
+        switch session.phase {
+        case .success: LerroTheme.green
+        case .failed: LerroTheme.red
+        case .listening, .transcribing, .enhancing, .inserting: LerroTheme.accent
+        case .idle, .cancelled: LerroTheme.secondaryText
+        }
+    }
+
+    private var visualTitle: String {
+        switch step {
+        case .privacy: "由您掌控"
+        case .localMode: "本地优先"
+        case .permissions: "按用途授权"
+        case .shortcuts: "随处开口"
+        case .practice: "声音成为文字"
+        }
+    }
+
+    private var visualCaption: String {
+        switch step {
+        case .privacy: "清楚了解数据去向，并随时调整保存选项。"
+        case .localMode: "基础听写即时可用，本地增强按需准备。"
+        case .permissions: "每项权限都有明确用途和独立设置入口。"
+        case .shortcuts:
+            "\(shortcutDraft?.displayName ?? "Fn") · \(shortcutActivation.resolved == .hold ? "按住说话" : "按一下开关")"
+        case .practice: "自在说，清楚写。"
+        }
+    }
+}
+
+private struct WaveLevelMeter: View {
+    let level: Float
+    let reduceMotion: Bool
+    let isRunning: Bool
+
+    var body: some View {
+        Group {
+            if reduceMotion {
+                HStack(spacing: 8) {
+                    Image(systemName: detectedSound ? "waveform.circle.fill" : "waveform.circle")
+                        .foregroundStyle(detectedSound ? LerroTheme.accent : LerroTheme.tertiaryText)
+                    Text(detectedSound ? "检测到声音" : (isRunning ? "等待声音" : "麦克风测试未开始"))
+                        .font(LerroTheme.font(12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+            } else {
+                HStack(alignment: .center, spacing: 4) {
+                    ForEach(0..<24, id: \.self) { index in
+                        Capsule()
+                            .fill(index < Int(level * 24) ? LerroTheme.accent : LerroTheme.fillContainerTough)
+                            .frame(maxWidth: .infinity, minHeight: 8, maxHeight: 8)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(minHeight: 40)
+        .background(LerroTheme.fillContainerThin)
+        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("麦克风音量")
+        .accessibilityValue(accessibilityValue)
+    }
+
+    private var detectedSound: Bool {
+        isRunning && level >= 0.12
+    }
+
+    private var accessibilityValue: String {
+        if !isRunning { return "测试未开始" }
+        return detectedSound ? "检测到声音" : "等待声音"
+    }
+}

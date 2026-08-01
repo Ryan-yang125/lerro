@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 2,
+  "brand": {
+    "name": "Lerro",
+    "pronunciation": "LEH-ro",
+    "tagline": {
+      "zh-Hans": "自在说，清楚写。",
+      "en": "Speak freely. Write clearly."
+    }
+  },
+  "color": {
+    "main": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#FAFAFA", "dark": "#161616" },
+      "increaseContrast": { "light": "#FFFFFF", "dark": "#0D0D0D" }
+    },
+    "mainContrast": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#F2F2F2", "dark": "#202020" },
+      "increaseContrast": { "light": "#EEEEEE", "dark": "#272727" }
+    },
+    "topLayer": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#FFFFFF", "dark": "#222222" },
+      "increaseContrast": { "light": "#FFFFFF", "dark": "#1A1A1A" }
+    },
+    "bottomLayer": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#F2F2F2", "dark": "#191919" }
+    },
+    "sidebar": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#F1F1F1", "dark": "#1B1B1B" }
+    },
+    "elevated": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#FFFFFF", "dark": "#292929" }
+    },
+    "text": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#292929", "dark": "#F2F2F2" },
+      "increaseContrast": { "light": "#111111", "dark": "#FFFFFF" }
+    },
+    "secondaryText": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#5D5D5D", "dark": "#B8B8B8" },
+      "increaseContrast": { "light": "#444444", "dark": "#D2D2D2" }
+    },
+    "tertiaryText": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#9E9E9E", "dark": "#929292" },
+      "increaseContrast": { "light": "#5D5D5D", "dark": "#C4C4C4" },
+      "usage": "nonEssentialOnly"
+    },
+    "metadataText": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#6B6B6B", "dark": "#BEBEBE" },
+      "increaseContrast": { "light": "#444444", "dark": "#D8D8D8" },
+      "usage": "essentialSmallText"
+    },
+    "fillContainerThin": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#F3F3F3", "dark": "#292929" }
+    },
+    "fillContainerTough": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#E8E8E8", "dark": "#333333" }
+    },
+    "fillHover": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#E9E9E9", "dark": "#303030" },
+      "increaseContrast": { "light": "#DEDEDE", "dark": "#3D3D3D" }
+    },
+    "fillSelected": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#DEDEDE", "dark": "#3A3A3A" },
+      "increaseContrast": { "light": "#CECECE", "dark": "#4A4A4A" }
+    },
+    "actionFill": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#EBEBEB", "dark": "#303030" }
+    },
+    "actionFillHover": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#E0E0E0", "dark": "#3A3A3A" }
+    },
+    "border": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#D6D6D6", "dark": "#444444" },
+      "increaseContrast": { "light": "#858585", "dark": "#787878" }
+    },
+    "borderHover": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#BEBEBE", "dark": "#5A5A5A" },
+      "increaseContrast": { "light": "#686868", "dark": "#969696" }
+    },
+    "thinBorder": {
+      "kind": "adaptiveMonochrome",
+      "preview": { "light": "#E3E3E3", "dark": "#383838" },
+      "increaseContrast": { "light": "#858585", "dark": "#787878" }
+    },
+    "accent": { "semantic": "macOSControlAccentColor" },
+    "accentHover": { "alias": "accent", "opacity": 0.88 },
+    "accentPressed": { "alias": "accent", "opacity": 0.72 },
+    "primaryAction": { "alias": "accent" },
+    "primaryActionHover": { "alias": "accentHover" },
+    "primaryActionPressed": { "alias": "accentPressed" },
+    "primaryActionForeground": { "semantic": "macOSAlternateSelectedControlTextColor" },
+    "focusBorder": { "alias": "accent" },
+    "selection": { "alias": "fillSelected" },
+    "brandInk": {
+      "kind": "fixedBrandArtwork",
+      "preview": { "light": "#111113", "dark": "#111113" }
+    },
+    "brandLight": {
+      "kind": "fixedBrandArtwork",
+      "preview": { "light": "#F5F2EA", "dark": "#F5F2EA" }
+    },
+    "success": {
+      "semantic": "systemGreen",
+      "preview": { "light": "#34C759", "dark": "#30D158" }
+    },
+    "warning": {
+      "semantic": "systemOrange",
+      "preview": { "light": "#FF9500", "dark": "#FF9F0A" }
+    },
+    "error": {
+      "semantic": "systemRed",
+      "preview": { "light": "#FF3B30", "dark": "#FF453A" }
+    }
+  },
+  "type": {
+    "ui": "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif",
+    "display": "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif",
+    "mono": "'SF Mono', ui-monospace, monospace",
+    "weights": { "regular": 400, "medium": 500 },
+    "size": { "title": 24, "body": 14, "label": 13, "caption": 12 },
+    "trackingPoints": -0.15
+  },
+  "spacing": { "1": 4, "2": 8, "3": 12, "4": 16, "6": 24, "8": 32 },
+  "radius": {
+    "navigation": 8,
+    "control": 8,
+    "card": 16,
+    "appIcon": 210
+  },
+  "icon": { "navigation": 14, "card": 20 },
+  "shape": { "primaryCTA": "capsule" },
+  "motion": {
+    "mainWindow": {
+      "hoverSeconds": 0.15,
+      "pressSeconds": 0.1,
+      "pressedOffsetY": 1,
+      "pressedOpacity": 0.92,
+      "disabledOpacity": 0.48,
+      "spring": { "response": 0.2, "dampingFraction": 1.0, "blendDuration": 0 }
+    },
+    "momentumSpring": { "response": 0.36, "dampingFraction": 0.82 },
+    "hudProtectedBaseline": {
+      "surface": { "mass": 0.9, "stiffness": 420, "damping": 36 },
+      "crossfade": { "mass": 0.8, "stiffness": 260, "damping": 34 },
+      "processingSeconds": 0.08,
+      "controlDisclosureSeconds": 0.2,
+      "controlOpacitySeconds": 0.1,
+      "behaviorChanged": false,
+      "processingColor": "macOSControlAccentColor"
+    }
+  },
+  "stroke": { "symbol": 7, "micro16": 7.5, "micro24": 7, "menuBar": 1.75 },
+  "symbolGrid": { "width": 80, "height": 64 },
+  "minimumSize": { "micro": 16, "symbol": 24, "horizontalLockupWidth": 96 }
+}

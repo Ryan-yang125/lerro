@@ -1,0 +1,79 @@
+name: Bug report
+description: Report a reproducible Lerro problem using synthetic data.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Lerro. Remove transcripts, focused text, recordings, personal paths, credentials, signing identities, and other private data before submitting. Security issues belong in a private vulnerability report.
+  - type: input
+    id: version
+    attributes:
+      label: Lerro version and build
+      placeholder: "0.1.0 (1)"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac architecture
+      placeholder: "macOS 26.x, Apple silicon"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Dictate
+        - Translate
+        - Ask
+        - Rewrite
+        - Hands-free
+        - History or dictionary
+        - Permissions or onboarding
+        - Model download or generation
+        - Build, signing, or release
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use synthetic text and the smallest reliable sequence.
+      placeholder: |
+        1. Launch the signed app from ...
+        2. Select ...
+        3. Press ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Observed result
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Include signing mode, relevant permission state, and reviewed log excerpts when useful.
+      render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed real transcripts, selected text, recordings, personal paths, credentials, and certificate details.
+          required: true
+        - label: I used the security reporting path for any vulnerability details.
+          required: true

@@ -1,0 +1,56 @@
+# Root metadata and governance
+.gitattributes
+.gitignore
+AGENTS.md
+CHANGELOG.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+LICENSE
+LICENSES/
+NOTICE
+PRIVACY.md
+README.md
+SECURITY.md
+SUPPORT.md
+THIRD_PARTY_NOTICES.md
+TRADEMARKS.md
+
+# Package, source, tests, and licensed assets
+Package.swift
+Package.resolved
+Brand/
+Sources/
+Tests/
+Vendor/
+config/
+site/
+
+# Public project automation
+.github/
+script/build_and_run.sh
+script/check_third_party_licenses.py
+script/export_public_repo.sh
+script/package_release.sh
+script/public_repo_allowlist.txt
+script/public_repo_legacy_allowlist.txt
+script/scan_public_repo.sh
+script/signing_support.zsh
+script/test_live_model.sh
+script/test_live_remote.sh
+script/verify_release.sh
+
+# Public documentation
+docs/README.md
+docs/architecture.md
+docs/build.md
+docs/core-flow.md
+docs/decisions/
+docs/identity.md
+docs/models.md
+docs/name-clearance.md
+docs/open-source/
+docs/permissions.md
+docs/privacy-security.md
+docs/release.md
+docs/testing.md
+docs/troubleshooting.md

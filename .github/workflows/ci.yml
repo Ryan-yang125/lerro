@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  website:
+    name: Website
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: site
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify website
+        run: |
+          npm run lint
+          npm run build
+          npm test
+          npm run build:pages
+          npm audit --omit=dev --audit-level=high
+
+  swift-package:
+    name: Build and test
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Report toolchain
+        run: |
+          xcode-select -p
+          swift --version
+
+      - name: Validate shell entrypoints
+        run: zsh -n Brand/scripts/*.sh script/*.sh script/*.zsh
+
+      - name: Prepare Metal toolchain
+        run: |
+          if ! xcrun metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+
+      - name: Verify Release artifact
+        env:
+          LERRO_SIGNING_MODE: ad-hoc
+        run: ./script/verify_release.sh

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+  <title>Lerro menu bar error template</title>
+  <path d="M4.5 7V13.5C4.5 16 6 17.5 8.5 17.5H13.5" stroke="#000000" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="17.5" y="5.5" width="2.25" height="7" rx="1" fill="#000000"/>
+  <circle cx="18.625" cy="16.5" r="1.25" fill="#000000"/>
+</svg>

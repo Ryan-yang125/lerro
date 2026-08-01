@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <title>Lerro App Icon</title>
+  <rect x="64" y="64" width="896" height="896" rx="210" fill="#111113"/>
+  <g transform="translate(68 160) scale(10.2)">
+    <path d="M8 10V42C8 49 12 52 19 52H20V38C20 30 24 26 30 26C36 26 40 30 40 38V52V38C40 30 44 26 50 26C56 26 60 30 60 38V52" stroke="#F5F2EA" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="68" cy="39" r="11" stroke="#F5F2EA" stroke-width="7"/>
+    <path d="M75 34L84 30V48L75 44Z" fill="#111113"/>
+  </g>
+</svg>
