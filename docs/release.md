@@ -388,6 +388,23 @@ Sparkle framework 在 `dist/Lerro.app/Contents/Frameworks` 内签名并随 app �
 导出之外。`distribution/wrangler.toml.example` 只提供结构模板。完整架构、撤回与失败策略见
 [ADR-0007](decisions/0007-cloudflare-distribution-and-sparkle-updates.md)。
 
+## GitHub 公开镜像
+
+Cloudflare 保持官网、appcast 和应用下载的 canonical 分发源。每次 Cloudflare 发布及公开
+SHA-256 复验完成后，同步执行以下 GitHub 镜像流程：
+
+1. 从 [`public_repo_allowlist.txt`](../script/public_repo_allowlist.txt) 重新生成 clean export，
+   完成公开扫描后同步到公开仓库 `main`，保留公开仓库已有历史。
+2. 在该公开 commit 创建 `v<version>` annotated tag。
+3. 创建稳定 GitHub Release，并上传同一次打包产生的
+   `Lerro-macOS-arm64.zip`、`Lerro-macOS-arm64.dSYM.zip`、
+   `Lerro-release-manifest.json` 与 `SHA256SUMS.txt`。
+4. 通过 GitHub API 读取每个 asset 的 `digest`，逐项确认与 canonical 本地产物相同；
+   `releases/latest` 必须解析到新稳定版本。
+
+GitHub Release 文案链接 canonical 下载与官网 changelog。GitHub 自动生成的 tag source
+archive 提供源码快照，`outputs/Lerro-public-source.zip` 不重复上传。
+
 ## 版本发布检查表
 
 - [ ] `config/Info.plist` 的 version/build 已更新。
@@ -410,5 +427,7 @@ Sparkle framework 在 `dist/Lerro.app/Contents/Frameworks` 内签名并随 app �
 - [ ] Developer ID ZIP 的 Sparkle Ed25519 签名和长度已写入 manifest 并通过复验。
 - [ ] `publish_cloudflare_release.sh` 已完成 R2 读回、D1 batch 与公开 appcast/download SHA-256 验证。
 - [ ] `lerroapp.com` 和 `www.lerroapp.com` 已返回预期站点，`updates.lerroapp.com` 已返回预期 feed。
+- [ ] clean export 已同步到 GitHub `main`，公开扫描与 CI 已通过。
+- [ ] GitHub tag、稳定 Release、四个镜像资产和 `releases/latest` 已复验，asset digest 与 canonical 产物一致。
 - [ ] 已记录当前版本的首次手动安装边界，以及下一版本的真实 Sparkle N 到 N+1 验收计划。
 - [ ] 已记录仍未执行的模型、TCC、硬件或多显示器边界。
