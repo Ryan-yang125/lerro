@@ -22,6 +22,10 @@ pending_manifest_path="$outputs_path/.$manifest_name.pending"
 pending_checksum_path="$outputs_path/.$checksum_name.pending"
 requested_signing_mode=${LERRO_SIGNING_MODE:-auto}
 notary_profile=${LERRO_NOTARY_PROFILE:-}
+sparkle_key_account=${LERRO_SPARKLE_KEY_ACCOUNT:-app.lerro.mac}
+sparkle_sign_update="$project_dir/.build/artifacts/sparkle/Sparkle/bin/sign_update"
+sparkle_ed_signature=""
+sparkle_archive_length=""
 
 mkdir -p "$outputs_path"
 lerro_resolve_signing
@@ -82,6 +86,10 @@ paths = [
 content = hashlib.sha256()
 for relative in sorted(paths):
     path = root / relative
+    if not path.exists() and not path.is_symlink():
+        content.update(relative.encode("utf-8", "surrogateescape"))
+        content.update(b"\0missing\0")
+        continue
     mode = path.lstat().st_mode
     content.update(relative.encode("utf-8", "surrogateescape"))
     content.update(b"\0")
@@ -110,6 +118,9 @@ PY
 }
 
 capture_source_snapshot "$source_before_path"
+
+print "Cleaning SwiftPM build artifacts for a source-prefix-mapped Release rebuild"
+swift package clean
 
 LERRO_SIGNING_MODE="$signing_mode" \
 LERRO_CODESIGN_IDENTITY="$signing_identity" \
@@ -142,10 +153,41 @@ ditto -c -k --norsrc --keepParent "$dsym_path" "$pending_dsym_archive_path"
 archive_hash=$(shasum -a 256 "$pending_archive_path" | awk '{print $1}')
 dsym_archive_hash=$(shasum -a 256 "$pending_dsym_archive_path" | awk '{print $1}')
 
+if [[ "$signing_mode" == "developer-id" ]]; then
+    [[ -x "$sparkle_sign_update" ]] || {
+        print -u2 "Missing Sparkle archive signing tool: $sparkle_sign_update"
+        exit 1
+    }
+    sparkle_signature_output=$("$sparkle_sign_update" \
+        --account "$sparkle_key_account" \
+        "$pending_archive_path")
+    sparkle_signature_fields=$(python3 - "$sparkle_signature_output" <<'PY'
+import re
+import sys
+
+match = re.search(
+    r'sparkle:edSignature="([A-Za-z0-9+/]+={0,2})"\s+length="([0-9]+)"',
+    sys.argv[1],
+)
+if match is None:
+    raise SystemExit("Sparkle did not return an archive signature and length.")
+print(f"{match.group(1)}\t{match.group(2)}")
+PY
+)
+    sparkle_ed_signature=${sparkle_signature_fields%%$'\t'*}
+    sparkle_archive_length=${sparkle_signature_fields##*$'\t'}
+    [[ "$sparkle_archive_length" == "$(stat -f '%z' "$pending_archive_path")" ]] || {
+        print -u2 "Sparkle archive length does not match the final ZIP."
+        exit 1
+    }
+fi
+
 LERRO_MANIFEST_REQUESTED_MODE="$requested_signing_mode" \
 LERRO_MANIFEST_RESOLVED_MODE="$signing_mode" \
 LERRO_MANIFEST_IDENTITY="$signing_identity" \
 LERRO_MANIFEST_NOTARIZED="$([[ -n "$notary_profile" ]] && print true || print false)" \
+LERRO_MANIFEST_SPARKLE_ED_SIGNATURE="$sparkle_ed_signature" \
+LERRO_MANIFEST_SPARKLE_LENGTH="$sparkle_archive_length" \
 python3 - \
     "$project_dir" \
     "$source_before_path" \
@@ -281,6 +323,11 @@ manifest = {
             "file": archive_name,
             "sha256": archive_hash,
             "bytes": archive.stat().st_size,
+            "sparkle": {
+                "edSignature": os.environ["LERRO_MANIFEST_SPARKLE_ED_SIGNATURE"] or None,
+                "length": int(os.environ["LERRO_MANIFEST_SPARKLE_LENGTH"])
+                if os.environ["LERRO_MANIFEST_SPARKLE_LENGTH"] else None,
+            },
         },
         "debugSymbolsArchive": {
             "file": dsym_archive_name,
@@ -312,3 +359,8 @@ print "Packaged $archive_path"
 print "Debug symbols: $dsym_archive_path"
 print "Release manifest: $manifest_path"
 print "Source tree dirty: $source_tree_dirty"
+if [[ -n "$sparkle_ed_signature" ]]; then
+    print "Sparkle archive signature: present"
+else
+    print "Sparkle archive signature: skipped for $signing_mode packaging"
+fi

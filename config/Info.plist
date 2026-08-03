@@ -19,19 +19,17 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.1</string>
+    <string>1.1.0</string>
     <key>CFBundleVersion</key>
-    <string>2</string>
+    <string>6</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
     <key>LSMinimumSystemVersion</key>
-    <string>26.0</string>
+    <string>26.0.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>Lerro 使用麦克风在本机完成语音输入。</string>
-    <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Lerro 使用 Apple 设备端语音识别把语音转成文字。</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSQuitAlwaysKeepsWindows</key>
@@ -40,5 +38,15 @@
     <false/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
+    <key>SUAllowsAutomaticUpdates</key>
+    <false/>
+    <key>SUEnableAutomaticChecks</key>
+    <false/>
+    <key>SUFeedURL</key>
+    <string>https://updates.lerroapp.com/appcast/stable.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>zsb8ktQi+MZcETLnngCctw1BrzHZvjyJY6cw6JZ842M=</string>
 </dict>
 </plist>

@@ -14,6 +14,7 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
     public var finalText: String
     public var answerText: String?
     public var targetLanguage: String?
+    public var sourceLanguage: String?
     public var duration: TimeInterval
     public var applicationName: String
     public var bundleIdentifier: String?
@@ -30,6 +31,7 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
         finalText: String,
         answerText: String? = nil,
         targetLanguage: String? = nil,
+        sourceLanguage: String? = nil,
         duration: TimeInterval,
         applicationName: String,
         bundleIdentifier: String? = nil,
@@ -45,6 +47,7 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
         self.finalText = finalText
         self.answerText = answerText
         self.targetLanguage = targetLanguage
+        self.sourceLanguage = sourceLanguage
         self.duration = duration
         self.applicationName = applicationName
         self.bundleIdentifier = bundleIdentifier

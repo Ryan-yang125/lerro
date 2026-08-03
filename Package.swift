@@ -14,6 +14,10 @@ let package = Package(
     ],
     dependencies: [
         .package(
+            url: "https://github.com/sparkle-project/Sparkle.git",
+            exact: "2.9.4"
+        ),
+        .package(
             url: "https://github.com/ml-explore/mlx-swift-lm.git",
             revision: "3b3516d8fbc6451d6c444a5e03cd1e0ba8719964",
             traits: []
@@ -47,12 +51,18 @@ let package = Package(
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("Carbon"),
                 .linkedFramework("ServiceManagement"),
-                .linkedFramework("Speech")
+                .linkedFramework("Speech"),
+                .linkedFramework("Translation")
             ]
         ),
         .executableTarget(
             name: "Lerro",
-            dependencies: ["LerroCore", "LerroIntelligence", "LerroMac"],
+            dependencies: [
+                "LerroCore",
+                "LerroIntelligence",
+                "LerroMac",
+                .product(name: "Sparkle", package: "Sparkle")
+            ],
             path: "Sources/Lerro",
             exclude: ["Resources"]
         ),

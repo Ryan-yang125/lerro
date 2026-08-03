@@ -233,7 +233,7 @@ Gatekeeper 接受是 Developer ID + 公证流程的目标。ad-hoc 和 Apple Dev
 - app 路径或签名身份发生变化。
 - 当前运行的是旧 bundle。
 - 系统设置尚未刷新进程状态。
-- Input Monitoring event tap 创建失败。
+- Accessibility event tap 创建失败。
 
 检查：
 
@@ -247,8 +247,8 @@ plutil -p dist/Lerro.app/Contents/Info.plist
 
 1. 用 `codesign -dvvv` 确认当前 Release app 的 Apple Development 签名，并确认实际启动路径与计划长期使用的路径一致。
 2. 退出当前运行的 `Lerro`。
-3. 打开“系统设置 → 隐私与安全性 → 辅助功能”和“输入监控”，删除名称为 **Lerro** 的旧条目。旧条目可能绑定了旧签名身份或旧 app 路径。
-4. 从稳定路径启动当前 Apple Development 签名的 `Lerro.app`，由应用重新请求 Accessibility 和 Input Monitoring。
+3. 打开“系统设置 → 隐私与安全性 → 辅助功能”，删除名称为 **Lerro** 的旧条目。旧条目可能绑定了旧签名身份或旧 app 路径。
+4. 从稳定路径启动当前 Apple Development 签名的 `Lerro.app`，由应用重新请求 Accessibility。
 5. 打开新出现的 **Lerro** 条目，退出并重新启动 `Lerro`，再刷新应用内权限状态。
 
 需要重置单项 TCC 时由用户明确确认，并且只针对 bundle ID `app.lerro.mac` 和目标服务；禁止执行全局重置。
@@ -263,7 +263,7 @@ plutil -p dist/Lerro.app/Contents/Info.plist
 - 设置中的识别语言与系统 Speech 支持一致。
 - 网络可支持首次 Apple 语言资源安装。
 - 麦克风设备仍存在，sample rate 和 channel count 大于零。
-- Speech 与麦克风 TCC 已授权。
+- 麦克风 TCC 已授权；SpeechAnalyzer/SpeechTranscriber 不请求 Speech Recognition TCC。
 
 日志与错误入口位于
 [`AppleSpeechService.swift`](../Sources/LerroMac/Speech/AppleSpeechService.swift)。禁止通过跳过 locale/assets 检查继续分析。
@@ -301,7 +301,7 @@ system_profiler SPAudioDataType
 当前窗口的 AppKit local event monitor 读取修饰键；暂停检测按钮会恢复 Tab/Return 导航。
 这一步可以单独验证键盘是否向 macOS 送出目标事件。
 
-全局快捷键依赖 Input Monitoring、Accessibility 和生产 event tap。检查运行日志：
+全局快捷键依赖 Accessibility 和生产 event tap。检查运行日志：
 
 ```zsh
 ./script/build_and_run.sh --logs
@@ -333,7 +333,7 @@ modifier 与已 claim key state，确保 physical drain 可以退出。watchdog 
 keyCode 物理状态继续 drain。
 
 如果权限刷新发生在 hold capture 中，确认 AppSession 先取消 capture，再停止 event tap。
-Accessibility 与 Input Monitoring 必须同时可用才启动监听。
+Accessibility 可用后启动监听。
 
 ## 热键产生重复 stop 或幽灵录音
 

@@ -114,7 +114,7 @@ struct HomeView: View {
                 VStack(spacing: 2) {
                     shortcutRow(.dictation, title: "听写", detail: "Fn")
                     shortcutRow(.translation, title: "翻译", detail: "Fn Left Shift")
-                    shortcutRow(.ask, title: "问答", detail: "Fn Space")
+                    shortcutRow(.ask, title: "问答", detail: "未设置")
                 }
             }
 
@@ -146,9 +146,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Lerro for Mac · \(AppMetadata.version)")
                 Button("检查更新") {
-                    if !AppExternalLinks.openReleases() {
-                        session.currentError = AppExternalLinks.releasesOpenFailureMessage
-                    }
+                    AppUpdateController.shared.checkForUpdates()
                 }
                 .buttonStyle(LerroPressButtonStyle())
             }

@@ -4,7 +4,6 @@ import LerroCore
 
 enum CaptureHUDVisualState: Equatable {
     case idleHidden
-    case hover
     case waiting
     case listening
     case handsFree
@@ -14,7 +13,7 @@ enum CaptureHUDVisualState: Equatable {
     var size: CGSize {
         switch self {
         case .idleHidden: CGSize(width: 40, height: 6)
-        case .hover, .waiting, .listening, .processing, .error:
+        case .waiting, .listening, .processing, .error:
             CGSize(width: 70, height: 34)
         case .handsFree:
             CGSize(width: 116, height: 34)
@@ -35,7 +34,6 @@ enum CaptureHUDVisualState: Equatable {
         phase: CapturePhase,
         isStartingCapture: Bool,
         isHandsFreeCapture: Bool,
-        isHUDHovered: Bool,
         isSuppressed: Bool = false
     ) -> Self {
         if isSuppressed { return .idleHidden }
@@ -45,7 +43,7 @@ enum CaptureHUDVisualState: Equatable {
 
         switch phase {
         case .idle:
-            return isHUDHovered ? .hover : .idleHidden
+            return .idleHidden
         case .listening:
             return isHandsFreeCapture ? .handsFree : .listening
         case .transcribing, .enhancing, .inserting:
@@ -56,6 +54,7 @@ enum CaptureHUDVisualState: Equatable {
             return .idleHidden
         }
     }
+
 }
 
 enum CaptureHUDAnnouncement {
@@ -86,7 +85,7 @@ enum CaptureHUDAnnouncement {
         case .error: errorMessage ?? "听写失败，可以重试"
         case .idleHidden where phase == .cancelled: "听写已取消"
         case .idleHidden where previous == .processing: "听写完成"
-        case .idleHidden, .hover: nil
+        case .idleHidden: nil
         }
     }
 }
@@ -135,16 +134,6 @@ struct CaptureHUDView: View {
             }
 
             ZStack {
-                if visualState == .hover {
-                    HStack(spacing: 4) {
-                        Image(systemName: modeIcon)
-                            .font(.system(size: 12, weight: .semibold))
-                        Text(session.preferredActivation(for: session.activeMode) == .hold ? "按住" : "点按")
-                            .font(LerroTheme.font(10, weight: .medium))
-                    }
-                    .transition(.opacity)
-                }
-
                 if let waveformMode {
                     HStack(spacing: 4) {
                         HUDWaveform(
@@ -213,7 +202,7 @@ struct CaptureHUDView: View {
         case .waiting: .waiting
         case .handsFree where session.isStartingCapture: .arming
         case .listening, .handsFree: .listening
-        case .idleHidden, .hover, .processing, .error: nil
+        case .idleHidden, .processing, .error: nil
         }
     }
 
@@ -278,7 +267,6 @@ struct CaptureHUDView: View {
             phase: session.phase,
             isStartingCapture: session.isStartingCapture,
             isHandsFreeCapture: session.isHandsFreeCapture,
-            isHUDHovered: session.isHUDHovered,
             isSuppressed: session.isHUDSuppressed
         )
     }
@@ -319,10 +307,6 @@ struct CaptureHUDView: View {
     private var accessibilityLabel: String {
         switch visualState {
         case .idleHidden: "Lerro 已就绪"
-        case .hover:
-            session.preferredActivation(for: session.activeMode) == .hold
-                ? "Lerro 听写控制，按住快捷键开始，松开后完成"
-                : "Lerro 听写控制，按一次快捷键开始，再按一次完成"
         case .waiting: "正在准备麦克风"
         case .listening: "正在听写"
         case .handsFree: session.isStartingCapture

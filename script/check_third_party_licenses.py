@@ -59,6 +59,18 @@ def checkout_map(root: pathlib.Path) -> dict[str, pathlib.Path]:
     }
 
 
+def artifact_map(root: pathlib.Path) -> dict[str, pathlib.Path]:
+    artifacts = root / ".build" / "artifacts"
+    if not artifacts.is_dir():
+        return {}
+
+    result: dict[str, pathlib.Path] = {}
+    for candidate in artifacts.glob("*/*"):
+        if candidate.is_dir() and any(candidate.glob("LICENSE*")):
+            result[candidate.name.casefold()] = candidate
+    return result
+
+
 def resolved_revision(checkout: pathlib.Path) -> str:
     try:
         return subprocess.check_output(
@@ -76,7 +88,7 @@ def main() -> None:
     parser.add_argument(
         "--license-source",
         type=pathlib.Path,
-        help="workspace whose .build/checkouts provides resolved license evidence",
+        help="workspace whose .build/checkouts and .build/artifacts provide resolved license evidence",
     )
     args = parser.parse_args()
 
@@ -126,6 +138,7 @@ def main() -> None:
         fail("notice table has unresolved entries: " + ", ".join(extra_rows))
 
     checkouts = checkout_map(evidence_root)
+    artifacts = artifact_map(evidence_root)
     if pins and not checkouts:
         fail(
             "resolved checkout licenses are unavailable; run Swift package "
@@ -143,7 +156,7 @@ def main() -> None:
                 f"checkout revision mismatch for {identity}: "
                 f"Package.resolved={revision}, checkout={actual_revision}"
             )
-        license_path = first_license(checkout)
+        license_path = first_license(artifacts.get(identity, checkout))
         expression = detected_license(license_path)
         if expression == "UNKNOWN":
             fail(f"unrecognized license text: {license_path}")

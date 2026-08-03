@@ -123,6 +123,46 @@ if LC_ALL=C grep -aFq "$HOME/" "$binary_path"; then
     print -u2 "Release binary contains a path from the build user's home directory."
     exit 1
 fi
+sparkle_framework_path="$app_path/Contents/Frameworks/Sparkle.framework"
+sparkle_version_path="$sparkle_framework_path/Versions/B"
+sparkle_components=(
+    "$sparkle_version_path/XPCServices/Installer.xpc"
+    "$sparkle_version_path/XPCServices/Downloader.xpc"
+    "$sparkle_version_path/Autoupdate"
+    "$sparkle_version_path/Updater.app"
+    "$sparkle_framework_path"
+)
+for sparkle_component in "${sparkle_components[@]}"; do
+    [[ -e "$sparkle_component" ]] || {
+        print -u2 "Missing embedded Sparkle component: $sparkle_component"
+        exit 1
+    }
+    codesign --verify --strict --verbose=2 "$sparkle_component"
+done
+for sparkle_executable in \
+    "$sparkle_version_path/Sparkle" \
+    "$sparkle_version_path/Autoupdate" \
+    "$sparkle_version_path/Updater.app/Contents/MacOS/Updater" \
+    "$sparkle_version_path/XPCServices/Downloader.xpc/Contents/MacOS/Downloader" \
+    "$sparkle_version_path/XPCServices/Installer.xpc/Contents/MacOS/Installer"; do
+    [[ "$(lipo -archs "$sparkle_executable")" == "arm64" ]] || {
+        print -u2 "Embedded Sparkle executable must be arm64-only: $sparkle_executable"
+        exit 1
+    }
+done
+otool -L "$binary_path" | grep -Fq '@rpath/Sparkle.framework/Versions/B/Sparkle' || {
+    print -u2 "Release binary does not link the embedded Sparkle framework."
+    exit 1
+}
+otool -l "$binary_path" | awk '
+    $1 == "cmd" && $2 == "LC_RPATH" { in_rpath = 1; next }
+    in_rpath && $1 == "path" && $2 == "@executable_path/../Frameworks" { found = 1 }
+    in_rpath && $1 == "cmd" { in_rpath = 0 }
+    END { exit(found ? 0 : 1) }
+' || {
+    print -u2 "Release binary is missing the app Frameworks runtime search path."
+    exit 1
+}
 
 required_resources=(
     PrivacyInfo.xcprivacy
@@ -199,6 +239,7 @@ vendor_record_pairs=(
     "$project_dir/Vendor/swift-huggingface/UPSTREAM.md|$app_path/Contents/Resources/ThirdPartyLicenses/swift-huggingface-UPSTREAM.md"
     "$project_dir/Vendor/swift-transformers/LICENSE|$app_path/Contents/Resources/ThirdPartyLicenses/swift-transformers-LICENSE"
     "$project_dir/Vendor/swift-transformers/UPSTREAM.md|$app_path/Contents/Resources/ThirdPartyLicenses/swift-transformers-UPSTREAM.md"
+    "$project_dir/.build/artifacts/sparkle/Sparkle/LICENSE|$app_path/Contents/Resources/ThirdPartyLicenses/sparkle-LICENSE"
 )
 for record_pair in "${vendor_record_pairs[@]}"; do
     source_record="${record_pair%%|*}"
@@ -290,6 +331,30 @@ with (app / "Contents/Info.plist").open("rb") as handle:
     info = plistlib.load(handle)
 if manifest["application"]["bundleIdentifier"] != info["CFBundleIdentifier"]:
     raise SystemExit("Bundle identifier differs from manifest")
+
+if info.get("SUFeedURL") != "https://updates.lerroapp.com/appcast/stable.xml":
+    raise SystemExit("Sparkle feed URL differs from the production update endpoint")
+if info.get("SUEnableAutomaticChecks") is not False:
+    raise SystemExit("Sparkle scheduler must stay disabled for app-owned probing")
+if info.get("SUAutomaticallyUpdate") is not False:
+    raise SystemExit("Sparkle automatic installation must stay disabled")
+if info.get("SUAllowsAutomaticUpdates") is not False:
+    raise SystemExit("Sparkle automatic downloads must stay unavailable")
+if "SUScheduledCheckInterval" in info:
+    raise SystemExit("Sparkle check interval must stay app-owned")
+if not re.fullmatch(r"[A-Za-z0-9+/]{43}=", str(info.get("SUPublicEDKey", ""))):
+    raise SystemExit("Sparkle public signing key is malformed")
+
+sparkle = artifacts["applicationArchive"].get("sparkle")
+if not isinstance(sparkle, dict):
+    raise SystemExit("Application archive is missing Sparkle metadata")
+if mode == "developer-id":
+    if not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", str(sparkle.get("edSignature", ""))):
+        raise SystemExit("Developer ID application archive lacks a Sparkle signature")
+    if sparkle.get("length") != archive_raw.stat().st_size:
+        raise SystemExit("Sparkle archive length differs from the final ZIP")
+elif sparkle.get("edSignature") is not None or sparkle.get("length") is not None:
+    raise SystemExit("Non-public package unexpectedly carries a Sparkle archive signature")
 PY
 
 if [[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["signing"]["resolvedMode"])' "$manifest_path")" == "developer-id" ]]; then

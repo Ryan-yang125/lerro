@@ -18,7 +18,7 @@ reproduce the issue and the affected code remains supportable.
 
 System-level behavior still requires verification on the affected Mac. Useful
 examples include TCC permission state, microphone hardware, Speech resources,
-Accessibility behavior in a specific editor, Input Monitoring, multiple
+Accessibility behavior in a specific editor, global shortcut behavior, multiple
 displays, and Gatekeeper. Maintainers may ask for a fresh run of the documented
 diagnostic commands.
 

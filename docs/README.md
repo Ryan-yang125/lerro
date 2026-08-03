@@ -36,7 +36,7 @@ licenses, and deterministic validation assets.
 | --- | --- |
 | [`architecture.md`](architecture.md) | Targets, dependencies, composition, concurrency, storage, and build shape |
 | [`core-flow.md`](core-flow.md) | Dictate, Translate, Ask, Rewrite, Hands-free, failure, cancellation, and cleanup |
-| [`permissions.md`](permissions.md) | Microphone, Speech, Accessibility, Input Monitoring, TCC, and manual checks |
+| [`permissions.md`](permissions.md) | Microphone, Accessibility, TCC, and manual checks |
 | [`models.md`](models.md) | Consent, model source, download, cache, runtime, offline behavior, and smoke test |
 | [`privacy-security.md`](privacy-security.md) | Data map, secure input, clipboard, audio, network, logs, and deletion |
 | [`build.md`](build.md) | Toolchain, app bundle, fixtures, signing modes, and build commands |

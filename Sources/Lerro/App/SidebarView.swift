@@ -6,6 +6,7 @@ struct SidebarView: View {
     @FocusState private var focusedDestination: SidebarDestination?
 
     var body: some View {
+        @Bindable var updater = AppUpdateController.shared
         VStack(spacing: 0) {
             LerroBrandBadge()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -35,6 +36,17 @@ struct SidebarView: View {
                     session.isOnboardingPresented = true
                 }
                 .frame(maxWidth: .infinity)
+                if updater.updateAvailable {
+                    LerroIconButton(
+                        systemName: AppUpdatePresentation.availableIcon,
+                        help: "发现新版本，立即下载",
+                        foreground: Color(nsColor: .systemBlue)
+                    ) {
+                        updater.checkForUpdates()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel("发现新版本，立即下载")
+                }
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 10)

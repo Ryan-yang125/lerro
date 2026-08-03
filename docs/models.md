@@ -1,14 +1,16 @@
 # Intelligence modes and model providers
 
-Lerro always uses Apple Speech for transcription, then routes the raw transcript
-through one of three user-selected modes:
+Lerro always uses Apple Speech for transcription. Dictate, Ask, and Rewrite can
+then route the raw transcript through one of three user-selected modes:
 
 - `raw`: direct Dictate output with no language-model call.
 - `local`: Qwen through MLX on the current Mac.
 - `remote`: a user-configured OpenAI-compatible API.
 
-Translate, Ask and Rewrite require `local` or `remote`. A capture freezes the
-selected mode and configuration when recording starts.
+Translate uses Apple Translation directly and does not depend on the selected
+intelligence mode. Ask and Rewrite require `local` or `remote`. A capture freezes
+the selected mode, Provider configuration, API key, context options, and target
+language when recording starts.
 
 ## Default model
 

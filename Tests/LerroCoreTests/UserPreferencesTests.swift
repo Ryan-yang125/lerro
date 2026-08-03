@@ -46,19 +46,26 @@ struct UserPreferencesTests {
         #expect(!preferences.shouldSaveCaptureAudio)
     }
 
-    @Test("Default hotkeys cover every primary interaction")
+    @Test("Default hotkeys provide the clean first-run capture profile")
     func validatesDefaultHotkeys() throws {
         let hotkeys = UserPreferences().hotkeys
 
-        #expect(hotkeys.count == 4)
-        #expect(Set(hotkeys.map(\.action)) == [.dictate, .translate, .ask, .pasteLastResult])
+        #expect(hotkeys.count == 3)
+        #expect(Set(hotkeys.map(\.action)) == [.dictate, .translate, .pasteLastResult])
 
         let dictate = try #require(hotkeys.first { $0.action == .dictate })
         #expect(dictate.usesFunctionKey)
-        #expect(dictate.activation == .hold)
+        #expect(dictate.activation == .toggle)
         #expect(dictate.keyCode == nil)
         #expect(dictate.modifiers == 1 << 23)
         #expect(dictate.displayName == "Fn")
+
+        let translate = try #require(hotkeys.first { $0.action == .translate })
+        #expect(translate.usesFunctionKey)
+        #expect(translate.activation == .toggle)
+        #expect(translate.keyCode == nil)
+        #expect(translate.modifiers == (1 << 23) | (1 << 17))
+        #expect(translate.displayName == "Fn ⇧")
 
         let paste = try #require(hotkeys.first { $0.action == .pasteLastResult })
         #expect(paste.keyCode == 9)

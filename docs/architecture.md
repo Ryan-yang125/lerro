@@ -24,6 +24,27 @@ Lerro 是 package-first 的原生 macOS GUI 应用。工程入口为
 | `LerroMac` | Audio、Speech、Accessibility、文本交付、全局热键、权限、登录项与 panels | [`Sources/LerroMac`](../Sources/LerroMac) |
 | `Lerro` | SwiftUI scene、设计系统、页面、依赖组合、AppSession 编排 | [`Sources/Lerro`](../Sources/Lerro) |
 
+## 更新与公开分发
+
+[`AppUpdateController.swift`](../Sources/Lerro/App/AppUpdateController.swift) 在正常应用
+生命周期中持有 Sparkle 的 `SPUStandardUpdaterController`。它读取
+[`Info.plist`](../config/Info.plist) 中的 HTTPS appcast 与 Ed25519 公钥；应用启动时及每
+24 小时执行静默信息探测，有更新时显示蓝色下载入口。Home、设置页和下载入口使用同一个
+controller 发起用户主动检查与下载。fixture 与 XCTest 进程通过环境门禁跳过 controller，
+因此 fixture 保持零网络访问。
+
+公开数据流位于应用进程之外：
+
+```text
+Lerro.app -> updates.lerroapp.com/appcast/stable.xml -> D1 stable head
+          -> updates.lerroapp.com/download/macos/latest -> 私有 R2 ZIP
+lerroapp.com -> lerro-site Worker
+```
+
+`lerro-distribution` Worker 只提供读取路由。发布脚本校验已公证且由 Sparkle 签名的 ZIP，
+上传不可变 R2 key，再通过带 generation 比较条件的 D1 batch 推进 stable head。完整的密钥、失败和兼容策略见
+[ADR-0007](decisions/0007-cloudflare-distribution-and-sparkle-updates.md)。
+
 测试 target 与 source 的实时清单由以下命令给出：
 
 ```zsh

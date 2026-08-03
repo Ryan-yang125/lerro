@@ -10,6 +10,8 @@ LICENSES/
 NOTICE
 PRIVACY.md
 README.md
+PRODUCT.md
+DESIGN.md
 SECURITY.md
 SUPPORT.md
 THIRD_PARTY_NOTICES.md
@@ -23,6 +25,7 @@ Sources/
 Tests/
 Vendor/
 config/
+distribution/
 site/
 
 # Public project automation
@@ -31,6 +34,7 @@ script/build_and_run.sh
 script/check_third_party_licenses.py
 script/export_public_repo.sh
 script/package_release.sh
+script/publish_cloudflare_release.sh
 script/public_repo_allowlist.txt
 script/public_repo_legacy_allowlist.txt
 script/scan_public_repo.sh

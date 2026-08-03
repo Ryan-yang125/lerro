@@ -1,29 +1,24 @@
-import Foundation
 import Testing
 @testable import Lerro
 
-@Suite("App external links")
-@MainActor
+@Suite("Application updates")
 struct AppExternalLinksTests {
-    @Test("Release action opens the repository release list")
-    func releasePage() {
-        var openedURL: URL?
-
-        let opened = AppExternalLinks.openReleases { url in
-            openedURL = url
-            return true
-        }
-
-        #expect(opened)
-        #expect(openedURL?.absoluteString == "https://github.com/Ryan-yang125/lerro/releases")
-        #expect(openedURL?.path == "/Ryan-yang125/lerro/releases")
+    @Test("Live update checks run outside fixture and test processes")
+    func allowsLiveUpdater() {
+        #expect(AppUpdateEnvironment.allowsLiveUpdater([:]))
+        #expect(AppUpdateEnvironment.allowsLiveUpdater(["LERRO_FIXTURE_MODE": "0"]))
     }
 
-    @Test("Release action preserves opener failure")
-    func releasePageFailure() {
-        let opened = AppExternalLinks.openReleases { _ in false }
+    @Test("Fixtures and tests never start a network updater")
+    func keepsFixtureAndTestProcessesOffline() {
+        #expect(!AppUpdateEnvironment.allowsLiveUpdater(["LERRO_FIXTURE_MODE": "1"]))
+        #expect(!AppUpdateEnvironment.allowsLiveUpdater(["XCTestConfigurationFilePath": "/tmp/test.xctest"]))
+    }
 
-        #expect(!opened)
-        #expect(!AppExternalLinks.releasesOpenFailureMessage.isEmpty)
+    @Test("Available updates use the dedicated blue download affordance")
+    func presentsAvailableUpdateClearly() {
+        #expect(AppUpdatePresentation.availableIcon == "arrow.down.circle.fill")
+        #expect(AppUpdatePresentation.usesSystemBlue)
+        #expect(AppUpdatePolicy.detectionInterval == .seconds(86_400))
     }
 }

@@ -40,7 +40,6 @@ jobs:
           npm run lint
           npm run build
           npm test
-          npm run build:pages
           npm audit --omit=dev --audit-level=high
 
   swift-package:

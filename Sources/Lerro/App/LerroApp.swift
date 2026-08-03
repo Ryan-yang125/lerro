@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        AppUpdateController.shared.startIfEligible()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -22,6 +23,7 @@ struct LerroApp: App {
     var body: some Scene {
         Window("Lerro", id: "main") {
             RootView(session: session)
+                .background(TranslationResourcePreparationHost(session: session))
                 .task { await session.start() }
                 .onReceive(NotificationCenter.default.publisher(
                     for: NSApplication.didBecomeActiveNotification
@@ -70,6 +72,8 @@ private struct LerroCommands: Commands {
             Divider()
             Button("粘贴上次结果") { session.pasteLastResult() }
                 .keyboardShortcut("v", modifiers: [.command, .control])
+            Divider()
+            Button("检查更新…") { AppUpdateController.shared.checkForUpdates() }
         }
     }
 

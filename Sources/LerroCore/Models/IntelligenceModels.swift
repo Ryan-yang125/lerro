@@ -79,6 +79,7 @@ public enum LerroError: LocalizedError, Sendable {
     case localData(String)
     case modelUnavailable(String)
     case remoteUnavailable(String)
+    case translationUnavailable(String)
     case selectionTooLong(Int)
     case cancelled
 
@@ -100,6 +101,8 @@ public enum LerroError: LocalizedError, Sendable {
             "本地模型暂不可用：\(message)"
         case .remoteUnavailable(let message):
             "远程模型暂不可用：\(message)"
+        case .translationUnavailable(let message):
+            "设备端翻译暂不可用：\(message)"
         case .selectionTooLong(let maximumCharacters):
             "选中文字最多支持 \(maximumCharacters) 字符，请缩小选区后重试"
         case .cancelled:

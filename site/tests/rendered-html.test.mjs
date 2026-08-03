@@ -10,7 +10,7 @@ async function render(path = "/") {
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
-    new Request(`https://lerro.pages.dev${path}`, {
+    new Request(`https://lerroapp.com${path}`, {
       headers: { accept: "text/html" },
     }),
     {
@@ -31,24 +31,49 @@ test("server-renders the complete Lerro landing page", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Lerro — Open-source voice typing for macOS<\/title>/i);
-  assert.match(html, /Speak freely\./);
-  assert.match(html, /Write clearly\./);
+  assert.match(html, /<title>Lerro — Native voice typing for macOS<\/title>/i);
+  assert.match(html, /Speak\./);
+  assert.match(html, /Your Mac writes\./);
   assert.match(html, /Download for macOS/);
   assert.match(html, />Dictate</);
   assert.match(html, />Translate</);
-  assert.match(html, />Ask</);
+  assert.match(html, />Refine</);
   assert.match(html, /Apple Speech/);
-  assert.match(html, /Your API key/);
-  assert.match(html, /Qwen on your Mac/);
-  assert.match(html, /System Settings/);
-  assert.match(html, /Privacy &amp; Security/);
-  assert.match(html, /https:\/\/github\.com\/Ryan-yang125\/lerro\/releases/);
-  assert.match(html, /https:\/\/lerro\.pages\.dev/);
+  assert.match(html, /No telemetry/);
+  assert.match(html, /does not request Input Monitoring/);
+  assert.match(html, /Signed, notarized/);
+  assert.match(html, /hero-hud--listening/);
+  assert.equal((html.match(/hero-hud__bar/g) ?? []).length, 10);
+  assert.match(html, /data-interior-link/);
+  assert.match(html, /lerro-home-light\.png/);
+  assert.match(html, /lerro-onboarding-shortcuts-light\.png/);
+  assert.match(html, /lerro-settings-light\.png/);
+  assert.match(html, /https:\/\/updates\.lerroapp\.com\/download\/macos\/latest/);
+  assert.match(html, /href="\/changelog"/);
+  assert.match(html, /https:\/\/lerroapp\.com/);
   assert.doesNotMatch(html, /releases\/latest|codex-preview|SkeletonPreview|react-loading-skeleton/i);
 });
 
-test("publishes crawler metadata for the Pages host", async () => {
+test("server-renders the changelog with permanent release downloads", async () => {
+  const response = await render("/changelog");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+
+  const html = await response.text();
+  assert.match(html, /<title>Changelog — Lerro<\/title>/i);
+  assert.match(html, /What(?:&#x27;|&apos;|’)s new in Lerro\./);
+  assert.match(html, /Version(?:\s|<[^>]+>)*1\.1\.0/);
+  assert.match(html, /Build(?:\s|<[^>]+>)*6/);
+  assert.match(html, /August 4, 2026/);
+  assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.1\.0\/6\/Lerro-macOS-arm64\.zip/);
+  assert.match(html, /Version(?:\s|<[^>]+>)*1\.0\.3/);
+  assert.match(html, /Build(?:\s|<[^>]+>)*5/);
+  assert.match(html, /August 2, 2026/);
+  assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.0\.3\/5\/Lerro-macOS-arm64\.zip/);
+  assert.match(html, /href="\/changelog"/);
+});
+
+test("publishes crawler metadata for the custom domain", async () => {
   const [robotsResponse, sitemapResponse] = await Promise.all([
     render("/robots.txt"),
     render("/sitemap.xml"),
@@ -60,9 +85,10 @@ test("publishes crawler metadata for the Pages host", async () => {
     robotsResponse.text(),
     sitemapResponse.text(),
   ]);
-  assert.match(robots, /Host: https:\/\/lerro\.pages\.dev/);
-  assert.match(robots, /Sitemap: https:\/\/lerro\.pages\.dev\/sitemap\.xml/);
-  assert.match(sitemap, /<loc>https:\/\/lerro\.pages\.dev\/<\/loc>/);
+  assert.match(robots, /Host: https:\/\/lerroapp\.com/);
+  assert.match(robots, /Sitemap: https:\/\/lerroapp\.com\/sitemap\.xml/);
+  assert.match(sitemap, /<loc>https:\/\/lerroapp\.com\/<\/loc>/);
+  assert.match(sitemap, /<loc>https:\/\/lerroapp\.com\/changelog<\/loc>/);
 });
 
 test("keeps the public site free of starter surfaces", async () => {
@@ -73,9 +99,9 @@ test("keeps the public site free of starter surfaces", async () => {
   ]);
 
   assert.match(page, /Lerro/);
-  assert.match(layout, /https:\/\/lerro\.pages\.dev/);
+  assert.match(layout, /https:\/\/lerroapp\.com/);
   assert.match(packageJson, /"name": "lerro-site"/);
-  assert.match(packageJson, /"build:pages": "LERRO_STATIC_EXPORT=1 next build"/);
+  assert.match(packageJson, /"deploy": "npm run build && wrangler deploy"/);
   assert.doesNotMatch(
     `${page}\n${layout}\n${packageJson}`,
     /site-creator|Starter Project|SkeletonPreview|react-loading-skeleton|drizzle|tailwind/i,
@@ -86,6 +112,10 @@ test("keeps the public site free of starter surfaces", async () => {
     access(new URL("public/lerro-symbol.svg", projectRoot)),
     access(new URL("public/favicon.png", projectRoot)),
     access(new URL("public/og.png", projectRoot)),
+    access(new URL("public/screenshots/lerro-home-light.png", projectRoot)),
+    access(new URL("public/screenshots/lerro-onboarding-shortcuts-light.png", projectRoot)),
+    access(new URL("public/screenshots/lerro-settings-light.png", projectRoot)),
+    access(new URL("app/components/interior/README.md", projectRoot)),
   ]);
 
   await Promise.all([

@@ -30,10 +30,39 @@ final class AudioBufferConverter: @unchecked Sendable {
             inputProvider.provide(status: statusPointer)
         }
 
-        guard conversionError == nil, status == .haveData || status == .inputRanDry else {
+        guard conversionError == nil, (status == .haveData || status == .inputRanDry) else {
             return nil
         }
         return output.frameLength > 0 ? output : nil
+    }
+
+    /// Drains samples retained by the resampler after the final input buffer.
+    /// This preserves the trailing phoneme when input and analysis sample rates
+    /// differ.
+    func drainTail(maximumBufferCount: Int = 32) -> [AVAudioPCMBuffer]? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard maximumBufferCount > 0 else { return nil }
+        let capacity = AVAudioFrameCount(max(32, Int(outputFormat.sampleRate / 50)))
+        var buffers: [AVAudioPCMBuffer] = []
+        for _ in 0..<maximumBufferCount {
+            guard let output = AVAudioPCMBuffer(
+                pcmFormat: outputFormat,
+                frameCapacity: capacity
+            ) else { return nil }
+            var conversionError: NSError?
+            let status = converter.convert(to: output, error: &conversionError) { _, statusPointer in
+                statusPointer.pointee = .endOfStream
+                return nil
+            }
+            guard conversionError == nil,
+                  (status == .haveData || status == .endOfStream) else { return nil }
+            if output.frameLength > 0 { buffers.append(output) }
+            if status == .endOfStream { return buffers }
+            guard output.frameLength > 0 else { return nil }
+        }
+        return nil
     }
 }
 

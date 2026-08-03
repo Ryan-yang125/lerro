@@ -1,153 +1,88 @@
-# Lerro
+<p align="center">
+  <img src="site/public/lerro-logo.svg" width="176" alt="Lerro">
+</p>
 
-**Speak freely. Write clearly.**
+<h1 align="center">Voice to text, native to Mac.</h1>
 
-[Website](https://lerro.pages.dev) ·
-[Download the macOS preview](https://github.com/Ryan-yang125/lerro/releases)
+<p align="center">
+  Lerro turns speech into text at your cursor with Apple Speech on macOS 26.<br>
+  Fast, accurate, local-first, and open source.
+</p>
 
-Lerro is a local-first voice-writing app for macOS with optional BYOK cloud
-processing. Hold a global shortcut, speak naturally, and deliver a clear result
-to the current text cursor. Dictate, Translate, Ask, Rewrite, history, personal
-dictionary, and Hands-free share one native session pipeline.
+<p align="center">
+  <a href="https://updates.lerroapp.com/download/macos/latest"><strong>Download for macOS</strong></a>
+  · <a href="https://lerroapp.com">Website</a>
+  · <a href="https://lerroapp.com/changelog">Changelog</a>
+</p>
 
-## Highlights
+<p align="center">
+  Free forever · Apple silicon · macOS 26+
+</p>
 
-- Native SwiftUI and AppKit experience for macOS 26.
-- Apple Speech transcription with secure-field and focus checks.
-- Optional on-device MLX processing after explicit model-download consent.
-- DeepSeek, OpenAI, Gemini, and custom OpenAI-compatible processing with a
-  user-supplied API key.
-- Transaction-safe current-focus Command-V delivery, with strict Accessibility checks for Rewrite.
-- Local history, dictionary, JSON preferences, optional recordings, and model cache.
-- Global Fn gestures, non-activating capture HUD, and interactive Ask panel.
-- Apple-native visual system using semantic colors, system typography,
-  materials, accessibility settings, and standard controls.
-- Reproducible local Release gates for signing, checksums, source metadata,
-  licenses, architecture, resources, and isolated launch checks.
+![Lerro 1.1 home screen](site/public/screenshots/lerro-home-light.png)
 
-## Architecture
+## Speak. Your Mac writes.
 
-```text
-Lerro -> LerroIntelligence -> LerroCore
-   |                           ^
-   +----------> LerroMac ------+
-```
+Press a shortcut, speak naturally, and keep working. Lerro uses Apple&apos;s native Speech framework to transcribe your voice, then places the result in the active Mac app.
 
-- `LerroCore` contains domain models, protocols, rules, persistence, and
-  deterministic text processing.
-- `LerroIntelligence` owns MLX model download, loading, and generation.
-- `LerroMac` owns AVFoundation, Speech, Accessibility, CGEventTap, permissions,
-  panels, login items, and lifecycle integration.
-- `Lerro` owns SwiftUI scenes, the design system, dependency composition, and
-  `AppSession` orchestration.
+- **Native and fast.** Apple Speech gives Dictate a direct path from microphone to cursor.
+- **Private by architecture.** Lerro has no account system, subscription, product analytics, or telemetry. Audio saving is off by default.
+- **Translation on your Mac.** Apple Translation turns speech into another language after the required language resources are installed.
+- **Intelligence when you choose it.** Refine locally with an optional MLX model, or connect your own OpenAI-compatible API key.
+- **Open from app to release.** Source, tests, privacy policy, release scripts, and website are public under Apache-2.0.
 
-Every capture receives a generation and session identity. Results from an older
-operation cannot update a newer capture. Ordinary insertion commits to the
-current keyboard focus; selection-aware Rewrite revalidates the original app,
-selection, and secure-input state immediately before writing.
+## One shortcut, three paths
 
-## Requirements
+| Path | Flow | Best for |
+| --- | --- | --- |
+| **Dictate** | Voice → Apple Speech → Cursor | The shortest native transcription path |
+| **Translate** | Voice → Apple Speech → Apple Translation → Cursor | On-device multilingual writing |
+| **Refine** | Transcript → Local MLX or BYOK → Cursor | Polish, rewrite, and Ask |
 
-The exact platform, Swift version, targets, and dependencies live in
-[`Package.swift`](Package.swift). The current release workflow targets macOS 26
-on Apple silicon and requires the matching Xcode Metal Toolchain for MLX.
+![Lerro onboarding detecting an Fn shortcut](site/public/screenshots/lerro-onboarding-shortcuts-light.png)
+
+Shortcut setup detects the exact press and release events before onboarding completes. Lerro requests two macOS permissions: **Microphone** for the speech you choose to capture and **Accessibility** for global shortcuts and cursor delivery. Input Monitoring and a separate Speech Recognition permission are not requested.
+
+## Local-first, with clear network boundaries
+
+Core Dictate, Apple Translation, and optional local MLX processing work offline after their language resources or model are installed.
+
+Network access is limited to explicit boundaries:
+
+- Apple language-resource and optional model setup.
+- Signed update checks and downloads.
+- BYOK requests sent directly to the provider you configure, with only the context fields you enable.
+
+Lerro&apos;s update service handles release metadata and downloads. It never receives audio, transcripts, or app context. Read the full [privacy model](PRIVACY.md) and [security policy](SECURITY.md).
+
+## Download
+
+[Download the latest signed and Apple-notarized build](https://updates.lerroapp.com/download/macos/latest), then move **Lerro.app** to Applications and complete the guided permission setup.
+
+Requirements:
+
+- Apple silicon Mac.
+- macOS 26 or later.
+- About 3.03 GB only when you approve the optional local MLX model.
+
+Permanent downloads and concise release notes live in the [changelog](https://lerroapp.com/changelog). GitHub Releases mirrors the same public artifacts.
+
+## Build from source
 
 ```zsh
-xcode-select -p
-swift --version
-xcrun metal --version
-```
-
-Install the matching Metal component when needed:
-
-```zsh
-xcodebuild -downloadComponent MetalToolchain
-```
-
-## Build and test
-
-```zsh
-swift package describe --type json
+swift build
 swift test
-./script/build_and_run.sh --verify
+./script/build_and_run.sh
 ```
 
-The app-aware build script creates `dist/Lerro.app` with resources, privacy
-metadata, third-party license records, an arm64 executable, and a matching dSYM.
-A bare executable under `.build` has a smaller runtime boundary and is not a
-Release acceptance artifact.
+The product architecture and contributor details live in:
 
-Create and verify release archives with:
-
-```zsh
-./script/package_release.sh
-./script/verify_release.sh
-```
-
-Signing modes are `auto`, `ad-hoc`, `development`, and `developer-id`. Public
-distribution uses a Developer ID Application identity, Hardened Runtime, secure
-timestamping, Apple notarization, stapling, Gatekeeper validation, and an
-independent quarantine test. The Phase 6 publication pipeline also produces an
-SBOM and GitHub artifact attestation. Signing identities and the
-`LERRO_NOTARY_PROFILE` value stay in the maintainer environment.
-
-Preview builds use manual updates. Choose **Check for Updates** in Home or
-Settings to open the complete [GitHub Releases](https://github.com/Ryan-yang125/lerro/releases)
-list, including prereleases, then download the newer signed build. Stable
-automatic updates remain a future release capability.
-
-## Permissions and intelligence providers
-
-Lerro can request Microphone, Speech Recognition, Accessibility, and Input
-Monitoring. Each permission has a feature-scoped explanation and remains under
-the user's control in System Settings. See [macOS permissions](docs/permissions.md).
-
-Basic Dictate can deliver the Apple Speech transcript directly. Intelligent
-processing can use the optional MLX model or a user-configured compatible API.
-The default local-model download is approximately 3.03 GB and starts only after
-explicit consent. API mode sends the enabled context directly to the selected
-provider. See [intelligence providers](docs/models.md).
-
-## Privacy
-
-Lerro has no account requirement, advertising SDK, or analytics pipeline.
-History, dictionary, preferences, optional audio, and model files remain in the
-app's Application Support directory. Provider API keys are plaintext fields in
-the local `preferences.json`, protected with owner-only file permissions. Raw-audio
-retention is disabled by default. Public model downloads use no Hugging Face
-account bearer token. API processing sends only the context enabled in settings
-to the provider chosen by the user.
-
-Read [PRIVACY.md](PRIVACY.md) and the engineering
-[privacy and security boundary](docs/privacy-security.md) for the complete data
-map, clipboard transaction, secure-input, logging, deletion, and migration
-rules.
-
-## Documentation
-
-- [Engineering index](docs/README.md)
 - [Architecture](docs/architecture.md)
 - [Core flow](docs/core-flow.md)
-- [Build](docs/build.md)
+- [Build guide](docs/build.md)
 - [Testing](docs/testing.md)
-- [Release and notarization](docs/release.md)
-- [Identity and migration](docs/identity.md)
-- [Open-source publication](docs/open-source/README.md)
-- [Brand Kit](Brand/README.md)
+- [Contributing](CONTRIBUTING.md)
 
-Automated tests, bundle validation, fixture screenshots, real macOS permissions,
-physical shortcuts, cross-application delivery, local model generation, and
-Developer ID distribution each prove a separate boundary. Release claims list
-the exact checks completed and the system-level checks still pending.
+## License
 
-## Contributing and security
-
-Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Report
-suspected vulnerabilities through the private path in [SECURITY.md](SECURITY.md).
-Use synthetic content in tests, logs, issues, and screenshots.
-
-Source code is licensed under [Apache-2.0](LICENSE). First-party documentation,
-screenshots, and reusable templates use
-[CC BY 4.0](LICENSES/CC-BY-4.0.txt). Third-party records are in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The Lerro name and logo follow
-[TRADEMARKS.md](TRADEMARKS.md).
+Lerro source code is available under [Apache-2.0](LICENSE). Documentation and first-party screenshots use [CC BY 4.0](LICENSES/CC-BY-4.0.txt). The name and logo follow [TRADEMARKS.md](TRADEMARKS.md); third-party notices are recorded in [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -231,23 +231,15 @@ public struct UserPreferences: Codable, Equatable, Sendable {
             action: .dictate,
             modifiers: 1 << 23,
             usesFunctionKey: true,
-            activation: .hold,
+            activation: .toggle,
             displayName: "Fn"
         ),
         HotkeyDefinition(
             action: .translate,
             modifiers: (1 << 23) | (1 << 17),
             usesFunctionKey: true,
-            activation: .hold,
+            activation: .toggle,
             displayName: "Fn ⇧"
-        ),
-        HotkeyDefinition(
-            action: .ask,
-            keyCode: 49,
-            modifiers: 1 << 23,
-            usesFunctionKey: true,
-            activation: .hold,
-            displayName: "Fn Space"
         ),
         HotkeyDefinition(
             action: .pasteLastResult,

@@ -54,10 +54,7 @@ public protocol HotkeyMonitoring: AnyObject, Sendable {
 public protocol PermissionChecking: Sendable {
     func microphoneAuthorized() async -> Bool
     func requestMicrophone() async -> Bool
-    func speechAuthorized() async -> Bool
-    func requestSpeech() async -> Bool
     func accessibilityAuthorized(prompt: Bool) -> Bool
-    func inputMonitoringAuthorized(prompt: Bool) -> Bool
 }
 
 public protocol LoginItemManaging: Sendable {

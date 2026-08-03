@@ -5,6 +5,33 @@ import Testing
 
 @Suite("Audio lifecycle", .serialized)
 struct AudioLifecycleTests {
+    @Test("Transcript segments preserve punctuation and CJK boundaries")
+    func transcriptSeparatorsRespectLanguageBoundaries() {
+        #expect(transcriptSeparator(after: "hello", before: ",") == "")
+        #expect(transcriptSeparator(after: "(", before: "hello") == "")
+        #expect(transcriptSeparator(after: "hello", before: "world") == " ")
+        #expect(transcriptSeparator(after: "你好", before: "世界") == "")
+        #expect(transcriptSeparator(after: "你好", before: "world") == " ")
+        #expect(transcriptSeparator(after: "world", before: "。") == "")
+        #expect(transcriptSeparator(after: "こんにちは", before: "世界") == "")
+        #expect(transcriptSeparator(after: "안녕", before: "하세요") == "")
+    }
+
+    @Test("Transcript ledger replaces overlapping volatile text and preserves final order")
+    func transcriptLedgerReconcilesVolatileAndFinalRanges() {
+        var ledger = TranscriptLedger()
+        ledger.apply(text: "later", start: 2, duration: 1, isFinal: false)
+        ledger.apply(text: "hello", start: 0, duration: 1, isFinal: false)
+        #expect(ledger.composedText == "hello later")
+
+        ledger.apply(text: "", start: 2, duration: 1, isFinal: false)
+        #expect(ledger.composedText == "hello")
+
+        ledger.apply(text: "hello,", start: 0, duration: 1, isFinal: true)
+        ledger.apply(text: "world", start: 1, duration: 1, isFinal: true)
+        #expect(ledger.composedText == "hello, world")
+    }
+
     @Test("Normalizes silence and a known signal level")
     func normalizesAudioLevels() throws {
         let silence = try makeBuffer(sampleRate: 16_000, frameCount: 256) { _ in 0 }
@@ -37,6 +64,10 @@ struct AudioLifecycleTests {
         #expect(output.frameLength <= output.frameCapacity)
         #expect(output.format.sampleRate == 16_000)
         #expect(output.format.channelCount == 1)
+
+        let tail = try #require(converter.drainTail())
+        #expect(tail.count <= 32)
+        #expect(tail.allSatisfy { $0.frameLength > 0 && $0.frameLength <= $0.frameCapacity })
     }
 
     @Test("Writes and reopens a synthetic CAF recording")

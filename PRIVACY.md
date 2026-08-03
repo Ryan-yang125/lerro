@@ -21,14 +21,11 @@ Model files can be removed by following the documented cache-removal procedure.
 
 ## System permissions
 
-Lerro can request four macOS permissions:
+Lerro can request two macOS permissions:
 
 - Microphone, to capture speech after an explicit user action.
-- Speech Recognition, to turn captured audio into text with Apple Speech.
 - Accessibility, to inspect a limited focused-element context, deliver text,
   and suppress a configured shortcut key before it reaches the focused app.
-- Input Monitoring, to observe configured global keyboard shortcut press and
-  release events.
 
 The app checks secure input fields before capture. Selection-aware Rewrite also
 verifies the secure-input state, target application, focused element, and original
@@ -51,6 +48,13 @@ Network access is limited to these product paths:
   directly to the configured DeepSeek, OpenAI, Gemini, or custom compatible
   endpoint using the user's API key. A connection test sends only a fixed
   synthetic message.
+- Lerro checks the signed Sparkle release feed at `updates.lerroapp.com` on app
+  launch, every 24 hours while running, and on an explicit user check. When a
+  newer release is available, clicking the update control starts the signed ZIP
+  download from the same domain. Cloudflare receives ordinary
+  connection metadata and update-selection information such as app version and
+  platform. Its private R2 and D1 resources retain release ZIPs and release
+  metadata only.
 
 Voice audio, transcripts, focused text, dictionary entries, and prompts are not
 sent to Hugging Face. Local language-model generation runs on the Mac after the
@@ -60,6 +64,11 @@ before the caret, up to 40 after it, task-relevant selected text, the user's ton
 and up to 12 matching dictionary entries. The configured provider receives this
 content plus ordinary connection and billing metadata under its own terms and
 privacy policy.
+
+The update service does not receive voice audio, transcripts, focused text,
+selected text, dictionary entries, prompts, model answers, or provider API keys.
+The app verifies each downloaded update archive with its embedded Sparkle
+Ed25519 public key before installation.
 
 ## Clipboard and focused text
 

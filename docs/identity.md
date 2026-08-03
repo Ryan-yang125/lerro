@@ -53,8 +53,8 @@ bundle is running.
 
 ## Permission effect
 
-macOS treats `app.lerro.mac` as a new privacy identity. Microphone, Speech,
-Accessibility, and Input Monitoring are requested again from the final signed
+macOS treats `app.lerro.mac` as a new privacy identity. Microphone and
+Accessibility are requested again from the final signed
 app. Testing uses a stable app path and signing identity so results correspond
 to the release candidate.
 

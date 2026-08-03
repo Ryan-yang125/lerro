@@ -24,14 +24,6 @@ final class AppSession {
     var audioLevel: Float = 0
     var captureElapsed: TimeInterval = 0
     var isHandsFreeCapture = false
-    var isHUDHovered = false {
-        didSet {
-            if !isHUDHovered, phase == .idle, isHUDSuppressed {
-                isHUDSuppressed = false
-                updateHUD()
-            }
-        }
-    }
     private(set) var isHUDSuppressed = false
     private(set) var captureError: String?
     var currentError: String?
@@ -67,9 +59,21 @@ final class AppSession {
     var dictionarySourceFilter: DictionaryEntrySource?
     var isStarted = false
     var microphonePermission = false
-    var speechPermission = false
     var accessibilityPermission = false
-    var inputMonitoringPermission = false
+    private(set) var speechResourceStatus = LanguageResourceStatus(
+        state: .available,
+        sourceLanguageIdentifier: "zh_CN",
+        message: "正在检查语音资源"
+    )
+    private(set) var translationResourceStatus = LanguageResourceStatus(
+        state: .available,
+        sourceLanguageIdentifier: "zh_CN",
+        targetLanguageIdentifier: "en_US",
+        message: "正在检查翻译资源"
+    )
+    private(set) var translationPreparationRequestID: UUID?
+    private(set) var translationPreparationSourceLanguageIdentifier = "zh_CN"
+    private(set) var translationPreparationTargetLanguageIdentifier = "en_US"
     var onboardingMicrophoneLevel: Float = 0
     var isOnboardingMicrophoneTestRunning = false
     var onboardingMicrophoneTestPassed = false
@@ -108,6 +112,9 @@ final class AppSession {
     private var modelLoadTask: Task<Void, Never>?
     private var captureTimerTask: Task<Void, Never>?
     private var microphoneTestTask: Task<Void, Never>?
+    private var speechPreparationTask: Task<Void, Never>?
+    private var speechPreparationRequestID: UUID?
+    private var languageResourceRefreshRequestID = UUID()
     private var microphoneTestGeneration: UUID?
     private var microphoneTestSessionID: UUID?
     private var preferenceSaveQueue = PreferenceSaveQueue(confirmed: UserPreferences())
@@ -157,9 +164,7 @@ final class AppSession {
 
     var requiredPermissionsGranted: Bool {
         microphonePermission
-            && speechPermission
             && accessibilityPermission
-            && inputMonitoringPermission
     }
 
     var canContinueWithBaseDictation: Bool {
@@ -232,6 +237,7 @@ final class AppSession {
             currentError = error.localizedDescription
         }
         await refreshData()
+        await refreshLanguageResources()
         audioInputDevices = await audioInputDevicesTask.value
         if let selectedUID = preferences.microphoneDeviceUID,
            !audioInputDevices.contains(where: { $0.uid == selectedUID }) {
@@ -267,6 +273,104 @@ final class AppSession {
         }
         updateUsageSummary()
         modelStatus = await modelStatusTask.value
+    }
+
+    func refreshLanguageResources(invalidatePreparations: Bool = false) async {
+        let source = preferences.recognitionLocaleIdentifier
+        let target = preferences.translationLanguageIdentifiers.first ?? "en_US"
+        if invalidatePreparations {
+            speechPreparationTask?.cancel()
+            speechPreparationTask = nil
+            speechPreparationRequestID = nil
+            translationPreparationRequestID = nil
+        }
+        let requestID = UUID()
+        languageResourceRefreshRequestID = requestID
+        async let speech = dependencies.speech.resourceStatus(localeIdentifier: source)
+        async let translation = dependencies.translation.resourceStatus(
+            sourceLanguageIdentifier: source,
+            targetLanguageIdentifier: target
+        )
+        let speechStatus = await speech
+        let translationStatus = await translation
+        guard languageResourceRefreshRequestID == requestID,
+              preferences.recognitionLocaleIdentifier == source,
+              (preferences.translationLanguageIdentifiers.first ?? "en_US") == target else { return }
+        speechResourceStatus = speechStatus
+        translationResourceStatus = translationStatus
+    }
+
+    func prepareSpeechResources() {
+        let source = preferences.recognitionLocaleIdentifier
+        languageResourceRefreshRequestID = UUID()
+        speechPreparationTask?.cancel()
+        let requestID = UUID()
+        speechPreparationRequestID = requestID
+        speechResourceStatus = LanguageResourceStatus(
+            state: .downloading,
+            sourceLanguageIdentifier: source,
+            message: "正在准备语音资源"
+        )
+        speechPreparationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let status = try await dependencies.speech.prepareResources(
+                    localeIdentifier: source
+                )
+                guard speechPreparationRequestID == requestID,
+                      preferences.recognitionLocaleIdentifier == source else { return }
+                speechResourceStatus = status
+            } catch {
+                guard speechPreparationRequestID == requestID,
+                      preferences.recognitionLocaleIdentifier == source else { return }
+                speechResourceStatus = LanguageResourceStatus(
+                    state: .failed,
+                    sourceLanguageIdentifier: source,
+                    message: error.localizedDescription
+                )
+            }
+            if speechPreparationRequestID == requestID {
+                speechPreparationRequestID = nil
+                speechPreparationTask = nil
+            }
+        }
+    }
+
+    func prepareTranslationResources() {
+        let source = preferences.recognitionLocaleIdentifier
+        let target = preferences.translationLanguageIdentifiers.first ?? "en_US"
+        languageResourceRefreshRequestID = UUID()
+        translationPreparationSourceLanguageIdentifier = source
+        translationPreparationTargetLanguageIdentifier = target
+        translationResourceStatus = LanguageResourceStatus(
+            state: .downloading,
+            sourceLanguageIdentifier: source,
+            targetLanguageIdentifier: target,
+            message: "正在准备翻译资源"
+        )
+        translationPreparationRequestID = UUID()
+    }
+
+    func completeTranslationResourcePreparation(
+        requestID: UUID,
+        errorMessage: String?
+    ) {
+        guard translationPreparationRequestID == requestID else { return }
+        translationPreparationRequestID = nil
+        guard preferences.recognitionLocaleIdentifier
+                == translationPreparationSourceLanguageIdentifier,
+              (preferences.translationLanguageIdentifiers.first ?? "en_US")
+                == translationPreparationTargetLanguageIdentifier else { return }
+        if let errorMessage {
+            translationResourceStatus = LanguageResourceStatus(
+                state: .failed,
+                sourceLanguageIdentifier: translationPreparationSourceLanguageIdentifier,
+                targetLanguageIdentifier: translationPreparationTargetLanguageIdentifier,
+                message: errorMessage
+            )
+            return
+        }
+        Task { await refreshLanguageResources() }
     }
 
     func updateHistoryQuery(searchText: String, mode: CaptureMode?) async {
@@ -479,8 +583,7 @@ final class AppSession {
     func endShortcutConfiguration() {
         guard isShortcutConfigurationActive else { return }
         isShortcutConfigurationActive = false
-        guard inputMonitoringPermission,
-              accessibilityPermission,
+        guard accessibilityPermission,
               !legacyApplicationIsRunning() else { return }
         configureHotkeys(reportError: false)
     }
@@ -503,12 +606,8 @@ final class AppSession {
         microphonePermission = prompt
             ? await dependencies.permissions.requestMicrophone()
             : await dependencies.permissions.microphoneAuthorized()
-        speechPermission = prompt
-            ? await dependencies.permissions.requestSpeech()
-            : await dependencies.permissions.speechAuthorized()
         accessibilityPermission = dependencies.permissions.accessibilityAuthorized(prompt: prompt)
-        inputMonitoringPermission = dependencies.permissions.inputMonitoringAuthorized(prompt: prompt)
-        if inputMonitoringPermission && accessibilityPermission {
+        if accessibilityPermission {
             if legacyApplicationIsRunning() {
                 cancelCaptureBeforeStoppingHotkeysIfNeeded()
             } else {
@@ -776,6 +875,7 @@ final class AppSession {
         completionTask = Task { [weak self] in
             guard let self else { return }
             await dependencies.speech.cancel()
+            await dependencies.translation.cancel()
             await reconcileOrphanedAudioFiles()
             eventTask?.cancel()
             captureTimerTask?.cancel()
@@ -1051,6 +1151,32 @@ final class AppSession {
     func retryHistoryEntry(_ entry: HistoryEntry) {
         guard !entry.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             currentError = "这条记录没有可重试的转写文本"
+            return
+        }
+        if entry.mode == .translation {
+            guard let targetLanguage = entry.targetLanguage else {
+                currentError = "这条翻译记录缺少目标语言"
+                return
+            }
+            let sourceLanguage = entry.sourceLanguage ?? preferences.recognitionLocaleIdentifier
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    let text = try await dependencies.translation.translate(
+                        entry.rawText,
+                        sourceLanguageIdentifier: sourceLanguage,
+                        targetLanguageIdentifier: targetLanguage
+                    )
+                    var updated = entry
+                    updated.finalText = text
+                    updated.status = .completed
+                    updated.wasEnhanced = false
+                    try await dependencies.history.save(updated)
+                    await refreshHistoryAndUsage()
+                } catch {
+                    currentError = error.localizedDescription
+                }
+            }
             return
         }
         guard preferences.intelligenceMode != .raw else {
@@ -1425,7 +1551,7 @@ final class AppSession {
         guard !legacyApplicationIsRunning() else { return }
         guard !isCleaningCapture else { return }
         guard !hasActiveCapture else { return }
-        guard authorizeIntelligenceIfNeeded(for: mode) else { return }
+        guard mode == .translation || authorizeIntelligenceIfNeeded(for: mode) else { return }
         let intelligenceMode = preferences.intelligenceMode
         let remoteProvider = intelligenceMode == .remote
             ? normalizedRemoteProvider(preferences.remoteProvider)
@@ -1480,6 +1606,10 @@ final class AppSession {
             return
         }
         let targetLanguage = mode == .translation ? preferences.translationLanguageIdentifiers.first : nil
+        if mode == .translation, targetLanguage == nil {
+            fail(LerroError.translationUnavailable("请先选择翻译目标语言"))
+            return
+        }
 
         do {
             let stream = try await dependencies.speech.start(
@@ -1615,7 +1745,22 @@ final class AppSession {
         )
 
         let result: IntelligenceResult
-        if session.intelligenceMode == .raw {
+        if session.mode == .translation {
+            guard let targetLanguage = session.targetLanguage else {
+                throw LerroError.translationUnavailable("请先选择翻译目标语言")
+            }
+            let text = try await dependencies.translation.translate(
+                transcription.rawText,
+                sourceLanguageIdentifier: transcription.localeIdentifier,
+                targetLanguageIdentifier: targetLanguage
+            )
+            result = IntelligenceResult(
+                text: text,
+                disposition: .insert,
+                modelIdentifier: "apple-translation",
+                source: .raw
+            )
+        } else if session.intelligenceMode == .raw {
             result = try rawResult(for: request, task: task)
         } else {
             let modelStatusMonitor = session.intelligenceMode == .local
@@ -1651,6 +1796,7 @@ final class AppSession {
             finalText: result.text,
             answerText: result.disposition == .showAnswer ? result.text : nil,
             targetLanguage: session.targetLanguage,
+            sourceLanguage: transcription.localeIdentifier,
             duration: transcription.duration,
             applicationName: session.context.applicationName,
             bundleIdentifier: session.context.bundleIdentifier,
@@ -1731,9 +1877,7 @@ final class AppSession {
         isStartingCapture = false
         isHandsFreeCapture = false
         phase = .idle
-        if !isHUDHovered {
-            isHUDSuppressed = false
-        }
+        isHUDSuppressed = false
         partialTranscript = ""
         audioLevel = 0
         captureElapsed = 0
@@ -1780,12 +1924,8 @@ final class AppSession {
         if !microphonePermission {
             microphonePermission = await dependencies.permissions.requestMicrophone()
         }
-        if !speechPermission {
-            speechPermission = await dependencies.permissions.requestSpeech()
-        }
         accessibilityPermission = dependencies.permissions.accessibilityAuthorized(prompt: true)
-        inputMonitoringPermission = dependencies.permissions.inputMonitoringAuthorized(prompt: true)
-        if inputMonitoringPermission && accessibilityPermission {
+        if accessibilityPermission {
             configureHotkeys(reportError: true)
         } else {
             stopHotkeyMonitoring()
@@ -1794,16 +1934,8 @@ final class AppSession {
             fail(LerroError.permissionRequired("麦克风"))
             return false
         }
-        guard speechPermission else {
-            fail(LerroError.permissionRequired("语音识别"))
-            return false
-        }
         guard accessibilityPermission else {
             fail(LerroError.permissionRequired("辅助功能"))
-            return false
-        }
-        guard inputMonitoringPermission else {
-            fail(LerroError.permissionRequired("输入监控"))
             return false
         }
         return true
@@ -2094,6 +2226,10 @@ final class AppSession {
 
     private func updateHUD() {
         guard presentsFloatingPanels else { return }
+        guard currentHUDVisualState != .idleHidden else {
+            hudController.hide(animated: false)
+            return
+        }
         let content = AnyView(CaptureHUDView(session: self))
         hudController.show(
             content: content,
@@ -2101,9 +2237,6 @@ final class AppSession {
             interactionSize: hudInteractionSize,
             interactionBottomInset: LerroTheme.hudContentBottomInset,
             allowsInteraction: !isHUDSuppressed,
-            onHoverChange: { [weak self] isHovered in
-                self?.isHUDHovered = isHovered
-            },
             animated: false
         )
     }
@@ -2266,6 +2399,7 @@ final class AppSession {
         Task { @MainActor [weak self] in
             guard let self else { return }
             await dependencies.speech.cancel()
+            await dependencies.translation.cancel()
             await reconcileOrphanedAudioFiles()
             isCleaningCapture = false
         }
@@ -2324,10 +2458,18 @@ final class AppSession {
             phase: phase,
             isStartingCapture: isStartingCapture,
             isHandsFreeCapture: isHandsFreeCapture,
-            isHUDHovered: isHUDHovered,
             isSuppressed: isHUDSuppressed
         ).interactionSize(
             countdownVisible: phase == .listening && captureElapsed >= 8 * 60
+        )
+    }
+
+    private var currentHUDVisualState: CaptureHUDVisualState {
+        CaptureHUDVisualState.resolve(
+            phase: phase,
+            isStartingCapture: isStartingCapture,
+            isHandsFreeCapture: isHandsFreeCapture,
+            isSuppressed: isHUDSuppressed
         )
     }
 

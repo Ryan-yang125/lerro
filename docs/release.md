@@ -285,7 +285,7 @@ manifest 是本次打包的机器可读证据，包含：
 - executable hash、binary UUID、dSYM UUID 和 resource bundles。
 - requested/resolved signing mode、identity、authority、Team ID、CDHash、designated requirement、公证状态。
 - Swift、Xcode、Metal 版本和 `Package.resolved` hash。
-- app ZIP、dSYM ZIP 的文件名、hash 和字节数。
+- app ZIP、dSYM ZIP 的文件名、hash 和字节数，以及公开 Developer ID ZIP 的 Sparkle Ed25519 签名和长度。
 
 文档或人工记录中的产物信息应引用 manifest，避免手动复制后与新产物漂移。
 
@@ -341,25 +341,52 @@ xcrun stapler validate dist/Lerro.app
 
 ad-hoc 和 Apple Development 产物不以 Gatekeeper 离站分发接受作为验收目标。
 
-## Phase 6 公开分发补充产物
+## Cloudflare 公开分发与应用内更新
 
-当前脚本生成 app ZIP、dSYM ZIP、source-bound manifest 与 checksums。正式公开
-发布还需要在独立发布流水线中生成并验证以下产物：
+公开 macOS 分发使用以下地址：
 
-- 品牌化 DMG 与独立 quarantine 安装测试。
-- 从同一 `Package.resolved`、Vendor 来源和模型记录生成的 SBOM。
-- GitHub Release artifact attestation，以及与 tag 和 source manifest 的绑定。
-- Developer ID、公证日志、staple 与 Gatekeeper 证据。
+```text
+官网：https://lerroapp.com
+更新 feed：https://updates.lerroapp.com/appcast/stable.xml
+最新下载：https://updates.lerroapp.com/download/macos/latest
+不可变归档：https://updates.lerroapp.com/releases/<version>/<build>/Lerro-macOS-arm64.zip
+```
 
-GitHub 仓库尚未创建时，artifact attestation 无法执行。Developer ID identity
-或 notary profile 缺失时，签名与公证分支应保持未验收，并在交付记录中明确列出。
+`package_release.sh` 在 `developer-id` 模式完成公证和 staple 后，以维护者 Keychain 中的
+Sparkle Ed25519 私钥签署最终 ZIP。`LERRO_SPARKLE_KEY_ACCOUNT` 可以指定 Keychain
+profile 名；私钥不会写入 source tree、manifest、D1、R2 或公开配置。非公开签名模式的
+归档签名字段必须为空。
 
-## Preview 手动更新
+发布命令：
 
-当前 preview 版本采用手动更新。Home 与设置页的“检查更新”统一打开完整的
-[GitHub Releases](https://github.com/Ryan-yang125/lerro/releases) 列表，确保仍处于
-prerelease 状态的最新构建可见。用户选择版本后下载对应的签名产物，并继续按本页的
-checksum、签名、公证与 Gatekeeper 规则验证。稳定版自动更新属于后续发布能力。
+```zsh
+LERRO_SIGNING_MODE=developer-id \
+LERRO_NOTARY_PROFILE='<maintainer-keychain-profile>' \
+./script/package_release.sh
+
+(cd site && npm run deploy)
+curl --fail --silent --show-error https://lerroapp.com/changelog >/dev/null
+
+./script/publish_cloudflare_release.sh
+```
+
+官网 changelog 先上线并通过公开 200 检查，随后发布 appcast 和归档。发布脚本在上传前
+复验 ZIP 与 manifest 的 SHA-256、字节数、Developer ID、公证与 Sparkle
+签名。ZIP 写入私有 R2 的不可变 key，读回校验后，通过 D1 batch 同时写入 release、artifact
+和 stable channel head。batch 使用读取时的 generation 作为比较条件；并发发布失败时稳定
+渠道保持上一条记录。每个 stable channel、平台和架构组合的 Sparkle build 必须唯一。公开 Worker
+只接受读取请求；appcast 和下载路由只读取已发布的 stable head。发布完成后脚本以 cache-busting 请求复验 appcast enclosure 的版本、长度、
+Ed25519 签名、不可变 URL，以及 latest 与不可变 ZIP 的 SHA-256。
+
+Sparkle framework 在 `dist/Lerro.app/Contents/Frameworks` 内签名并随 app 分发。`Info.plist`
+固定 `SUFeedURL`、`SUPublicEDKey`，并关闭 Sparkle 自带的定时检查和自动下载。应用在启动
+时及每 24 小时静默探测 feed；发现新版本后显示蓝色下载入口，用户点击后进入 Sparkle
+下载与安装流程。第一次安装带更新器的版本由用户从官网完成。真实上一版本到下一版本的
+检查、点击下载、安装和重启属于每次新公开版本的实机验收。
+
+`distribution/wrangler.toml` 是维护环境私有配置，包含 D1 资源标识，必须保持在 Git 与公开
+导出之外。`distribution/wrangler.toml.example` 只提供结构模板。完整架构、撤回与失败策略见
+[ADR-0007](decisions/0007-cloudflare-distribution-and-sparkle-updates.md)。
 
 ## 版本发布检查表
 
@@ -380,4 +407,8 @@ checksum、签名、公证与 Gatekeeper 规则验证。稳定版自动更新属
 - [ ] 真实缓存模型 smoke 已通过，或交付记录已经列明跳过原因与剩余边界。
 - [ ] 真实 BYOK Provider smoke 已通过，或交付记录已经列明跳过原因与剩余边界。
 - [ ] Developer ID 分支已完成 notary、staple、Gatekeeper。
+- [ ] Developer ID ZIP 的 Sparkle Ed25519 签名和长度已写入 manifest 并通过复验。
+- [ ] `publish_cloudflare_release.sh` 已完成 R2 读回、D1 batch 与公开 appcast/download SHA-256 验证。
+- [ ] `lerroapp.com` 和 `www.lerroapp.com` 已返回预期站点，`updates.lerroapp.com` 已返回预期 feed。
+- [ ] 已记录当前版本的首次手动安装边界，以及下一版本的真实 Sparkle N 到 N+1 验收计划。
 - [ ] 已记录仍未执行的模型、TCC、硬件或多显示器边界。

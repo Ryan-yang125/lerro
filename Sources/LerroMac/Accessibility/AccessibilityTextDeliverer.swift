@@ -159,6 +159,9 @@ public actor AccessibilityTextDeliverer: TextDelivering {
     ) async throws {
         let transaction = try await MainActor.run {
             try Task.checkCancellation()
+            guard CGPreflightPostEventAccess() else {
+                throw LerroError.permissionRequired("辅助功能")
+            }
             let transaction = try CurrentFocusPasteboardTransaction.begin(text: text)
             do {
                 let (keyDown, keyUp) = try makeLerroPasteKeyEvents()

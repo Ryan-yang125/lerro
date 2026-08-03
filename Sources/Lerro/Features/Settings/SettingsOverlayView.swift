@@ -270,6 +270,23 @@ private struct MainSettingsPage: View {
                     .settingsBlock()
                 }
 
+                settingsGroup("语言资源") {
+                    VStack(spacing: 0) {
+                        languageResourceRow(
+                            "语音资源",
+                            status: session.speechResourceStatus,
+                            prepare: session.prepareSpeechResources
+                        )
+                        Divider().overlay(LerroTheme.thinBorder)
+                        languageResourceRow(
+                            "翻译资源",
+                            status: session.translationResourceStatus,
+                            prepare: session.prepareTranslationResources
+                        )
+                    }
+                    .settingsBlock()
+                }
+
                 settingsGroup("音频") {
                     VStack(spacing: 0) {
                         settingsRow("麦克风", detail: "选择听写与翻译使用的输入设备") {
@@ -320,7 +337,16 @@ private struct MainSettingsPage: View {
                 permissionSummary
             }
         }
-        .task { await session.refreshAudioInputDevices() }
+        .task {
+            await session.refreshAudioInputDevices()
+            await session.refreshLanguageResources()
+        }
+        .onChange(of: session.preferences.recognitionLocaleIdentifier) {
+            Task { await session.refreshLanguageResources(invalidatePreparations: true) }
+        }
+        .onChange(of: session.preferences.translationLanguageIdentifiers) {
+            Task { await session.refreshLanguageResources(invalidatePreparations: true) }
+        }
         .sheet(
             isPresented: shortcutRecorderPresented,
             onDismiss: { session.endShortcutConfiguration() }
@@ -536,11 +562,7 @@ private struct MainSettingsPage: View {
             VStack(spacing: 0) {
                 permissionRow("麦克风", granted: session.microphonePermission, settingsAnchor: "Privacy_Microphone")
                 Divider().overlay(LerroTheme.thinBorder)
-                permissionRow("语音识别", granted: session.speechPermission, settingsAnchor: "Privacy_SpeechRecognition")
-                Divider().overlay(LerroTheme.thinBorder)
                 permissionRow("辅助功能", granted: session.accessibilityPermission, settingsAnchor: "Privacy_Accessibility")
-                Divider().overlay(LerroTheme.thinBorder)
-                permissionRow("输入监控", granted: session.inputMonitoringPermission, settingsAnchor: "Privacy_ListenEvent")
                 Divider().overlay(LerroTheme.thinBorder)
                 HStack {
                     Button("重新检查权限") { Task { await session.refreshPermissions(prompt: true) } }
@@ -550,6 +572,31 @@ private struct MainSettingsPage: View {
                 .padding(12)
             }
             .settingsBlock()
+        }
+    }
+
+    private func languageResourceRow(
+        _ title: String,
+        status: LanguageResourceStatus,
+        prepare: @escaping () -> Void
+    ) -> some View {
+        settingsRow(title, detail: status.message) {
+            switch status.state {
+            case .ready:
+                Label("已准备", systemImage: "checkmark.circle.fill")
+                    .font(LerroTheme.font(12, weight: .medium))
+                    .foregroundStyle(LerroTheme.green)
+            case .downloading:
+                ProgressView().controlSize(.small)
+            case .available, .failed:
+                Button("准备", action: prepare)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            case .unsupported:
+                Text("当前不可用")
+                    .font(LerroTheme.font(12))
+                    .foregroundStyle(LerroTheme.secondaryText)
+            }
         }
     }
 
@@ -621,7 +668,7 @@ private struct AccountSettingsPage: View {
                 }
 
                 VStack(spacing: 0) {
-                    settingsRow("运行方式", detail: "听写、翻译、问答与个性化") { Text("本地优先").foregroundStyle(LerroTheme.secondaryText) }
+                    settingsRow("运行方式", detail: "增强听写、问答、改写与个性化") { Text("本地优先").foregroundStyle(LerroTheme.secondaryText) }
                     Divider().overlay(LerroTheme.thinBorder)
                     settingsRow("账户", detail: "功能可直接使用") { Text("无需登录").foregroundStyle(LerroTheme.secondaryText) }
                     Divider().overlay(LerroTheme.thinBorder)
@@ -741,9 +788,7 @@ private struct AboutSettingsPage: View {
             VStack(spacing: 0) {
                 settingsRow("Lerro for Mac", detail: "版本 \(AppMetadata.version) · Swift 原生") {
                     Button("检查更新") {
-                        if !AppExternalLinks.openReleases() {
-                            session.currentError = AppExternalLinks.releasesOpenFailureMessage
-                        }
+                        AppUpdateController.shared.checkForUpdates()
                     }
                         .buttonStyle(LerroPillButtonStyle(prominent: true))
                 }

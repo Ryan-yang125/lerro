@@ -71,7 +71,7 @@ swift test --filter LerroPressFeedbackTests
 
 迁移 suite 覆盖整根同卷移动、模型 inode 保留、重复执行、lock、journal
 恢复、receipt 更新、并存目录去重、独有 Audio 移动、冲突零变更和 recovery
-report。AppSession suite 覆盖迁移后的登录项收尾与 app 回到前台后的四项权限刷新。
+report。AppSession suite 覆盖迁移后的登录项收尾与 app 回到前台后的两项权限刷新。
 
 Swift Testing 的 filter 匹配当前生成的 test spec。筛选结果为空时运行 `swift test list` 查看完整名称，并把最终使用的筛选命令记录在交付说明中。
 
@@ -351,6 +351,7 @@ Logo、App Icon、菜单栏或公开模板变化时先执行：
 | Vendor Hub / Tokenizers | vendored HubCache/FileOperations tests | vendored packages + `swift test` | 单一本地依赖来源、显式缓存模型 smoke、Release LICENSE/UPSTREAM 非空且 byte-identical |
 | 主窗口 UI / tokens | `LerroThemeAccessibilityTests` + `LerroPressFeedbackTests` | `swift test` | 尺寸与外观矩阵、fixture PNG、Release 窗口、HUD 基线对比 |
 | Brand / App Icon / Menu Bar | `generate-assets.sh` + `verify-assets.sh` | `swift test` | 16/32/64 px 验证板 + Finder/Dock/真实状态栏 |
+| Sparkle 更新器 | `AppExternalLinksTests`、`distribution/npm test` | `swift test`、`npm test` | Keychain 签名、公证 ZIP、公开 appcast、真实 N 到 N+1 安装 |
 | 构建/签名/资源 | shell/plist | `swift test` | package + `verify_release.sh` |
 
 ## 真实 Release 人工矩阵
@@ -359,7 +360,7 @@ Logo、App Icon、菜单栏或公开模板变化时先执行：
 
 | 场景 | 操作 | 通过条件 |
 | --- | --- | --- |
-| 首次启动 | 启动 clean profile | 引导出现；四项权限状态准确；拒绝后有可恢复路径 |
+| 首次启动 | 启动 clean profile | 引导出现；两项权限状态准确；拒绝后有可恢复路径 |
 | 快捷键录制 | 在 Onboarding 与设置分别录入 Fn、Option、Command、Fn + Space；切换两种触发方式并重复按下 | keycap 在 down/up 时立即变化；候选保存；测试期间无麦克风、HUD、历史和文本交付；退出后全局触发恢复 |
 | 原始听写 hold | 选择原始听写，在 TextEdit 按住已配置键说话后松开；再选中既有文本重复一次 | 无模型下载或 API；Apple Speech 原文完整交付；文本写入当前键盘焦点；已有选区遵循 Command-V 标准替换语义；completed history；无 CAF；全程无应用音效 |
 | 原始听写 toggle | 选择原始听写，点按已配置键开始，说话后再次点按 | 首次点按 50 ms 内从原位连续展开 116×34 hands-free HUD；准备期显示静态低亮声线，麦克风 ready 时外壳保持稳定；真实语音驱动的峰值位置持续变化，停止说话后约 300 ms 回到基线；第二次点按一帧内显示 processing 且只停止一次；插入完成后 100 ms 内收起；全程无应用音效 |
@@ -385,6 +386,10 @@ Logo、App Icon、菜单栏或公开模板变化时先执行：
 | 多显示器/Space | 在不同显示器和全屏 Space 触发 HUD/Ask | HUD 跟随目标屏幕且不抢焦点；Ask 可交互 |
 | 登录启动 | 稳定路径安装后切换设置并登录 | SMAppService 状态与偏好一致；失败可回滚 |
 | 模型缓存 | 首次下载后退出、断网、再次使用 | 缓存识别正确；离线加载成功；闲置后释放内存 |
+| Sparkle 主动检查 | 从 `/Applications` 启动上一公开版本，在 Home 或设置点“检查更新” | appcast 读取成功；可见新版本、版本号、发布日期与安装说明；断网时保留可恢复错误 |
+| Sparkle 更新提示 | 从上一公开版本启动并等待静默探测 | 发现更新时左下角出现蓝色下载图标；没有弹出下载窗口；没有后台下载 ZIP |
+| Sparkle 点击更新 | 点击蓝色下载图标并完成安装 | archive Ed25519 签名验证成功；重启为新 build；历史、偏好与权限身份保持可用 |
+| 官网直连下载 | 从 `https://lerroapp.com` 点击下载，在独立目录解压并启动 | HTTPS 下载落到当前 stable ZIP；SHA-256 与 manifest 一致；Developer ID、staple 和 Gatekeeper 通过 |
 
 真实模型下载和系统权限会产生网络、磁盘或 TCC 状态变化，必须由用户授权或在专用验收账户中执行。
 

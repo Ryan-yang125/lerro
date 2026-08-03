@@ -16,7 +16,7 @@ private enum OnboardingStep: Int, CaseIterable, Identifiable {
         case .privacy: "隐私从这台 Mac 开始"
         case .localMode: "选择初始处理方式"
         case .permissions: "连接 macOS 权限"
-        case .shortcuts: "设置听写快捷键"
+        case .shortcuts: "设置快捷键"
         case .practice: "完成一次语音输入"
         }
     }
@@ -28,7 +28,7 @@ private enum OnboardingStep: Int, CaseIterable, Identifiable {
         case .localMode:
             "基础听写可直接使用 Apple 语音识别；本地 AI 可整理表达。完成引导后，也能在“智能处理”中配置自己的 API。"
         case .permissions:
-            "四项权限分别负责收音、转写、全局快捷键和文字写入。您也可以稍后在设置中继续。"
+            "两项权限分别负责收音、全局快捷键和文字写入。您也可以稍后在设置中继续。"
         case .shortcuts:
             "选择顺手的按键和触发方式，实时确认这块键盘是否成功送出按下与松开事件。"
         case .practice:
@@ -59,36 +59,28 @@ private enum OnboardingStep: Int, CaseIterable, Identifiable {
 
 private enum OnboardingPermission: String, CaseIterable, Identifiable {
     case microphone
-    case speechRecognition
     case accessibility
-    case inputMonitoring
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .microphone: "麦克风"
-        case .speechRecognition: "语音识别"
         case .accessibility: "辅助功能"
-        case .inputMonitoring: "输入监控"
         }
     }
 
     var detail: String {
         switch self {
         case .microphone: "录制您主动发起的语音"
-        case .speechRecognition: "通过 Apple Speech 转成文字"
-        case .accessibility: "读取有限上下文并写入当前应用"
-        case .inputMonitoring: "响应全局 Fn 快捷键"
+        case .accessibility: "响应全局 Fn 快捷键并写入当前应用"
         }
     }
 
     var icon: String {
         switch self {
         case .microphone: "mic.fill"
-        case .speechRecognition: "captions.bubble.fill"
         case .accessibility: "accessibility"
-        case .inputMonitoring: "keyboard.fill"
         }
     }
 
@@ -96,12 +88,8 @@ private enum OnboardingPermission: String, CaseIterable, Identifiable {
         switch self {
         case .microphone:
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-        case .speechRecognition:
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
         case .accessibility:
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        case .inputMonitoring:
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
         }
     }
 }
@@ -120,8 +108,11 @@ struct OnboardingView: View {
     @State private var step: OnboardingStep = .privacy
     @State private var sampleText = "把光标放在这里，然后按住 Fn 说一句话。"
     @State private var showShortcutHelp = false
-    @State private var shortcutDraft: ShortcutBindingDraft?
-    @State private var shortcutActivation: ShortcutActivation = .hold
+    @State private var dictateShortcutDraft: ShortcutBindingDraft?
+    @State private var translateShortcutDraft: ShortcutBindingDraft?
+    @State private var dictateShortcutActivation: ShortcutActivation = .toggle
+    @State private var translateShortcutActivation: ShortcutActivation = .toggle
+    @State private var selectedShortcutAction: HotkeyAction = .dictate
     @State private var shortcutSaveError = ""
     @State private var isShortcutSaving = false
     @State private var shortcutConfigurationPrepared = false
@@ -196,11 +187,12 @@ struct OnboardingView: View {
             switch step {
             case .permissions:
                 await session.refreshPermissions(prompt: false)
+                await session.refreshLanguageResources()
             case .practice:
                 await session.refreshPermissions(prompt: false)
                 await session.refreshAudioInputDevices()
             case .shortcuts:
-                prepareShortcutDraftIfNeeded()
+                prepareShortcutDraftsIfNeeded()
                 shortcutConfigurationPrepared = session.beginShortcutConfiguration()
                 if !shortcutConfigurationPrepared {
                     shortcutSaveError = session.currentError ?? "请完成当前语音输入后再设置快捷键。"
@@ -228,9 +220,6 @@ struct OnboardingView: View {
             Task { await session.refreshPermissions(prompt: false) }
         }
         .alert("快捷键没有反应", isPresented: $showShortcutHelp) {
-            Button("打开输入监控设置") {
-                openSystemSettings(for: .inputMonitoring)
-            }
             Button("打开辅助功能设置") {
                 openSystemSettings(for: .accessibility)
             }
@@ -239,7 +228,7 @@ struct OnboardingView: View {
             }
             Button("继续练习", role: .cancel) {}
         } message: {
-            Text("开启输入监控和辅助功能后，回到 Lerro 即会自动刷新状态。部分系统权限在首次开启后需要重新启动应用。")
+            Text("开启辅助功能后，回到 Lerro 即会自动刷新状态。")
         }
         .onAppear {
             if let index = session.preferences.onboardingStepIndex,
@@ -415,7 +404,7 @@ struct OnboardingView: View {
                             .accessibilityLabel("本地模型准备进度")
                     }
 
-                    Text("首次准备会在您确认后下载约 3.03 GB。翻译、问答和改写可以使用本地模型，也可以在设置中配置 API 模型。")
+                    Text("首次准备会在您确认后下载约 3.03 GB。本地模型或 API 可用于增强听写、问答和改写。")
                         .font(LerroTheme.font(12))
                         .foregroundStyle(.secondary)
                 } else if session.preferences.intelligenceMode == .remote {
@@ -448,12 +437,27 @@ struct OnboardingView: View {
                 permissionCard(permission, granted: permissionGranted(permission))
             }
 
+            languageResourceCard(
+                title: "语音资源",
+                detail: "用于设备端听写",
+                icon: "waveform",
+                status: session.speechResourceStatus,
+                prepare: session.prepareSpeechResources
+            )
+            languageResourceCard(
+                title: "翻译资源",
+                detail: "用于设备端翻译",
+                icon: "character.bubble",
+                status: session.translationResourceStatus,
+                prepare: session.prepareTranslationResources
+            )
+
             HStack(spacing: 10) {
                 if session.requiredPermissionsGranted {
-                    Label("四项权限均已就绪", systemImage: "checkmark.circle.fill")
+                    Label("两项权限均已就绪", systemImage: "checkmark.circle.fill")
                         .font(LerroTheme.font(13, weight: .medium))
                         .foregroundStyle(LerroTheme.green)
-                        .accessibilityLabel("四项权限均已授权")
+                        .accessibilityLabel("两项权限均已授权")
                 } else {
                     Button("请求系统权限") {
                         Task { await session.refreshPermissions(prompt: true) }
@@ -476,10 +480,25 @@ struct OnboardingView: View {
 
     private var shortcutsContent: some View {
         VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                onboardingShortcutActionCard(
+                    action: .dictate,
+                    title: "听写",
+                    detail: "说话后写入当前光标",
+                    icon: "waveform"
+                )
+                onboardingShortcutActionCard(
+                    action: .translate,
+                    title: "翻译",
+                    detail: "说话后输出目标语言",
+                    icon: "character.bubble"
+                )
+            }
+
             if shortcutConfigurationPrepared {
                 ShortcutRecorderCard(
-                    shortcut: $shortcutDraft,
-                    activation: $shortcutActivation
+                    shortcut: selectedShortcutDraft,
+                    activation: selectedShortcutActivation
                 )
             } else {
                 ProgressView("正在准备按键检测…")
@@ -496,7 +515,7 @@ struct OnboardingView: View {
             HStack(spacing: 8) {
                 Image(systemName: "waveform")
                     .foregroundStyle(LerroTheme.accent)
-                Text("这项设置用于听写。翻译与问答可稍后在设置中分别调整。")
+                Text("分别设置听写与翻译的快捷键，完成后立刻试按确认。")
                     .font(LerroTheme.font(12))
                     .foregroundStyle(.secondary)
             }
@@ -505,7 +524,7 @@ struct OnboardingView: View {
                 showShortcutHelp = true
             }
             .buttonStyle(.link)
-            .accessibilityHint("查看输入监控与辅助功能权限帮助")
+            .accessibilityHint("查看辅助功能权限帮助")
         }
     }
 
@@ -589,6 +608,44 @@ struct OnboardingView: View {
                     .accessibilityLabel("听写状态：\(practicePhaseText)")
             }
         }
+    }
+
+    private func onboardingShortcutActionCard(
+        action: HotkeyAction,
+        title: String,
+        detail: String,
+        icon: String
+    ) -> some View {
+        let definition = session.preferences.hotkeys.first { $0.action == action }
+        let isSelected = selectedShortcutAction == action
+        return Button {
+            selectedShortcutAction = action
+            shortcutSaveError = ""
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: icon)
+                    Spacer()
+                    if let definition { ShortcutBadge(title: definition.displayName) }
+                }
+                Text(title).font(LerroTheme.font(14, weight: .medium))
+                Text(detail)
+                    .font(LerroTheme.font(12))
+                    .foregroundStyle(LerroTheme.secondaryText)
+                    .multilineTextAlignment(.leading)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+            .background(isSelected ? LerroTheme.fillContainerTough : LerroTheme.fillContainerThin)
+            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                    .stroke(isSelected ? LerroTheme.focusBorder : LerroTheme.thinBorder)
+            }
+        }
+        .buttonStyle(LerroPressButtonStyle())
+        .accessibilityLabel("设置\(title)快捷键")
+        .accessibilityValue(definition?.displayName ?? "尚未设置")
     }
 
     private var visualPanel: some View {
@@ -688,6 +745,43 @@ struct OnboardingView: View {
         }
     }
 
+    private func languageResourceCard(
+        title: String,
+        detail: String,
+        icon: String,
+        status: LanguageResourceStatus,
+        prepare: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
+                .foregroundStyle(status.state == .ready ? LerroTheme.green : LerroTheme.accent)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(LerroTheme.font(14, weight: .medium))
+                Text(status.message.isEmpty ? detail : status.message)
+                    .font(LerroTheme.font(12))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if status.state == .available || status.state == .failed {
+                Button("准备", action: prepare)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            } else if status.state == .downloading {
+                ProgressView().controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 62)
+        .background(LerroTheme.fillContainerThin)
+        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                .stroke(LerroTheme.thinBorder)
+        }
+    }
+
     private func shortcutRow(
         title: String,
         detail: String,
@@ -727,9 +821,7 @@ struct OnboardingView: View {
     private func permissionGranted(_ permission: OnboardingPermission) -> Bool {
         switch permission {
         case .microphone: session.microphonePermission
-        case .speechRecognition: session.speechPermission
         case .accessibility: session.accessibilityPermission
-        case .inputMonitoring: session.inputMonitoringPermission
         }
     }
 
@@ -801,39 +893,55 @@ struct OnboardingView: View {
         }
     }
 
-    private func prepareShortcutDraftIfNeeded() {
-        guard shortcutDraft == nil else { return }
-        guard let definition = session.preferences.hotkeys.first(where: { $0.action == .dictate }) else {
-            shortcutActivation = .hold
-            return
+    private var selectedShortcutDraft: Binding<ShortcutBindingDraft?> {
+        selectedShortcutAction == .dictate ? $dictateShortcutDraft : $translateShortcutDraft
+    }
+
+    private var selectedShortcutActivation: Binding<ShortcutActivation> {
+        selectedShortcutAction == .dictate ? $dictateShortcutActivation : $translateShortcutActivation
+    }
+
+    private func prepareShortcutDraftsIfNeeded() {
+        if dictateShortcutDraft == nil,
+           let definition = session.preferences.hotkeys.first(where: { $0.action == .dictate }) {
+            dictateShortcutDraft = ShortcutBindingDraft(definition: definition)
+            dictateShortcutActivation = definition.activation.resolved
         }
-        shortcutDraft = ShortcutBindingDraft(definition: definition)
-        shortcutActivation = definition.activation.resolved
+        if translateShortcutDraft == nil,
+           let definition = session.preferences.hotkeys.first(where: { $0.action == .translate }) {
+            translateShortcutDraft = ShortcutBindingDraft(definition: definition)
+            translateShortcutActivation = definition.activation.resolved
+        }
     }
 
     private func saveOnboardingShortcut() async -> Bool {
-        guard let shortcutDraft else {
-            shortcutSaveError = "请按下一个快捷键后继续。"
+        guard let dictateShortcutDraft, let translateShortcutDraft else {
+            shortcutSaveError = "请完成听写和翻译快捷键。"
             return false
         }
-        let existing = session.preferences.hotkeys.first(where: { $0.action == .dictate })
-        let saved = await session.commitHotkey(
-            for: .dictate,
-            replacing: existing,
-            keyCode: shortcutDraft.keyCode,
-            modifiers: shortcutDraft.modifiers,
-            usesFunctionKey: shortcutDraft.usesFunctionKey,
-            activation: shortcutActivation,
-            displayName: shortcutDraft.displayName
-        )
-        guard saved else {
-            shortcutSaveError = "这个按键已经分配给其他功能，请重新选择。"
-            return false
+        let changes: [(HotkeyAction, ShortcutBindingDraft, ShortcutActivation)] = [
+            (.dictate, dictateShortcutDraft, dictateShortcutActivation),
+            (.translate, translateShortcutDraft, translateShortcutActivation)
+        ]
+        for (action, draft, activation) in changes {
+            let existing = session.preferences.hotkeys.first(where: { $0.action == action })
+            guard await session.commitHotkey(
+                for: action,
+                replacing: existing,
+                keyCode: draft.keyCode,
+                modifiers: draft.modifiers,
+                usesFunctionKey: draft.usesFunctionKey,
+                activation: activation,
+                displayName: draft.displayName
+            ) else {
+                shortcutSaveError = "\(action == .dictate ? "听写" : "翻译")快捷键与已有按键冲突，请重新选择。"
+                return false
+            }
         }
         shortcutSaveError = ""
-        sampleText = shortcutActivation.resolved == .hold
-            ? "把光标放在这里，然后按住 \(shortcutDraft.displayName) 说一句话。"
-            : "把光标放在这里，按一下 \(shortcutDraft.displayName) 开始，再按一下完成。"
+        sampleText = dictateShortcutActivation.resolved == .hold
+            ? "把光标放在这里，然后按住 \(dictateShortcutDraft.displayName) 说一句话。"
+            : "把光标放在这里，按一下 \(dictateShortcutDraft.displayName) 开始，再按一下完成。"
         return true
     }
 
@@ -896,7 +1004,7 @@ struct OnboardingView: View {
         case .raw:
             "完成语音识别后直接插入原始文字，无需准备语言模型。"
         case .local:
-            "听写完成后在本机整理语句；同一模型也负责翻译、问答与改写。"
+            "听写完成后在本机整理语句；问答与改写也可使用本地模型。"
         case .remote:
             "使用您在设置中保存的 API 模型整理文字；发送内容由六项上下文开关控制。"
         }
@@ -1040,7 +1148,7 @@ struct OnboardingView: View {
         case .localMode: "基础听写即时可用，本地增强按需准备。"
         case .permissions: "每项权限都有明确用途和独立设置入口。"
         case .shortcuts:
-            "\(shortcutDraft?.displayName ?? "Fn") · \(shortcutActivation.resolved == .hold ? "按住说话" : "按一下开关")"
+            "\(selectedShortcutDraft.wrappedValue?.displayName ?? "Fn") · \(selectedShortcutActivation.wrappedValue.resolved == .hold ? "按住说话" : "按一下开关")"
         case .practice: "自在说，清楚写。"
         }
     }

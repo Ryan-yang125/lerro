@@ -49,11 +49,13 @@ Application Support 根目录在准备和迁移时强制为 `0700`，`preference
 | 权限 | 用途 | 声明或检查位置 |
 | --- | --- | --- |
 | 麦克风 | AVAudioEngine 收音、引导麦克风测试 | [`Info.plist`](../config/Info.plist)、[`MacPermissionService`](../Sources/LerroMac/System/MacPermissionService.swift) |
-| Speech Recognition | Apple SpeechAnalyzer / SpeechTranscriber | 同上 |
 | Accessibility | 捕获有限上下文、读取并验证焦点与选区、提交 Command-V、运行 active shortcut filter | `MacPermissionService`、Accessibility adapters、`GlobalHotkeyMonitor` |
-| Input Monitoring | 全局单修饰键、组合键、key down/up 与 Escape 事件 | `MacPermissionService`、[`GlobalHotkeyMonitor`](../Sources/LerroMac/Hotkeys/GlobalHotkeyMonitor.swift) |
 
 TCC 授权由用户和 macOS 控制。usage description、entitlement 和代码签名只提供系统声明与身份，不能代替授权。
+
+Apple Speech 与传统 Apple Translation 由系统管理语言资源。Lerro 使用 SwiftUI
+系统资源准备流程，并在快捷键运行时只调用已安装的本地资源；这两项能力不增加
+Speech Recognition、Input Monitoring 或 Translation TCC。
 
 快捷键录制器只在 Lerro 当前窗口内观察用户主动测试的按键并即时显示状态。进入录制器时
 生产 global event tap 暂停；候选按键只写入本地偏好，不写入日志、历史或网络请求。
@@ -135,8 +137,8 @@ saveAudio == true && historyRetention != .never
 
 ## 网络边界
 
-生产代码包含三类主动网络路径：公开 Hugging Face 模型下载、用户配置的 BYOK 模型请求、
-以及 BYOK 连接测试。
+生产代码包含四类主动网络路径：公开 Hugging Face 模型下载、用户配置的 BYOK 模型请求、
+BYOK 连接测试，以及 Sparkle 公开版本检查和 ZIP 下载。
 
 [`MLXLanguageModelRuntime.publicModelHubClient`](../Sources/LerroIntelligence/MLXLanguageModelRuntime.swift) 固定：
 
@@ -166,6 +168,19 @@ Bearer API Key。普通请求可以包含：
 URLSession 关闭 cookie、URL cache、credential store 和请求缓存；错误描述排除响应正文、
 请求正文、Key 与 Authorization header。第三方 Provider 仍会按自身条款处理请求内容、IP、
 时间、账户、用量与计费信息。
+
+[`AppUpdateController.swift`](../Sources/Lerro/App/AppUpdateController.swift) 通过 Sparkle 访问
+`https://updates.lerroapp.com/appcast/stable.xml`，在启动时及运行期间每 24 小时静默探测；
+用户点击 Home、设置中的“检查更新”或蓝色下载入口会发起交互式检查。appcast 选择较新版本
+后，用户点击启动 Sparkle 下载；ZIP 来自 `updates.lerroapp.com`，并以 `SUPublicEDKey`
+验证 Ed25519 归档签名。该路径可携带
+当前应用版本、平台和常规 HTTPS 连接元数据，例如 IP、User-Agent 与请求时间；它不包含音频、
+transcript、焦点文本、选区、词典、prompt、回答或 API Key。
+
+`lerro-distribution` Worker 从私有 R2 读取公开 ZIP，并从私有 D1 读取版本、build、签名、长度、
+SHA-256 与发布时间等 release 元数据。服务端不存储 Lerro 用户内容。R2/D1 的写入仅在维护者
+受控发布流程中发生；公开 Worker 不提供写入路由。`PrivacyInfo.xcprivacy` 已针对这条网络路径
+复核：它没有新增 tracking、收集数据类型或 Required Reason API。
 
 当前产品没有：
 
@@ -223,7 +238,7 @@ Release 构建通过 Swift 与 Clang compiler prefix map 清除构建工作区�
 | 文件 | 当前职责 |
 | --- | --- |
 | [`PrivacyInfo.xcprivacy`](../Sources/Lerro/Resources/PrivacyInfo.xcprivacy) | 无 tracking、无 declared collected data；System Boot Time 使用 reason `35F9.1` |
-| [`Info.plist`](../config/Info.plist) | 麦克风和 Speech usage descriptions、bundle identity、最低系统 |
+| [`Info.plist`](../config/Info.plist) | 麦克风 usage description、bundle identity、最低系统；Apple Speech 路径不声明独立 Speech Recognition 权限 |
 | [`Lerro.entitlements`](../config/Lerro.entitlements) | audio input 与 network client |
 | [`PrivacyPolicy.html`](../Sources/Lerro/Resources/PrivacyPolicy.html) | 用户可读的数据、网络、权限、删除说明 |
 | [`TermsOfUse.html`](../Sources/Lerro/Resources/TermsOfUse.html) | 本地学习用途、模型输出、备份和第三方组件 |

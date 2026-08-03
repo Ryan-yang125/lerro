@@ -549,6 +549,7 @@ struct LerroIconButton: View {
     let systemName: String
     var help: String = ""
     var selected = false
+    var foreground: Color? = nil
     let action: () -> Void
 
     var body: some View {
@@ -557,7 +558,7 @@ struct LerroIconButton: View {
                 .font(.system(size: LerroTheme.navigationIconSize, weight: .medium))
                 .frame(width: 32, height: 32)
         }
-        .buttonStyle(LerroIconButtonStyle(selected: selected))
+        .buttonStyle(LerroIconButtonStyle(selected: selected, foreground: foreground))
         .contentShape(Rectangle().inset(by: -6))
         .help(help)
         .accessibilityLabel(help.isEmpty ? systemName : help)
@@ -566,11 +567,13 @@ struct LerroIconButton: View {
 
 private struct LerroIconButtonStyle: ButtonStyle {
     let selected: Bool
+    let foreground: Color?
 
     func makeBody(configuration: Configuration) -> some View {
         IconBody(
             label: configuration.label,
             selected: selected,
+            foreground: foreground,
             isPressed: configuration.isPressed
         )
     }
@@ -578,6 +581,7 @@ private struct LerroIconButtonStyle: ButtonStyle {
     private struct IconBody<Label: View>: View {
         let label: Label
         let selected: Bool
+        let foreground: Color?
         let isPressed: Bool
         @State private var hovering = false
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -585,7 +589,7 @@ private struct LerroIconButtonStyle: ButtonStyle {
 
         var body: some View {
             label
-                .foregroundStyle(selected ? LerroTheme.text : LerroTheme.secondaryText)
+                .foregroundStyle(foreground ?? (selected ? LerroTheme.text : LerroTheme.secondaryText))
                 .background(background)
                 .clipShape(RoundedRectangle(
                     cornerRadius: LerroTheme.navigationRadius,

@@ -79,6 +79,7 @@ dsym_path="$project_dir/dist/Lerro.app.dSYM"
 contents_path="$app_path/Contents"
 macos_path="$contents_path/MacOS"
 resources_path="$contents_path/Resources"
+frameworks_path="$contents_path/Frameworks"
 
 stage_arm64_file() {
     local source_path=$1
@@ -99,21 +100,92 @@ stage_arm64_file() {
     exit 1
 }
 
+stage_sparkle_framework() {
+    local artifact_root="$project_dir/.build/artifacts/sparkle/Sparkle"
+    local source_framework="$artifact_root/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+    local destination_framework="$frameworks_path/Sparkle.framework"
+    local executable_path architectures temporary_path
+
+    [[ -d "$source_framework" ]] || {
+        print -u2 "Missing resolved Sparkle framework: $source_framework"
+        exit 1
+    }
+    ditto "$source_framework" "$destination_framework"
+
+    while IFS= read -r -d $'\0' executable_path; do
+        architectures=$(lipo -archs "$executable_path" 2>/dev/null || true)
+        [[ -n "$architectures" ]] || continue
+        if [[ "$architectures" == "arm64" ]]; then
+            continue
+        fi
+        if [[ " $architectures " != *" arm64 "* ]]; then
+            print -u2 "Sparkle executable is missing an arm64 slice: $executable_path ($architectures)"
+            exit 1
+        fi
+        temporary_path="$executable_path.arm64"
+        lipo "$executable_path" -thin arm64 -output "$temporary_path"
+        mv -f "$temporary_path" "$executable_path"
+        chmod 755 "$executable_path"
+    done < <(find "$destination_framework/Versions/B" -type f -perm -111 -print0)
+}
+
+verify_sparkle_linkage() {
+    local executable_path="$macos_path/Lerro"
+
+    otool -L "$executable_path" | grep -Fq '@rpath/Sparkle.framework/Versions/B/Sparkle' || {
+        print -u2 "Lerro does not link the embedded Sparkle framework."
+        exit 1
+    }
+    otool -l "$executable_path" | awk '
+        $1 == "cmd" && $2 == "LC_RPATH" { in_rpath = 1; next }
+        in_rpath && $1 == "path" && $2 == "@executable_path/../Frameworks" { found = 1 }
+        in_rpath && $1 == "cmd" { in_rpath = 0 }
+        END { exit(found ? 0 : 1) }
+    ' || {
+        print -u2 "Lerro is missing the @executable_path/../Frameworks runtime search path."
+        exit 1
+    }
+}
+
+sanitize_runtime_search_paths() {
+    local executable_path="$macos_path/Lerro"
+    local existing_path
+    local has_app_frameworks_path=false
+
+    while IFS= read -r existing_path; do
+        if [[ "$existing_path" == "@executable_path/../Frameworks" ]]; then
+            has_app_frameworks_path=true
+        elif [[ "$existing_path" == "$project_dir"/* ]]; then
+            install_name_tool -delete_rpath "$existing_path" "$executable_path"
+        fi
+    done < <(
+        otool -l "$executable_path" | awk '
+            $1 == "cmd" && $2 == "LC_RPATH" { in_rpath = 1; next }
+            in_rpath && $1 == "path" { print $2; in_rpath = 0 }
+        '
+    )
+    if ! $has_app_frameworks_path; then
+        install_name_tool -add_rpath "@executable_path/../Frameworks" "$executable_path"
+    fi
+}
+
 rm -rf "$app_path"
 rm -rf "$dsym_path"
-mkdir -p "$macos_path" "$resources_path"
+mkdir -p "$macos_path" "$resources_path" "$frameworks_path"
 stage_arm64_file "$binary_dir/Lerro" "$macos_path/Lerro"
 chmod 755 "$macos_path/Lerro"
+stage_sparkle_framework
 
 dsym_dwarf_path="$dsym_path/Contents/Resources/DWARF/Lerro"
+if codesign -d "$macos_path/Lerro" >/dev/null 2>&1; then
+    codesign --remove-signature "$macos_path/Lerro"
+fi
+sanitize_runtime_search_paths
 /usr/bin/dsymutil "$macos_path/Lerro" -o "$dsym_path"
 [[ -f "$dsym_dwarf_path" ]] || {
     print -u2 "Missing Lerro dSYM after dsymutil: $dsym_path"
     exit 1
 }
-if codesign -d "$macos_path/Lerro" >/dev/null 2>&1; then
-    codesign --remove-signature "$macos_path/Lerro"
-fi
 /usr/bin/strip -S -x "$macos_path/Lerro"
 
 ditto "$project_dir/config/Info.plist" "$contents_path/Info.plist"
@@ -154,11 +226,17 @@ copy_dependency_records() {
 while IFS= read -r package_identity; do
     checkout_path=$(find "$project_dir/.build/checkouts" \
         -mindepth 1 -maxdepth 1 -type d -iname "$package_identity" -print -quit)
-    [[ -n "$checkout_path" ]] || {
+    if [[ -n "$checkout_path" ]]; then
+        copy_dependency_records "$checkout_path" "$package_identity"
+        continue
+    fi
+    artifact_path=$(find "$project_dir/.build/artifacts" \
+        -mindepth 2 -maxdepth 2 -type d -iname "$package_identity" -print -quit)
+    [[ -n "$artifact_path" ]] || {
         print -u2 "Missing resolved checkout for license collection: $package_identity"
         exit 1
     }
-    copy_dependency_records "$checkout_path" "$package_identity"
+    copy_dependency_records "$artifact_path" "$package_identity"
 done < <(python3 - "$project_dir/Package.resolved" <<'PY'
 import json
 import pathlib
@@ -258,9 +336,37 @@ case "$signing_mode" in
         signing_arguments+=(--options runtime --timestamp)
         ;;
 esac
+sparkle_framework_path="$frameworks_path/Sparkle.framework"
+sparkle_version_path="$sparkle_framework_path/Versions/B"
+sign_sparkle_component() {
+    local component_path="$1"
+    local preserve_entitlements="${2:-false}"
+    local component_arguments=(--force --sign "$signing_identity")
+
+    if [[ "$preserve_entitlements" == true ]]; then
+        component_arguments+=(--preserve-metadata=entitlements)
+    fi
+    case "$signing_mode" in
+        development)
+            component_arguments+=(--options runtime)
+            ;;
+        developer-id)
+            component_arguments+=(--options runtime --timestamp)
+            ;;
+    esac
+    codesign "${component_arguments[@]}" "$component_path"
+}
+
+sign_sparkle_component "$sparkle_version_path/XPCServices/Installer.xpc"
+sign_sparkle_component "$sparkle_version_path/XPCServices/Downloader.xpc" true
+sign_sparkle_component "$sparkle_version_path/Autoupdate"
+sign_sparkle_component "$sparkle_version_path/Updater.app"
+sign_sparkle_component "$sparkle_framework_path"
+codesign "${signing_arguments[@]}" "$macos_path/Lerro"
 codesign "${signing_arguments[@]}" "$app_path"
 
 plutil -lint "$contents_path/Info.plist" "$project_dir/config/Lerro.entitlements"
+verify_sparkle_linkage
 codesign --verify --deep --strict --verbose=2 "$app_path"
 
 print "Built $app_path"

@@ -5,12 +5,9 @@ import SwiftUI
 public final class FloatingPanelController {
     private var panel: NSPanel?
     private var hasInstalledContent = false
-    private var trackingTimer: Timer?
     private var interactionSize = CGSize(width: 176, height: 48)
     private var interactionBottomInset: CGFloat = 0
     private var allowsInteraction = true
-    private var isPointerInsideInteractionTarget = false
-    private var hoverChangeHandler: (@MainActor (Bool) -> Void)?
     private let role: Role
 
     public enum Role: Sendable {
@@ -28,7 +25,6 @@ public final class FloatingPanelController {
         interactionSize: CGSize? = nil,
         interactionBottomInset: CGFloat = 0,
         allowsInteraction: Bool = true,
-        onHoverChange: (@MainActor (Bool) -> Void)? = nil,
         animated: Bool = true
     ) {
         let panel = panel ?? makePanel()
@@ -39,15 +35,13 @@ public final class FloatingPanelController {
         if let interactionSize { self.interactionSize = interactionSize }
         self.interactionBottomInset = interactionBottomInset
         self.allowsInteraction = allowsInteraction
-        hoverChangeHandler = onHoverChange
         if panel.frame.size != size {
             panel.setContentSize(size)
         }
         position(panel: panel, size: size)
         self.panel = panel
-        startTrackingIfNeeded(panel: panel, size: size)
         if role == .passiveHUD {
-            updatePassivePanel(panel, size: size)
+            panel.ignoresMouseEvents = !allowsInteraction
         }
 
         guard !panel.isVisible else { return }
@@ -87,7 +81,6 @@ public final class FloatingPanelController {
 
     public func hide(animated: Bool = true) {
         guard let panel else { return }
-        stopTracking()
         if animated {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.12
@@ -104,7 +97,6 @@ public final class FloatingPanelController {
     }
 
     public func close() {
-        stopTracking()
         panel?.close()
         panel = nil
         hasInstalledContent = false
@@ -139,7 +131,7 @@ public final class FloatingPanelController {
         panel.animationBehavior = role == .passiveHUD ? .none : .utilityWindow
         panel.ignoresMouseEvents = role == .passiveHUD
         panel.isMovableByWindowBackground = false
-        panel.acceptsMouseMovedEvents = true
+        panel.acceptsMouseMovedEvents = false
         panel.becomesKeyOnlyIfNeeded = role == .passiveHUD
         return panel
     }
@@ -189,58 +181,6 @@ public final class FloatingPanelController {
         case .interactiveCard:
             NSApp.activate(ignoringOtherApps: true)
             panel.makeKeyAndOrderFront(nil)
-        }
-    }
-
-    private func startTrackingIfNeeded(panel: NSPanel, size: CGSize) {
-        guard role == .passiveHUD, trackingTimer == nil else { return }
-        updatePassivePanel(panel, size: size)
-        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self, weak panel] _ in
-            Task { @MainActor [weak self, weak panel] in
-                guard let self, let panel, panel.isVisible else { return }
-                self.updatePassivePanel(panel, size: size)
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        trackingTimer = timer
-    }
-
-    private func stopTracking() {
-        trackingTimer?.invalidate()
-        trackingTimer = nil
-        if role == .passiveHUD {
-            panel?.ignoresMouseEvents = true
-        }
-        if isPointerInsideInteractionTarget {
-            isPointerInsideInteractionTarget = false
-            hoverChangeHandler?(false)
-        }
-    }
-
-    private func updatePassivePanel(_ panel: NSPanel, size: CGSize) {
-        let mouseLocation = NSEvent.mouseLocation
-        if let targetScreen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }),
-           targetScreen.visibleFrame.intersection(panel.frame).isEmpty {
-            panel.setFrameOrigin(CGPoint(
-                x: targetScreen.visibleFrame.midX - size.width / 2,
-                y: targetScreen.visibleFrame.minY
-            ))
-        }
-
-        let targetFrame = CGRect(
-            x: panel.frame.midX - interactionSize.width / 2,
-            y: panel.frame.minY + interactionBottomInset,
-            width: interactionSize.width,
-            height: interactionSize.height
-        )
-        let isInside = targetFrame.contains(mouseLocation)
-        let shouldIgnoreMouseEvents = !allowsInteraction || !isInside
-        if panel.ignoresMouseEvents != shouldIgnoreMouseEvents {
-            panel.ignoresMouseEvents = shouldIgnoreMouseEvents
-        }
-        if isInside != isPointerInsideInteractionTarget {
-            isPointerInsideInteractionTarget = isInside
-            hoverChangeHandler?(isInside)
         }
     }
 

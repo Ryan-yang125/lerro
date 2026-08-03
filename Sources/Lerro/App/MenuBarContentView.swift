@@ -21,7 +21,7 @@ struct MenuBarContentView: View {
             fallbackShortcut: "Fn ⇧",
             icon: "character.bubble"
         )
-        captureItem(.ask, title: "问答", fallbackShortcut: "Fn Space", icon: "sparkles")
+        captureItem(.ask, title: "问答", fallbackShortcut: "未设置", icon: "sparkles")
 
         if session.isCaptureCancellationAvailable {
             Button {

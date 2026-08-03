@@ -69,7 +69,7 @@ struct GlobalHotkeyMonitorTests {
             flags: [.maskSecondaryFn]
         )
         #expect(down.triggers.isEmpty)
-        #expect(!down.suppressEvent)
+        #expect(down.suppressEvent)
 
         let began = try #require(monitor.activatePendingModifierForTesting())
         #expect(began == HotkeyTrigger(
@@ -136,7 +136,8 @@ struct GlobalHotkeyMonitorTests {
             modifierHoldDelay: 60
         )
 
-        _ = monitor.process(type: .flagsChanged, keyCode: 63, flags: [.maskSecondaryFn])
+        let fnDown = monitor.process(type: .flagsChanged, keyCode: 63, flags: [.maskSecondaryFn])
+        #expect(fnDown.suppressEvent)
         let spaceDown = monitor.process(
             type: .keyDown,
             keyCode: 49,
@@ -339,7 +340,8 @@ struct GlobalHotkeyMonitorTests {
             modifierHoldDelay: 60
         )
 
-        _ = monitor.process(type: .flagsChanged, keyCode: 63, flags: [.maskSecondaryFn])
+        let fnDown = monitor.process(type: .flagsChanged, keyCode: 63, flags: [.maskSecondaryFn])
+        #expect(fnDown.suppressEvent)
         _ = try #require(monitor.activatePendingModifierForTesting())
         monitor.resetTransientState()
 
@@ -349,14 +351,17 @@ struct GlobalHotkeyMonitorTests {
             flags: [.maskSecondaryFn, .maskShift]
         )
         #expect(shiftDown.triggers.isEmpty)
+        #expect(shiftDown.suppressEvent)
         let shiftUp = monitor.process(
             type: .flagsChanged,
             keyCode: 56,
             flags: [.maskSecondaryFn]
         )
         #expect(shiftUp.triggers.isEmpty)
+        #expect(shiftUp.suppressEvent)
         let fnUp = monitor.process(type: .flagsChanged, keyCode: 63, flags: [])
         #expect(fnUp.triggers.isEmpty)
+        #expect(fnUp.suppressEvent)
 
         _ = monitor.process(type: .flagsChanged, keyCode: 63, flags: [.maskSecondaryFn])
         #expect(try #require(monitor.activatePendingModifierForTesting()).definitionID == fn.id)
@@ -548,7 +553,7 @@ struct GlobalHotkeyMonitorTests {
 
         _ = monitor.process(type: .flagsChanged, keyCode: 63, flags: [.maskSecondaryFn])
         _ = try #require(monitor.activatePendingModifierForTesting())
-        #expect(!monitor.processAndEmitForTesting(
+        #expect(monitor.processAndEmitForTesting(
             type: .flagsChanged,
             keyCode: 56,
             flags: [.maskSecondaryFn, .maskShift]
@@ -1125,7 +1130,7 @@ struct GlobalHotkeyMonitorTests {
             keyDown: true
         ))
         freshFnDown.flags = [.maskSecondaryFn]
-        #expect(!monitor.receive(type: .flagsChanged, event: freshFnDown))
+        #expect(monitor.receive(type: .flagsChanged, event: freshFnDown))
         #expect(monitor.activatePendingModifierForTesting() == HotkeyTrigger(
             action: .dictate,
             activation: .hold,
@@ -1188,7 +1193,7 @@ struct GlobalHotkeyMonitorTests {
             keyDown: false
         ))
         rightShiftUp.flags = []
-        #expect(!monitor.receive(type: .flagsChanged, event: rightShiftUp))
+        #expect(monitor.receive(type: .flagsChanged, event: rightShiftUp))
 
         probe.update(
             secureInput: false,
@@ -1201,7 +1206,7 @@ struct GlobalHotkeyMonitorTests {
             keyDown: true
         ))
         freshLeftShiftDown.flags = [.maskShift]
-        #expect(!monitor.receive(type: .flagsChanged, event: freshLeftShiftDown))
+        #expect(monitor.receive(type: .flagsChanged, event: freshLeftShiftDown))
         #expect(monitor.activatePendingModifierForTesting()?.definitionID == shift.id)
     }
 
@@ -1266,7 +1271,7 @@ struct GlobalHotkeyMonitorTests {
             keyDown: false
         ))
         fnUp.flags = []
-        #expect(!monitor.receive(type: .flagsChanged, event: fnUp))
+        #expect(monitor.receive(type: .flagsChanged, event: fnUp))
 
         let freshFnDown = try #require(CGEvent(
             keyboardEventSource: nil,
@@ -1274,7 +1279,7 @@ struct GlobalHotkeyMonitorTests {
             keyDown: true
         ))
         freshFnDown.flags = [.maskSecondaryFn]
-        #expect(!monitor.receive(type: .flagsChanged, event: freshFnDown))
+        #expect(monitor.receive(type: .flagsChanged, event: freshFnDown))
         #expect(monitor.activatePendingModifierForTesting()?.definitionID == fn.id)
     }
 

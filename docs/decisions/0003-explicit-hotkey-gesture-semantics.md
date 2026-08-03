@@ -5,6 +5,7 @@
 - 决策人：Lerro maintainers
 - 关联任务/PR：本地 Phase 5 核心链路完善
 - 替代：无
+- 部分替代：[`0008-accessibility-owned-fn-shortcuts.md`](0008-accessibility-owned-fn-shortcuts.md)
 
 ## 背景
 
@@ -42,7 +43,7 @@ epoch 事件永久失效，已从当前 preferences 删除的 definition 也会�
 程序化启动与快捷键启动共享 generation guard。`HotkeySignature` 规范化物理 binding 后
 用于冲突检测与迁移去重。
 
-`GlobalHotkeyMonitor` 使用 active session event tap 监听 `flagsChanged`、`keyDown`、
+`GlobalHotkeyMonitor` 使用 active event tap 监听 `flagsChanged`、`keyDown`、
 `keyUp`。单修饰键先进入 120 ms 候选；候选期间出现其他键时让系统 chord 继续执行。
 命中的普通键 down、repeat 与 up 全部吞掉。重复 `start` 与相同 definitions 的
 `update` 保持幂等。配置中的更具体 chord 可以接管已激活的 modifier 前缀。逻辑 reset
@@ -87,8 +88,8 @@ Onboarding 或设置录制器时暂停生产 monitor，退出时恢复；
 
 ### 成本与风险
 
-- active event tap 同时依赖 Accessibility 与 Input Monitoring。
-- 任一监听权限在 capture 中被撤销时，AppSession 先取消 capture，再停止 event tap。
+- 当前 HID event tap 依赖 Accessibility；权限在 capture 中被撤销时，AppSession 先取消
+  capture，再停止 event tap。权限与 tap 位置由 ADR 0008 更新。
 - 单修饰键 hold 有 120 ms 意图确认延迟。
 - 外接键盘的 Fn/Globe 固件可能不向 macOS 发送事件，录制器会保持等待状态。
 - tap 被系统禁用、Secure Input 切换和物理键状态对账仍需要最终 Release 实机矩阵。

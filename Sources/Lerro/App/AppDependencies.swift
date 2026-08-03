@@ -19,6 +19,7 @@ struct AppDependencies: Sendable {
     let dictionary: any DictionaryRepository
     let preferences: any PreferencesRepository
     let intelligence: any IntelligenceProcessing
+    let translation: any TranslationServicing
 
     static func live() -> AppDependencies {
         if ProcessInfo.processInfo.environment["LERRO_FIXTURE_MODE"] == "1" {
@@ -71,7 +72,8 @@ struct AppDependencies: Sendable {
                 runtime: modelRuntime,
                 remoteRuntime: remoteModelRuntime,
                 modelIdentifier: defaultPreferences.localModelIdentifier
-            )
+            ),
+            translation: AppleTranslationService()
         )
     }
 
@@ -149,14 +151,15 @@ struct AppDependencies: Sendable {
             history: InMemoryHistoryRepository(entries: history),
             dictionary: InMemoryDictionaryRepository(entries: dictionary),
             preferences: InMemoryPreferencesRepository(value: preferences),
-            intelligence: RuleBasedIntelligenceService()
+            intelligence: RuleBasedIntelligenceService(),
+            translation: FixtureTranslationService()
         )
     }
 }
 
 /// Fixture adapters intentionally avoid every macOS integration point. They
 /// keep screenshot and launch-smoke runs deterministic without touching audio,
-/// Accessibility, input monitoring, pasteboard, TCC, login items, or disk.
+/// Accessibility, pasteboard, TCC, login items, or disk.
 private actor FixtureSpeechTranscriber: SpeechTranscribing {
     func availableInputDevices() async -> [AudioInputDevice] {
         [AudioInputDevice(uid: "fixture-input", name: "Fixture Microphone", isDefault: true)]
@@ -182,6 +185,28 @@ private actor FixtureSpeechTranscriber: SpeechTranscribing {
     }
 
     func cancel() async {}
+}
+
+private actor FixtureTranslationService: TranslationServicing {
+    func resourceStatus(
+        sourceLanguageIdentifier: String,
+        targetLanguageIdentifier: String
+    ) -> LanguageResourceStatus {
+        LanguageResourceStatus(
+            state: .ready,
+            sourceLanguageIdentifier: sourceLanguageIdentifier,
+            targetLanguageIdentifier: targetLanguageIdentifier,
+            message: "Fixture translation adapter"
+        )
+    }
+
+    func translate(
+        _ text: String,
+        sourceLanguageIdentifier: String,
+        targetLanguageIdentifier: String
+    ) throws -> String {
+        "Please translate this synthetic text into English."
+    }
 }
 
 private struct FixtureMicrophoneLevelTester: MicrophoneLevelTesting {
@@ -234,10 +259,7 @@ private final class FixtureHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable 
 private struct FixturePermissionChecker: PermissionChecking {
     func microphoneAuthorized() async -> Bool { true }
     func requestMicrophone() async -> Bool { true }
-    func speechAuthorized() async -> Bool { true }
-    func requestSpeech() async -> Bool { true }
     func accessibilityAuthorized(prompt: Bool) -> Bool { true }
-    func inputMonitoringAuthorized(prompt: Bool) -> Bool { true }
 }
 
 private struct FixtureLoginItemManager: LoginItemManaging {

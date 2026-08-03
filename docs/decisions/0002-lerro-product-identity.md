@@ -50,7 +50,7 @@ pointer-down 下沉 1 pt。HUD 继续使用既有外壳、声线、processing、
 
 ### 成本与风险
 
-- 新 Bundle ID 会建立新的 TCC 身份，最终签名 app 需要重新授权麦克风、Speech、Accessibility 与 Input Monitoring。
+- 新 Bundle ID 会建立新的 TCC 身份，最终签名 app 需要重新授权麦克风与辅助功能。
 - 旧数据需要在 repositories 和模型 runtime 初始化前迁移。
 - `lerro.com` 已由同名技术公司持有，正式商业发布仍需专业商标意见与域名策略。
 
@@ -71,7 +71,7 @@ pointer-down 下沉 1 pt。HUD 继续使用既有外壳、声线、processing、
 - 迁移 focused tests：仅旧根、仅新根、两者并存、中断恢复、重复执行、模型单副本。
 - 全量 `swift test`。
 - Release bundle 的 Bundle ID、模块、资源、签名与环境变量扫描。
-- 最终签名 app 的四项权限、物理 Fn、真人语音、跨 app 写入与断网模型测试。
+- 最终签名 app 的两项权限、物理 Fn、真人语音、跨 app 写入与断网模型测试。
 
 ## 文档同步
 

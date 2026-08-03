@@ -42,6 +42,10 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     private var activeModifierDefinition: HotkeyDefinition?
     private var activeKeyDefinitions: [Int64: HotkeyDefinition] = [:]
     private var claimedKeyCodes: Set<Int64> = []
+    /// A configured modifier shortcut owns every flagsChanged event from its
+    /// first press through the matching final release. This keeps Fn/Globe
+    /// from receiving the trailing event after Lerro accepted the shortcut.
+    private var modifierSequenceOwned = false
     private var modifierSequenceBlocked = false
     private var physicalDrainRequested = false
     private var pendingModifierActivation: DispatchWorkItem?
@@ -116,14 +120,14 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         }
 
         guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
+            tap: .cghidEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
             eventsOfInterest: eventMask,
             callback: globalHotkeyEventCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            throw LerroError.permissionRequired("输入监控与辅助功能")
+            throw LerroError.permissionRequired("辅助功能")
         }
 
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
@@ -342,20 +346,20 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     private func processFlagsChanged(flags: CGEventFlags) -> ProcessingResult {
         let current = flags.intersection(Self.primaryModifiers)
         let previous = currentModifierFlags
-        guard current != previous else { return ProcessingResult() }
+        var result = ProcessingResult()
+        let ownedBeforeEvent = modifierSequenceOwned
+        guard current != previous else { return result }
         currentModifierFlags = current
 
         if physicalDrainRequested {
             finishPhysicalDrainIfPossible()
-            return ProcessingResult()
+            return finalizeModifierResult(result, current: current, ownedBeforeEvent: ownedBeforeEvent)
         }
 
         let grew = current.rawValue.nonzeroBitCount > previous.rawValue.nonzeroBitCount
             && current.intersection(previous) == previous
         let shrank = current.rawValue.nonzeroBitCount < previous.rawValue.nonzeroBitCount
             && previous.intersection(current) == current
-
-        var result = ProcessingResult()
 
         if let active = activeModifierDefinition,
            requiredFlags(for: active) != current {
@@ -366,7 +370,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
                     HotkeyTrigger(action: .cancel, activation: .toggle, phase: .began)
                 )
                 activateModifierUpgrade(upgraded, result: &result)
-                return result
+                return finalizeModifierResult(result, current: current, ownedBeforeEvent: ownedBeforeEvent)
             }
 
             if active.activation.resolved == .hold, shrank {
@@ -380,7 +384,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
             if current.isEmpty {
                 modifierSequenceBlocked = false
             }
-            return result
+            return finalizeModifierResult(result, current: current, ownedBeforeEvent: ownedBeforeEvent)
         }
 
         if let pending = pendingModifierDefinition,
@@ -391,7 +395,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
             if grew,
                let upgraded = modifierOnlyDefinition(flags: current) {
                 stageModifierCandidate(upgraded, result: &result)
-                return result
+                return finalizeModifierResult(result, current: current, ownedBeforeEvent: ownedBeforeEvent)
             }
 
             if pending.activation.resolved == .toggle,
@@ -403,24 +407,39 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
             if current.isEmpty {
                 modifierSequenceBlocked = false
             }
-            return result
+            return finalizeModifierResult(result, current: current, ownedBeforeEvent: ownedBeforeEvent)
         }
 
         if current.isEmpty {
             modifierSequenceBlocked = false
-            return result
+            return finalizeModifierResult(result, current: current, ownedBeforeEvent: ownedBeforeEvent)
         }
 
         guard !modifierSequenceBlocked, previous.isEmpty || grew else {
-            return result
+            return finalizeModifierResult(result, current: current, ownedBeforeEvent: ownedBeforeEvent)
         }
 
         guard let definition = modifierOnlyDefinition(flags: current) else {
-            return result
+            return finalizeModifierResult(result, current: current, ownedBeforeEvent: ownedBeforeEvent)
         }
 
         stageModifierCandidate(definition, result: &result)
-        return result
+        return finalizeModifierResult(result, current: current, ownedBeforeEvent: ownedBeforeEvent)
+    }
+
+    private func finalizeModifierResult(
+        _ result: ProcessingResult,
+        current: CGEventFlags,
+        ownedBeforeEvent: Bool
+    ) -> ProcessingResult {
+        var finalized = result
+        if ownedBeforeEvent || modifierSequenceOwned {
+            finalized.suppressEvent = true
+        }
+        if current.isEmpty {
+            modifierSequenceOwned = false
+        }
+        return finalized
     }
 
     private func stageModifierCandidate(
@@ -428,6 +447,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         result: inout ProcessingResult
     ) {
         pendingModifierDefinition = definition
+        modifierSequenceOwned = true
         if definition.activation.resolved == .hold {
             result.timerDirective = .schedule(definitionID: definition.id)
         }
@@ -437,6 +457,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         _ definition: HotkeyDefinition,
         result: inout ProcessingResult
     ) {
+        modifierSequenceOwned = true
         result.timerDirective = .cancel
         result.triggers.append(trigger(for: definition, phase: .began))
         result.upgradeContinuation = .modifier(definition: definition)
@@ -699,11 +720,17 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     ) -> Bool {
         switch type {
         case .flagsChanged:
+            let ownsThisEvent = modifierSequenceOwned
             currentModifierFlags = flags.intersection(Self.primaryModifiers)
             if !currentModifierFlags.isEmpty {
                 physicalDrainRequested = true
                 modifierSequenceBlocked = true
             }
+            finishPhysicalDrainIfPossible()
+            if currentModifierFlags.isEmpty {
+                modifierSequenceOwned = false
+            }
+            return ownsThisEvent
         case .keyUp:
             let wasClaimed = claimedKeyCodes.remove(keyCode) != nil
             finishPhysicalDrainIfPossible()
@@ -734,6 +761,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         activeModifierDefinition = nil
         activeKeyDefinitions.removeAll()
         claimedKeyCodes.removeAll()
+        modifierSequenceOwned = false
         currentModifierFlags = []
         modifierSequenceBlocked = false
         physicalDrainRequested = false

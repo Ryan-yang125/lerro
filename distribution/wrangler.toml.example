@@ -1,0 +1,27 @@
+# Copy this file to wrangler.toml after creating the R2 bucket and D1 database.
+# The release bucket stays private. This Worker is the sole public read path.
+
+name = "lerro-distribution"
+main = "src/worker.mjs"
+compatibility_date = "2026-08-02"
+workers_dev = false
+
+[vars]
+PUBLIC_BASE_URL = "https://updates.lerroapp.com"
+
+[[r2_buckets]]
+binding = "RELEASES"
+bucket_name = "lerro-releases"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "lerro-releases"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# Add this before deployment to create the custom hostname. The public endpoint
+# is intentionally limited to updates.lerroapp.com.
+#
+# [[routes]]
+# pattern = "updates.lerroapp.com"
+# custom_domain = true

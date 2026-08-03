@@ -306,8 +306,7 @@ struct AppSessionCoreFlowTests {
         #expect(CaptureHUDVisualState.resolve(
             phase: harness.session.phase,
             isStartingCapture: harness.session.isStartingCapture,
-            isHandsFreeCapture: harness.session.isHandsFreeCapture,
-            isHUDHovered: harness.session.isHUDHovered
+            isHandsFreeCapture: harness.session.isHandsFreeCapture
         ) == .handsFree)
 
         let speechReadyAt = Date.now
@@ -344,8 +343,7 @@ struct AppSessionCoreFlowTests {
         #expect(CaptureHUDVisualState.resolve(
             phase: harness.session.phase,
             isStartingCapture: harness.session.isStartingCapture,
-            isHandsFreeCapture: harness.session.isHandsFreeCapture,
-            isHUDHovered: harness.session.isHUDHovered
+            isHandsFreeCapture: harness.session.isHandsFreeCapture
         ) == .processing)
         #expect(await waitUntil {
             harness.session.phase == .idle
@@ -485,8 +483,7 @@ struct AppSessionCoreFlowTests {
         #expect(CaptureHUDVisualState.resolve(
             phase: harness.session.phase,
             isStartingCapture: harness.session.isStartingCapture,
-            isHandsFreeCapture: harness.session.isHandsFreeCapture,
-            isHUDHovered: harness.session.isHUDHovered
+            isHandsFreeCapture: harness.session.isHandsFreeCapture
         ) == .handsFree)
         harness.session.cancelCapture()
         await harness.speechStartGate.open()
@@ -1278,43 +1275,134 @@ struct AppSessionCoreFlowTests {
         #expect(intelligenceRequests.map(\.task) == [.polish])
     }
 
-    @Test("Translation sends the target language through generation and delivery")
+    @Test("Translation uses device-local Apple Translation and delivers the result")
     @MainActor
     func translationCompletesEndToEnd() async throws {
         var preferences = basePreferences()
-        preferences.hasApprovedModelDownload = true
-        preferences.intelligenceMode = .local
+        preferences.intelligenceMode = .raw
         preferences.translationLanguageIdentifiers = ["en_US"]
-        let translated = IntelligenceResult(
-            text: "Hello from Lerro",
-            disposition: .insert,
-            modelIdentifier: "test-qwen"
-        )
         let harness = makeHarness(
             preferences: preferences,
             transcription: SpeechTranscription(
                 rawText: "你好",
                 localeIdentifier: "zh_CN",
                 duration: 1
-            ),
-            intelligenceResult: translated
+            )
         )
 
         await harness.session.start()
         harness.session.toggleCapture(.translation)
         #expect(await waitUntil { harness.session.phase == .listening })
         harness.session.toggleCapture(.translation)
-        #expect(await waitUntil { harness.session.phase == .idle && harness.session.lastResult == translated.text })
+        #expect(await waitUntil { harness.session.phase == .idle && harness.session.lastResult == "translated: 你好" })
 
-        let request = try #require(await harness.intelligence.requests().first)
         let delivery = try #require(await harness.delivery.deliveries().first)
         let history = try #require(await harness.history.entries().first)
 
-        #expect(request.task == .translate)
-        #expect(request.targetLanguage == "en_US")
-        #expect(delivery == DeliveryRecord(text: translated.text, replacingSelection: false))
+        #expect(await harness.intelligence.requests().isEmpty)
+        #expect(delivery == DeliveryRecord(text: "translated: 你好", replacingSelection: false))
         #expect(history.targetLanguage == "en_US")
-        #expect(history.wasEnhanced)
+        #expect(history.sourceLanguage == "zh_CN")
+        #expect(history.wasEnhanced == false)
+    }
+
+    @Test("Changing languages refreshes resource state and invalidates stale preparation")
+    @MainActor
+    func languageChangesRefreshResources() async throws {
+        var preferences = basePreferences()
+        preferences.recognitionLocaleIdentifier = "zh_CN"
+        preferences.translationLanguageIdentifiers = ["en_US"]
+        let harness = makeHarness(
+            preferences: preferences,
+            transcription: SpeechTranscription(
+                rawText: "unused",
+                localeIdentifier: "zh_CN",
+                duration: 1
+            )
+        )
+
+        await harness.session.start()
+        harness.session.prepareTranslationResources()
+        let staleRequestID = try #require(harness.session.translationPreparationRequestID)
+
+        harness.session.preferences.recognitionLocaleIdentifier = "ja_JP"
+        harness.session.preferences.translationLanguageIdentifiers = ["ko_KR"]
+        await harness.session.refreshLanguageResources(invalidatePreparations: true)
+
+        #expect(harness.session.translationPreparationRequestID == nil)
+        #expect(harness.session.speechResourceStatus.sourceLanguageIdentifier == "ja_JP")
+        #expect(harness.session.translationResourceStatus.sourceLanguageIdentifier == "ja_JP")
+        #expect(harness.session.translationResourceStatus.targetLanguageIdentifier == "ko_KR")
+
+        harness.session.completeTranslationResourcePreparation(
+            requestID: staleRequestID,
+            errorMessage: "stale failure"
+        )
+        #expect(harness.session.translationResourceStatus.message != "stale failure")
+    }
+
+    @Test("Translation bypasses intelligence in every configured intelligence mode")
+    @MainActor
+    func translationNeverCallsIntelligence() async throws {
+        for mode in [IntelligenceMode.raw, .local, .remote] {
+            var preferences = basePreferences()
+            preferences.intelligenceMode = mode
+            preferences.translationLanguageIdentifiers = ["en_US"]
+            let harness = makeHarness(
+                preferences: preferences,
+                transcription: SpeechTranscription(rawText: "你好", localeIdentifier: "zh_CN", duration: 1)
+            )
+            await harness.session.start()
+            harness.session.toggleCapture(.translation)
+            #expect(await waitUntil { harness.session.phase == .listening })
+            harness.session.toggleCapture(.translation)
+            #expect(await waitUntil { harness.session.phase == .idle })
+            #expect(await harness.intelligence.requests().isEmpty)
+            #expect(await harness.delivery.deliveries().first?.text == "translated: 你好")
+        }
+    }
+
+    @Test("Unavailable translation resource never delivers or persists history")
+    @MainActor
+    func unavailableTranslationDoesNotDeliver() async throws {
+        var preferences = basePreferences()
+        preferences.intelligenceMode = .raw
+        let harness = makeHarness(
+            preferences: preferences,
+            transcription: SpeechTranscription(rawText: "你好", localeIdentifier: "zh_CN", duration: 1),
+            translation: UnavailableTranslation()
+        )
+        await harness.session.start()
+        harness.session.toggleCapture(.translation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.translation)
+        #expect(await waitUntil { harness.session.phase == .failed })
+        #expect(await harness.delivery.deliveries().isEmpty)
+        #expect(await harness.history.entries().isEmpty)
+        #expect(await harness.intelligence.requests().isEmpty)
+    }
+
+    @Test("Cancelling translation cancels its active device-local session")
+    @MainActor
+    func cancellingTranslationLeavesNoDeliveryOrHistory() async throws {
+        var preferences = basePreferences()
+        preferences.intelligenceMode = .raw
+        let translation = BlockingTranslation()
+        let harness = makeHarness(
+            preferences: preferences,
+            transcription: SpeechTranscription(rawText: "你好", localeIdentifier: "zh_CN", duration: 1),
+            translation: translation
+        )
+        await harness.session.start()
+        harness.session.toggleCapture(.translation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.translation)
+        #expect(await waitUntil { await translation.hasStarted() })
+        harness.session.cancelCapture()
+        #expect(await waitUntil { harness.session.phase == .idle })
+        #expect(await translation.cancelCount() == 1)
+        #expect(await harness.delivery.deliveries().isEmpty)
+        #expect(await harness.history.entries().isEmpty)
     }
 
     @Test("Ask streams an answer card and persists the final answer without text delivery")
@@ -1662,7 +1750,6 @@ struct AppSessionCoreFlowTests {
             phase: harness.session.phase,
             isStartingCapture: harness.session.isStartingCapture,
             isHandsFreeCapture: harness.session.isHandsFreeCapture,
-            isHUDHovered: harness.session.isHUDHovered,
             isSuppressed: harness.session.isHUDSuppressed
         ) == .idleHidden)
         harness.session.cancelCapture()
@@ -1677,13 +1764,13 @@ struct AppSessionCoreFlowTests {
         #expect(await harness.history.entries().first?.status == .completed)
     }
 
-    @Test("Committed completion stays hidden while the pointer remains over the HUD")
+    @Test("Committed completion hides the HUD without a pointer-tracking state")
     @MainActor
-    func committedCompletionDoesNotReopenHoveredHUD() async {
+    func committedCompletionHidesHUDImmediately() async {
         let harness = makeHarness(
             preferences: basePreferences(),
             transcription: SpeechTranscription(
-                rawText: "hovered completion",
+                rawText: "completed delivery",
                 localeIdentifier: "en_US",
                 duration: 1
             ),
@@ -1693,23 +1780,18 @@ struct AppSessionCoreFlowTests {
         await harness.session.start()
         harness.session.toggleCapture(.dictation)
         #expect(await waitUntil { harness.session.phase == .listening })
-        harness.session.isHUDHovered = true
         harness.session.toggleCapture(.dictation)
         #expect(await waitUntil { await harness.delivery.commitCount() == 1 })
         await harness.deliveryCompletionGate.open()
         #expect(await waitUntil { harness.session.phase == .idle })
 
-        #expect(harness.session.isHUDSuppressed)
+        #expect(!harness.session.isHUDSuppressed)
         #expect(CaptureHUDVisualState.resolve(
             phase: harness.session.phase,
             isStartingCapture: harness.session.isStartingCapture,
             isHandsFreeCapture: harness.session.isHandsFreeCapture,
-            isHUDHovered: harness.session.isHUDHovered,
             isSuppressed: harness.session.isHUDSuppressed
         ) == .idleHidden)
-
-        harness.session.isHUDHovered = false
-        #expect(!harness.session.isHUDSuppressed)
     }
 
     @Test("Dictation over a captured selection still uses plain insertion")
@@ -2030,9 +2112,7 @@ struct AppSessionCoreFlowTests {
     func incompleteInsertionPermissionsDoNotStartHotkeyMonitor() async {
         let permissions = IndependentPermissions(
             microphone: true,
-            speech: true,
-            accessibility: false,
-            inputMonitoring: true
+            accessibility: false
         )
         let monitor = RecordingHotkeyMonitor()
         let harness = makeHarness(
@@ -2062,9 +2142,7 @@ struct AppSessionCoreFlowTests {
     func permissionRevocationCancelsActiveHold() async throws {
         let permissions = IndependentPermissions(
             microphone: true,
-            speech: true,
-            accessibility: true,
-            inputMonitoring: true
+            accessibility: true
         )
         let monitor = RecordingHotkeyMonitor()
         let definition = HotkeyDefinition(
@@ -2097,7 +2175,7 @@ struct AppSessionCoreFlowTests {
         )])
         #expect(await waitUntil { harness.session.phase == .listening })
 
-        permissions.set(accessibility: false, inputMonitoring: true)
+        permissions.setAccessibility(false)
         await harness.session.applicationDidBecomeActive()
 
         #expect(await waitUntil {
@@ -2200,7 +2278,8 @@ struct AppSessionCoreFlowTests {
         hotkeys: any HotkeyMonitoring = NoopHotkeyMonitor(),
         preferencesRepository: (any PreferencesRepository)? = nil,
         historyRepository: (any HistoryRepository)? = nil,
-        dictionaryRepository: (any DictionaryRepository)? = nil
+        dictionaryRepository: (any DictionaryRepository)? = nil,
+        translation: any TranslationServicing = StubTranslation()
     ) -> Harness {
         _ = NSApplication.shared
         let speechStartGate = AsyncGate(isOpen: !speechStartSuspended)
@@ -2235,7 +2314,8 @@ struct AppSessionCoreFlowTests {
             history: historyRepository ?? history,
             dictionary: dictionaryRepository ?? InMemoryDictionaryRepository(),
             preferences: preferencesRepository ?? InMemoryPreferencesRepository(value: preferences),
-            intelligence: intelligence
+            intelligence: intelligence,
+            translation: translation
         )
         return Harness(
             session: AppSession(
@@ -2348,6 +2428,86 @@ private actor StubSpeech: SpeechTranscribing {
     func startRequests() -> [SpeechStartRecord] { recordedStarts }
     func cancelCount() -> Int { cancellations }
     func stopCount() -> Int { stops }
+}
+
+private actor StubTranslation: TranslationServicing {
+    func resourceStatus(
+        sourceLanguageIdentifier: String,
+        targetLanguageIdentifier: String
+    ) -> LanguageResourceStatus {
+        LanguageResourceStatus(
+            state: .ready,
+            sourceLanguageIdentifier: sourceLanguageIdentifier,
+            targetLanguageIdentifier: targetLanguageIdentifier
+        )
+    }
+
+    func translate(
+        _ text: String,
+        sourceLanguageIdentifier: String,
+        targetLanguageIdentifier: String
+    ) -> String {
+        "translated: \(text)"
+    }
+}
+
+private actor UnavailableTranslation: TranslationServicing {
+    func resourceStatus(
+        sourceLanguageIdentifier: String,
+        targetLanguageIdentifier: String
+    ) -> LanguageResourceStatus {
+        LanguageResourceStatus(
+            state: .available,
+            sourceLanguageIdentifier: sourceLanguageIdentifier,
+            targetLanguageIdentifier: targetLanguageIdentifier,
+            message: "需要准备翻译资源"
+        )
+    }
+
+    func translate(
+        _ text: String,
+        sourceLanguageIdentifier: String,
+        targetLanguageIdentifier: String
+    ) throws -> String {
+        throw LerroError.translationUnavailable("需要准备翻译资源")
+    }
+}
+
+private actor BlockingTranslation: TranslationServicing {
+    private var continuation: CheckedContinuation<String, any Error>?
+    private var didStart = false
+    private var cancellations = 0
+
+    func resourceStatus(
+        sourceLanguageIdentifier: String,
+        targetLanguageIdentifier: String
+    ) -> LanguageResourceStatus {
+        LanguageResourceStatus(
+            state: .ready,
+            sourceLanguageIdentifier: sourceLanguageIdentifier,
+            targetLanguageIdentifier: targetLanguageIdentifier
+        )
+    }
+
+    func translate(
+        _ text: String,
+        sourceLanguageIdentifier: String,
+        targetLanguageIdentifier: String
+    ) async throws -> String {
+        didStart = true
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func cancel() {
+        cancellations += 1
+        continuation?.resume(throwing: CancellationError())
+        continuation = nil
+    }
+
+    func hasStarted() -> Bool { didStart }
+    func cancelCount() -> Int { cancellations }
 }
 
 private struct DeliveryRecord: Equatable, Sendable {
@@ -2532,10 +2692,7 @@ private struct FixedContextCapture: ContextCapturing {
 private struct AllowedPermissions: PermissionChecking {
     func microphoneAuthorized() -> Bool { true }
     func requestMicrophone() -> Bool { true }
-    func speechAuthorized() -> Bool { true }
-    func requestSpeech() -> Bool { true }
     func accessibilityAuthorized(prompt: Bool) -> Bool { true }
-    func inputMonitoringAuthorized(prompt: Bool) -> Bool { true }
 }
 
 private final class MutablePermissions: PermissionChecking, @unchecked Sendable {
@@ -2552,44 +2709,31 @@ private final class MutablePermissions: PermissionChecking, @unchecked Sendable 
 
     func microphoneAuthorized() -> Bool { lock.withLock { granted } }
     func requestMicrophone() -> Bool { lock.withLock { granted } }
-    func speechAuthorized() -> Bool { lock.withLock { granted } }
-    func requestSpeech() -> Bool { lock.withLock { granted } }
     func accessibilityAuthorized(prompt: Bool) -> Bool { lock.withLock { granted } }
-    func inputMonitoringAuthorized(prompt: Bool) -> Bool { lock.withLock { granted } }
 }
 
 private final class IndependentPermissions: PermissionChecking, @unchecked Sendable {
     private let lock = NSLock()
     private var microphone: Bool
-    private var speech: Bool
     private var accessibility: Bool
-    private var inputMonitoring: Bool
 
     init(
         microphone: Bool,
-        speech: Bool,
-        accessibility: Bool,
-        inputMonitoring: Bool
+        accessibility: Bool
     ) {
         self.microphone = microphone
-        self.speech = speech
         self.accessibility = accessibility
-        self.inputMonitoring = inputMonitoring
     }
 
-    func set(accessibility: Bool, inputMonitoring: Bool) {
+    func setAccessibility(_ accessibility: Bool) {
         lock.withLock {
             self.accessibility = accessibility
-            self.inputMonitoring = inputMonitoring
         }
     }
 
     func microphoneAuthorized() -> Bool { lock.withLock { microphone } }
     func requestMicrophone() -> Bool { lock.withLock { microphone } }
-    func speechAuthorized() -> Bool { lock.withLock { speech } }
-    func requestSpeech() -> Bool { lock.withLock { speech } }
     func accessibilityAuthorized(prompt: Bool) -> Bool { lock.withLock { accessibility } }
-    func inputMonitoringAuthorized(prompt: Bool) -> Bool { lock.withLock { inputMonitoring } }
 }
 
 private struct SilentMicrophoneTester: MicrophoneLevelTesting {

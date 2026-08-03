@@ -1,310 +1,256 @@
-import type { CSSProperties } from "react";
 import Image from "next/image";
+import { HeroHud } from "./components/HeroHud";
+import { SiteFooter, SiteHeader } from "./components/SiteChrome";
+import { Disclosure } from "./components/interior/Disclosure";
+import { InteriorLink } from "./components/interior/InteriorLink";
 
 const githubUrl = "https://github.com/Ryan-yang125/lerro";
-const releasesUrl = "https://github.com/Ryan-yang125/lerro/releases";
+const downloadUrl = "https://updates.lerroapp.com/download/macos/latest";
 
-const modes = [
+const paths = [
   {
-    key: "D",
+    index: "01",
     title: "Dictate",
-    copy: "Speak naturally. Lerro cleans up the sentence and places it at your cursor.",
+    copy: "Apple Speech transcribes your voice and Lerro places the result at the active cursor.",
+    flow: ["Voice", "Apple Speech", "Cursor"],
   },
   {
-    key: "T",
+    index: "02",
     title: "Translate",
-    copy: "Say it once, then write it in the language your conversation needs.",
+    copy: "Speak in one language and write in another with Apple Translation on your Mac.",
+    flow: ["Voice", "Apple Speech", "Translation", "Cursor"],
   },
   {
-    key: "A",
-    title: "Ask",
-    copy: "Select text, ask a question, and turn the answer into your next edit.",
+    index: "03",
+    title: "Refine",
+    copy: "Polish, rewrite, or ask with an optional local MLX model or your own cloud API key.",
+    flow: ["Transcript", "MLX or BYOK", "Cursor"],
   },
-];
-
-const intelligenceModes = [
-  {
-    label: "Raw",
-    title: "Apple Speech",
-    copy: "Direct transcription with the shortest path from voice to cursor.",
-  },
-  {
-    label: "BYOK",
-    title: "Your API key",
-    copy: "Use DeepSeek or another OpenAI-compatible provider for fast refinement.",
-  },
-  {
-    label: "Local",
-    title: "Qwen on your Mac",
-    copy: "Keep model processing offline when local control matters most.",
-  },
-];
-
-const permissions = [
-  ["Microphone", "Captures only the voice you choose to dictate."],
-  ["Speech Recognition", "Turns audio into the raw words Lerro works with."],
-  ["Accessibility", "Returns the finished text to the active app."],
-  ["Input Monitoring", "Lets your chosen shortcut work across macOS."],
-];
+] as const;
 
 const faqs = [
   {
-    question: "Is Lerro free?",
+    question: "Which permissions does Lerro request?",
     answer:
-      "Yes. Lerro is an open-source macOS app. You can use raw dictation for free, bring your own model API key, or download the optional local model.",
+      "Microphone captures the speech you choose to dictate. Accessibility lets the global shortcut work and places finished text at the current cursor. Lerro does not request Input Monitoring or a separate Speech Recognition permission.",
   },
   {
-    question: "Where does my voice data go?",
+    question: "Does Lerro work offline?",
     answer:
-      "Raw transcription uses Apple Speech. Local mode keeps model processing on your Mac. BYOK mode sends the transcript and the context options you enable to your selected provider.",
+      "Core Dictate, Apple Translation, and optional local MLX processing work offline after their language resources or model are installed. Initial resource setup, update checks, and BYOK cloud requests use a network connection.",
   },
   {
-    question: "Why does Lerro need Accessibility and Input Monitoring?",
+    question: "Why might macOS download a language resource?",
     answer:
-      "Accessibility lets Lerro paste finished text at the active cursor. Input Monitoring lets a single key or shortcut start dictation from any app. The onboarding flow explains each permission before you grant it.",
+      "Apple Speech and Apple Translation manage language resources at the system level. A compatible resource may already be present, so setup can finish immediately; macOS downloads it when the selected language still needs one.",
+  },
+  {
+    question: "Where does my data go?",
+    answer:
+      "Lerro has no account system, subscription, product analytics, or telemetry. Audio saving is off by default. BYOK sends the transcript and only the context fields you enable to your chosen provider. Lerro's update service receives release requests only.",
   },
   {
     question: "Which Macs are supported?",
     answer:
-      "The current preview requires macOS 26 or later on Apple silicon. Local AI also needs roughly 3.03 GB for the optional model download.",
+      "Lerro requires Apple silicon and macOS 26 or later. The optional local model uses about 3.03 GB of storage and is downloaded only after you approve it.",
   },
   {
-    question: "Why might macOS block the preview the first time?",
+    question: "How are downloads verified?",
     answer:
-      "The current public build is a preview. If macOS blocks the first launch, open System Settings, choose Privacy & Security, and use Open Anyway after confirming the download came from the Lerro GitHub repository.",
+      "Every public build is signed with Apple Developer ID, notarized by Apple, and distributed through Lerro's Cloudflare release service. In-app updates verify their signed update metadata before installation.",
   },
-];
+] as const;
 
-function Arrow() {
-  return <span aria-hidden="true">↗</span>;
+function Arrow({ direction = "right" }: { direction?: "right" | "up" }) {
+  return <span aria-hidden="true">{direction === "right" ? "→" : "↗"}</span>;
 }
 
 export default function Home() {
   return (
     <main>
-      <header className="site-header">
-        <a className="brand" href="#top" aria-label="Lerro home">
-          <Image src="/lerro-logo.svg" alt="Lerro" width={150} height={40} priority />
-        </a>
-        <nav aria-label="Primary navigation">
-          <a href="#features">Features</a>
-          <a href="#privacy">Privacy</a>
-          <a href="#faq">FAQ</a>
-        </nav>
-        <a className="header-cta" href={releasesUrl}>
-          <span className="cta-label-full">Download preview</span>
-          <span className="cta-label-compact">Download</span>
-        </a>
-      </header>
+      <SiteHeader current="home" />
 
       <section className="hero" id="top">
         <div className="hero-copy">
-          <div className="preview-label">
-            <span className="status-dot" aria-hidden="true" />
-            Public preview for macOS
-          </div>
-          <h1>Speak freely.<br />Write clearly.</h1>
+          <p className="eyebrow"><span className="eyebrow-dot" aria-hidden="true" />Native voice typing for macOS 26</p>
+          <h1>Speak.<br />Your Mac writes.</h1>
           <p className="hero-lede">
-            Lerro turns your voice into clean, editable text in any Mac app—
-            right where your cursor is waiting.
+            Lerro turns speech into text at your cursor with Apple&apos;s native Speech framework. Fast, accurate, local-first, and open source.
           </p>
           <div className="hero-actions">
-            <a className="button button-primary" href={releasesUrl}>
+            <InteriorLink variant="primary" href={downloadUrl}>
               Download for macOS <Arrow />
-            </a>
-            <a className="button button-secondary" href={githubUrl}>
-              View source <Arrow />
-            </a>
+            </InteriorLink>
+            <InteriorLink variant="secondary" href={githubUrl}>
+              View source <Arrow direction="up" />
+            </InteriorLink>
           </div>
-          <p className="requirements-inline">
-            Free · Open source · macOS 26+ · Apple silicon
-          </p>
+          <p className="requirements-inline">Free forever · Apple silicon · macOS 26+</p>
         </div>
 
-        <div className="product-demo" aria-label="Lerro dictation workflow demonstration">
-          <div className="window-bar" aria-hidden="true">
-            <span className="traffic-light red" />
-            <span className="traffic-light yellow" />
-            <span className="traffic-light green" />
-            <span className="window-title">Notes</span>
+        <div className="product-demo" aria-label="Animated recreation of Lerro's macOS listening and processing HUD">
+          <div className="demo-toolbar" aria-hidden="true">
+            <span className="traffic-light traffic-light--red" />
+            <span className="traffic-light traffic-light--yellow" />
+            <span className="traffic-light traffic-light--green" />
+            <span className="demo-title">Untitled</span>
           </div>
-          <div className="editor-surface">
-            <div className="editor-kicker">Launch notes</div>
-            <p className="editor-copy">
-              Lerro turns a rough thought into clear text—right where the cursor is.
-              <span className="text-caret" aria-hidden="true" />
-            </p>
-            <div className="demo-hud" aria-hidden="true">
-              <span className="hud-key">Fn</span>
-              <span className="hud-divider" />
-              <span className="hud-content hud-waveform">
-                {[8, 15, 24, 13, 29, 18, 9, 22, 12].map((height, index) => (
-                  <span
-                    className="wave-bar"
-                    key={index}
-                    style={{ "--bar-height": `${height}px`, "--bar-delay": `${index * -0.07}s` } as CSSProperties}
-                  />
-                ))}
-              </span>
-              <span className="hud-content hud-processing">
-                <span />
-                <span />
-                <span />
-              </span>
-            </div>
-            <div className="demo-status" aria-hidden="true">
-              <span>Press</span><b>Fn</b><i />
-              <span>Speak</span><i />
-              <span>Done</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="trust-strip" aria-label="Product principles">
-        <span>Local-first</span>
-        <span>Bring your own key</span>
-        <span>No account</span>
-        <span>Open source</span>
-      </section>
-
-      <section className="section" id="features">
-        <div className="section-heading">
-          <p className="eyebrow">One shortcut, three modes</p>
-          <h2>Your voice can write, translate, or think with you.</h2>
-        </div>
-        <div className="feature-grid">
-          {modes.map((mode) => (
-            <article className="feature-card" key={mode.title}>
-              <span className="feature-key" aria-hidden="true">{mode.key}</span>
-              <h3>{mode.title}</h3>
-              <p>{mode.copy}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="section intelligence-section" id="intelligence">
-        <div className="section-heading narrow">
-          <p className="eyebrow">Choose the right intelligence</p>
-          <h2>Fast by default. Smarter when you want it.</h2>
-          <p>
-            Keep a direct Apple Speech path, bring a fast cloud model, or run the optional model locally.
-          </p>
-        </div>
-        <div className="mode-panel">
-          {intelligenceModes.map((mode, index) => (
-            <article className={`mode-row ${index === 1 ? "featured" : ""}`} key={mode.label}>
-              <div className="mode-label">{mode.label}</div>
-              <div>
-                <h3>{mode.title}</h3>
-                <p>{mode.copy}</p>
+          <div className="demo-editor" aria-hidden="true">
+            <div className="demo-page">
+              <p className="demo-date">AUGUST 4</p>
+              <p className="demo-copy">Voice becomes text right where the cursor is.<span className="text-caret" /></p>
+              <div className="demo-tags">
+                <span>Apple Speech</span>
+                <span>On-device</span>
               </div>
-              {index === 1 && <span className="recommended">Recommended</span>}
+            </div>
+            <HeroHud />
+          </div>
+          <p className="sr-only">The HUD listens with a live ten-bar waveform, then displays Lerro&apos;s three-dot processing state.</p>
+        </div>
+      </section>
+
+      <section className="principle-strip" aria-label="Lerro product principles">
+        <span>Apple Speech</span>
+        <span>No account</span>
+        <span>No telemetry</span>
+        <span>Offline after setup</span>
+      </section>
+
+      <section className="section workflow-section" id="workflow">
+        <div className="section-intro">
+          <p className="eyebrow">One shortcut, three paths</p>
+          <h2>Fast. Accurate.<br />Straight to the cursor.</h2>
+          <p>Lerro keeps the native path short, then adds translation or intelligence only when you choose it.</p>
+        </div>
+        <div className="path-list">
+          {paths.map((path) => (
+            <article className="path-row" key={path.title}>
+              <span className="path-index">{path.index}</span>
+              <div className="path-copy">
+                <h3>{path.title}</h3>
+                <p>{path.copy}</p>
+                <div className="path-flow" aria-label={`${path.title} flow: ${path.flow.join(" to ")}`}>
+                  {path.flow.map((step, index) => (
+                    <span key={step}>
+                      <b>{step}</b>
+                      {index < path.flow.length - 1 && <i aria-hidden="true">→</i>}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="section product-section" id="product">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Made for macOS</p>
+            <h2>Feels native from the first shortcut.</h2>
+          </div>
+          <p>Configure the keys you already use, see the same responsive HUD across apps, and keep every setting close at hand.</p>
+        </div>
+        <figure className="screenshot screenshot--hero">
+          <Image
+            src="/screenshots/lerro-home-light.png"
+            alt="Lerro 1.1 home screen showing local activity, shortcuts, and private on-device data"
+            width={1976}
+            height={1420}
+            sizes="(max-width: 720px) 100vw, 1180px"
+          />
+        </figure>
+        <div className="screenshot-grid">
+          <figure className="screenshot">
+            <Image
+              src="/screenshots/lerro-onboarding-shortcuts-light.png"
+              alt="Lerro onboarding detecting the Fn shortcut and letting the user choose hold or toggle mode"
+              width={1976}
+              height={1420}
+              sizes="(max-width: 900px) 100vw, 50vw"
+            />
+            <figcaption>Shortcut setup tests your exact press and release events before you continue.</figcaption>
+          </figure>
+          <figure className="screenshot">
+            <Image
+              src="/screenshots/lerro-settings-light.png"
+              alt="Lerro shortcut settings for Dictate, Translate, and Ask"
+              width={1976}
+              height={1420}
+              sizes="(max-width: 900px) 100vw, 50vw"
+            />
+            <figcaption>Dictate, Translate, and Ask each support up to four custom shortcuts.</figcaption>
+          </figure>
         </div>
       </section>
 
       <section className="section privacy-section" id="privacy">
-        <div className="privacy-intro">
-          <p className="eyebrow">Permission with purpose</p>
-          <h2>Every permission has one clear job.</h2>
-          <p>
-            Lerro explains each macOS permission before asking. Audio saving stays off by default, and model context remains under your control.
-          </p>
-          <a className="text-link" href={`${githubUrl}/blob/main/PRIVACY.md`}>
-            Read the privacy model <Arrow />
-          </a>
-        </div>
-        <div className="permission-list">
-          {permissions.map(([name, description], index) => (
-            <div className="permission-row" key={name}>
-              <span className="permission-number">0{index + 1}</span>
-              <div>
-                <h3>{name}</h3>
-                <p>{description}</p>
-              </div>
-            </div>
-          ))}
+        <div className="privacy-panel">
+          <div className="privacy-copy">
+            <p className="eyebrow eyebrow--dark">Private by architecture</p>
+            <h2>Your voice stays close.</h2>
+            <p>
+              Apple Speech handles the core transcript. Apple Translation and the optional MLX model run on your Mac after setup. Audio saving stays off by default.
+            </p>
+            <InteriorLink className="privacy-link" variant="quiet" href={`${githubUrl}/blob/main/PRIVACY.md`}>
+              Read the privacy model <Arrow direction="up" />
+            </InteriorLink>
+          </div>
+          <dl className="privacy-stats">
+            <div><dt>0</dt><dd>accounts</dd></div>
+            <div><dt>0</dt><dd>subscriptions</dd></div>
+            <div><dt>0</dt><dd>telemetry events</dd></div>
+          </dl>
+          <div className="network-note" role="note">
+            <strong>Clear network boundaries</strong>
+            <p>Language and model setup, signed update checks, and optional BYOK providers use the network. Lerro&apos;s update service never receives audio, transcripts, or app context.</p>
+          </div>
         </div>
       </section>
 
-      <section className="section steps-section" id="how-it-works">
-        <div className="section-heading">
-          <p className="eyebrow">Three steps</p>
-          <h2>Ready whenever the cursor is.</h2>
+      <section className="section source-section">
+        <div className="source-copy">
+          <p className="eyebrow">Open by default</p>
+          <h2>Inspect every product decision.</h2>
+          <p>Lerro is Apache-2.0 licensed. The app, privacy policy, architecture, tests, release scripts, and website are all public.</p>
         </div>
-        <ol className="steps-list">
-          <li>
-            <span>1</span>
-            <div><h3>Choose a shortcut</h3><p>Use Fn, another modifier, or a combination that feels natural.</p></div>
-          </li>
-          <li>
-            <span>2</span>
-            <div><h3>Speak naturally</h3><p>The HUD responds immediately, follows your voice, and shows processing at a glance.</p></div>
-          </li>
-          <li>
-            <span>3</span>
-            <div><h3>Keep writing</h3><p>Your finished text lands at the active cursor, ready to edit or send.</p></div>
-          </li>
-        </ol>
-      </section>
-
-      <section className="section download-section" id="download">
-        <div className="download-card">
-          <div>
-            <div className="preview-label on-dark">
-              <span className="status-dot" aria-hidden="true" />
-              Preview release
-            </div>
-            <h2>Give your keyboard a voice.</h2>
-            <p>Built for macOS 26 or later on Apple silicon.</p>
-          </div>
-          <div className="download-actions">
-            <a className="button button-light" href={releasesUrl}>
-              Open releases <Arrow />
-            </a>
-            <a className="source-link" href={githubUrl}>GitHub repository <Arrow /></a>
-          </div>
-        </div>
-        <div className="gatekeeper-note" role="note">
-          <strong>First-launch note</strong>
-          <p>
-            This is a preview build. If macOS blocks it, confirm the download came from the Lerro GitHub repository, then open System Settings → Privacy &amp; Security → Open Anyway.
-          </p>
-        </div>
+        <InteriorLink className="source-card" variant="card" href={githubUrl}>
+          <span className="source-card__mark" aria-hidden="true">&lt;/&gt;</span>
+          <span><b>Ryan-yang125/lerro</b><small>Swift · SwiftUI · Apple Speech · MLX</small></span>
+          <Arrow direction="up" />
+        </InteriorLink>
       </section>
 
       <section className="section faq-section" id="faq">
-        <div className="section-heading narrow">
+        <div className="faq-heading">
           <p className="eyebrow">Questions, answered</p>
           <h2>Before your first dictation.</h2>
         </div>
         <div className="faq-list">
-          {faqs.map((faq) => (
-            <details key={faq.question}>
-              <summary>{faq.question}<span aria-hidden="true">+</span></summary>
+          {faqs.map((faq, index) => (
+            <Disclosure key={faq.question} summary={faq.question} defaultOpen={index === 0}>
               <p>{faq.answer}</p>
-            </details>
+            </Disclosure>
           ))}
         </div>
       </section>
 
-      <footer>
-        <a className="footer-brand" href="#top">
-          <Image src="/lerro-symbol.svg" alt="" width={40} height={32} />
-          <span>Lerro</span>
-        </a>
-        <p>Speak freely. Write clearly.</p>
-        <div className="footer-links">
-          <a href={githubUrl}>GitHub</a>
-          <a href={releasesUrl}>Releases</a>
-          <a href={`${githubUrl}/blob/main/PRIVACY.md`}>Privacy</a>
-          <a href={`${githubUrl}/blob/main/SECURITY.md`}>Security</a>
-          <a href={`${githubUrl}/blob/main/LICENSE`}>License</a>
+      <section className="section download-section" id="download">
+        <div className="download-panel">
+          <div>
+            <p className="eyebrow">Lerro 1.1</p>
+            <h2>Give your keyboard a voice.</h2>
+            <p>Signed, notarized, and ready for Apple silicon Macs running macOS 26 or later.</p>
+          </div>
+          <div className="download-actions">
+            <InteriorLink variant="primary" href={downloadUrl}>Download for macOS <Arrow /></InteriorLink>
+            <a href="/changelog">Read the changelog <Arrow /></a>
+          </div>
         </div>
-      </footer>
+      </section>
+
+      <SiteFooter />
     </main>
   );
 }

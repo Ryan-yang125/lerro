@@ -1,5 +1,6 @@
 import AVFoundation
 import AudioToolbox
+import CoreMedia
 import Foundation
 import OSLog
 import Speech
@@ -19,12 +20,12 @@ public actor AppleSpeechService: SpeechTranscribing {
     private var analysisTask: Task<Void, Never>?
     private var resultTask: Task<Void, Never>?
     private var tapInstalled = false
-    private var finalSegments: [String] = []
-    private var volatileText = ""
+    private var transcriptLedger = TranscriptLedger()
     private var localeIdentifier = "zh_CN"
     private var startedAt: ContinuousClock.Instant?
     private var outputMuteSnapshot: CoreAudioHardware.OutputMuteSnapshot?
     private var audioFileWriter: AudioFileWriter?
+    private var audioConverter: AudioBufferConverter?
     private var audioRelativePath: String?
     private var sessionGeneration: UUID?
     private let applicationPaths: ApplicationPaths
@@ -60,7 +61,19 @@ public actor AppleSpeechService: SpeechTranscribing {
         try requireCurrent(generation)
 
         let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
-        try await ensureAssets(for: transcriber, locale: locale)
+        switch await AssetInventory.status(forModules: [transcriber]) {
+        case .installed:
+            _ = try? await AssetInventory.reserve(locale: locale)
+        case .supported, .downloading:
+            sessionGeneration = nil
+            throw LerroError.speechUnavailable("请先在引导或设置中准备语音资源")
+        case .unsupported:
+            sessionGeneration = nil
+            throw LerroError.speechUnavailable("语言资源不受支持")
+        @unknown default:
+            sessionGeneration = nil
+            throw LerroError.speechUnavailable("语言资源状态未知")
+        }
         try requireCurrent(generation)
 
         let engine = AVAudioEngine()
@@ -87,8 +100,12 @@ public actor AppleSpeechService: SpeechTranscribing {
         try await analyzer.prepareToAnalyze(in: analysisFormat)
         try requireCurrent(generation)
 
-        let inputPair = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingNewest(96))
-        let eventPair = AsyncThrowingStream<SpeechEvent, any Error>.makeStream(bufferingPolicy: .bufferingNewest(64))
+        // Audio never drops silently. A bounded queue gives a clear failure if
+        // the analyzer cannot keep pace instead of producing a partial transcript.
+        let inputPair = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingOldest(192))
+        // UI levels are naturally coalesced by the MainActor. Keep the event
+        // stream lossless so partial/final transcript events always arrive.
+        let eventPair = AsyncThrowingStream<SpeechEvent, any Error>.makeStream()
         let converter: AudioBufferConverter?
         if formatsMatch(naturalFormat, analysisFormat) {
             converter = nil
@@ -122,9 +139,24 @@ public actor AppleSpeechService: SpeechTranscribing {
                 }
                 converted = output
             } else {
-                converted = buffer
+                // AVAudioEngine owns the tap buffer only for this callback.
+                // SpeechAnalyzer consumes it asynchronously, so pass a copy.
+                guard let copied = copyPCMBuffer(buffer) else {
+                    inputPair.continuation.finish()
+                    eventPair.continuation.finish(
+                        throwing: LerroError.speechUnavailable("无法复制麦克风音频")
+                    )
+                    return
+                }
+                converted = copied
             }
-            inputPair.continuation.yield(AnalyzerInput(buffer: converted))
+            if case .dropped = inputPair.continuation.yield(AnalyzerInput(buffer: converted)) {
+                inputPair.continuation.finish()
+                eventPair.continuation.finish(
+                    throwing: LerroError.speechUnavailable("语音处理速度不足，请缩短本次录音后重试")
+                )
+                return
+            }
             eventPair.continuation.yield(.audioLevel(normalizedAudioLevel(buffer)))
         }
 
@@ -148,10 +180,10 @@ public actor AppleSpeechService: SpeechTranscribing {
         self.eventContinuation = eventPair.continuation
         self.tapInstalled = true
         self.audioFileWriter = recording?.writer
+        self.audioConverter = converter
         self.audioRelativePath = recording?.relativePath
         self.sessionGeneration = generation
-        self.finalSegments = []
-        self.volatileText = ""
+        self.transcriptLedger = TranscriptLedger()
         self.localeIdentifier = locale.identifier
         self.startedAt = .now
 
@@ -202,6 +234,16 @@ public actor AppleSpeechService: SpeechTranscribing {
             completedAudioRelativePath = nil
         }
         audioFileWriter = nil
+        if let audioConverter {
+            guard let tailBuffers = audioConverter.drainTail() else {
+                throw LerroError.speechUnavailable("无法完成音频尾部格式转换")
+            }
+            for tail in tailBuffers {
+                if case .some(.dropped) = inputContinuation?.yield(AnalyzerInput(buffer: tail)) {
+                    throw LerroError.speechUnavailable("语音处理速度不足，请缩短本次录音后重试")
+                }
+            }
+        }
         inputContinuation?.finish()
         let pendingResults = resultTask
         do {
@@ -275,21 +317,84 @@ public actor AppleSpeechService: SpeechTranscribing {
         }
     }
 
+    public func resourceStatus(localeIdentifier: String) async -> LanguageResourceStatus {
+        guard SpeechTranscriber.isAvailable else {
+            return LanguageResourceStatus(
+                state: .unsupported,
+                sourceLanguageIdentifier: localeIdentifier,
+                message: "SpeechTranscriber 在当前系统上不可用"
+            )
+        }
+        let requestedLocale = Locale(identifier: localeIdentifier)
+        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
+            return LanguageResourceStatus(
+                state: .unsupported,
+                sourceLanguageIdentifier: localeIdentifier,
+                message: "此听写语言暂不支持"
+            )
+        }
+        let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+        switch await AssetInventory.status(forModules: [transcriber]) {
+        case .installed:
+            return LanguageResourceStatus(
+                state: .ready,
+                sourceLanguageIdentifier: locale.identifier,
+                message: "语音资源已准备"
+            )
+        case .supported:
+            return LanguageResourceStatus(
+                state: .available,
+                sourceLanguageIdentifier: locale.identifier,
+                message: "需要准备语音资源"
+            )
+        case .downloading:
+            return LanguageResourceStatus(
+                state: .downloading,
+                sourceLanguageIdentifier: locale.identifier,
+                message: "语音资源下载中"
+            )
+        case .unsupported:
+            return LanguageResourceStatus(
+                state: .unsupported,
+                sourceLanguageIdentifier: locale.identifier,
+                message: "语音资源不受支持"
+            )
+        @unknown default:
+            return LanguageResourceStatus(
+                state: .failed,
+                sourceLanguageIdentifier: locale.identifier,
+                message: "语音资源状态未知"
+            )
+        }
+    }
+
+    public func prepareResources(localeIdentifier: String) async throws -> LanguageResourceStatus {
+        guard SpeechTranscriber.isAvailable else {
+            throw LerroError.speechUnavailable("SpeechTranscriber 在当前系统上不可用")
+        }
+        let requestedLocale = Locale(identifier: localeIdentifier)
+        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
+            throw LerroError.speechUnavailable("不支持语言 \(localeIdentifier)")
+        }
+        let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+        try await ensureAssets(for: transcriber, locale: locale)
+        return await resourceStatus(localeIdentifier: locale.identifier)
+    }
+
     private func receive(result: SpeechTranscriber.Result, generation: UUID) {
         guard sessionGeneration == generation else { return }
         let text = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        if result.isFinal {
-            finalSegments.append(text)
-            volatileText = ""
-        } else {
-            volatileText = text
-        }
+        transcriptLedger.apply(
+            text: text,
+            start: result.range.start.isNumeric ? result.range.start.seconds : 0,
+            duration: result.range.duration.isNumeric ? max(0, result.range.duration.seconds) : 0,
+            isFinal: result.isFinal
+        )
         eventContinuation?.yield(.partial(composedText()))
     }
 
     private func composedText() -> String {
-        (finalSegments + (volatileText.isEmpty ? [] : [volatileText])).joined(separator: " ")
+        transcriptLedger.composedText
     }
 
     private func finishWithError(_ error: any Error, generation: UUID) {
@@ -350,6 +455,7 @@ public actor AppleSpeechService: SpeechTranscribing {
         deleteRecording(relativePath: audioRelativePath)
         self.audioRelativePath = nil
         audioFileWriter = nil
+        audioConverter = nil
     }
 
     private func deleteRecording(relativePath: String) {
@@ -384,11 +490,54 @@ public actor AppleSpeechService: SpeechTranscribing {
         eventContinuation = nil
         tapInstalled = false
         audioFileWriter = nil
+        audioConverter = nil
         audioRelativePath = nil
         startedAt = nil
-        finalSegments = []
-        volatileText = ""
+        transcriptLedger = TranscriptLedger()
         sessionGeneration = nil
+    }
+}
+
+private func copyPCMBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+    guard let copy = AVAudioPCMBuffer(
+        pcmFormat: buffer.format,
+        frameCapacity: buffer.frameLength
+    ) else { return nil }
+    copy.frameLength = buffer.frameLength
+    let sourceBuffers = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
+    let destinationBuffers = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
+    guard sourceBuffers.count == destinationBuffers.count else { return nil }
+    for index in sourceBuffers.indices {
+        guard let source = sourceBuffers[index].mData,
+              let destination = destinationBuffers[index].mData else { return nil }
+        memcpy(destination, source, Int(sourceBuffers[index].mDataByteSize))
+    }
+    return copy
+}
+
+func transcriptSeparator(after preceding: String, before following: String) -> String {
+    guard let last = preceding.last, let first = following.first else { return "" }
+    guard !last.isWhitespace, !first.isWhitespace else { return "" }
+    if joinsPreviousToken(first) || joinsFollowingToken(last) { return "" }
+    return requiresWordSeparator(last) || requiresWordSeparator(first) ? " " : ""
+}
+
+private func joinsPreviousToken(_ character: Character) -> Bool {
+    ",.;:!?%)]}，。！？；：、）】》」』".contains(character)
+}
+
+private func joinsFollowingToken(_ character: Character) -> Bool {
+    "([{（【《「『".contains(character)
+}
+
+private func requiresWordSeparator(_ character: Character) -> Bool {
+    character.unicodeScalars.allSatisfy { scalar in
+        switch scalar.value {
+        case 0x2E80...0x9FFF, 0xAC00...0xD7AF, 0xF900...0xFAFF, 0xFF00...0xFFEF:
+            false
+        default:
+            true
+        }
     }
 }
 

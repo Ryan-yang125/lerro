@@ -22,6 +22,7 @@ same evidence after dependency resolution.
 | `eventsource` | MIT | Resolved `LICENSE.md` |
 | `mlx-swift` | MIT | Resolved `LICENSE` |
 | `mlx-swift-lm` | MIT | Resolved `LICENSE` |
+| `sparkle` | MIT | Resolved binary artifact `LICENSE` |
 | `swift-argument-parser` | Apache-2.0 | Resolved `LICENSE.txt` |
 | `swift-asn1` | Apache-2.0 | Resolved `LICENSE.txt` and `NOTICE.txt` |
 | `swift-atomics` | Apache-2.0 | Resolved `LICENSE.txt` |
@@ -58,6 +59,14 @@ size, license, and any additional use restrictions before release.
 Lerro calls Apple frameworks and uses system-provided typography and symbols.
 Those SDK and system resources remain subject to Apple's applicable terms and
 are outside the project's Apache-2.0 and CC BY 4.0 grants.
+
+## Website interaction components
+
+The press, ripple, and disclosure interactions under
+`site/app/components/interior/` are adapted from
+[ddoemonn/interior](https://github.com/ddoemonn/interior) at commit
+`3fd448863aac098c474a072bbc1630712504dd0d`. Interior is Copyright (c) 2026 ozzy
+and licensed under MIT. The complete license text is preserved in [`NOTICE`](NOTICE).
 
 ## Project documentation and brand assets
 

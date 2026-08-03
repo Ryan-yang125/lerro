@@ -10,9 +10,7 @@ code signature.
 | Permission | Product use | Requested by | Behavior when unavailable |
 | --- | --- | --- | --- |
 | Microphone | Capture speech after a user starts Dictate, Translate, Ask, Rewrite, or Hands-free | AVFoundation | Capture remains unavailable and the app presents the relevant System Settings route |
-| Speech Recognition | Convert captured audio with Apple Speech | Speech framework | Transcription stops with a recoverable permission or resource error |
 | Accessibility | Read limited focused-element context, deliver text, and run the active shortcut filter | ApplicationServices / CGEventTap | Context, direct delivery, and shortcut swallowing fail closed; the answer can remain available for explicit user action |
-| Input Monitoring | Observe global modifier and key gestures such as physical Fn | CGEventTap | Global shortcuts remain unavailable; in-app recorder and controls continue to work |
 
 Usage descriptions live in [`config/Info.plist`](../config/Info.plist).
 Entitlements live in [`config/Lerro.entitlements`](../config/Lerro.entitlements).
@@ -46,15 +44,15 @@ Use the final Release app and synthetic text. For every permission:
    state, cancels an active capture, and stops the global event tap.
 4. Grant access again, relaunch from the stable app path, and verify recovery.
 
-The Input Monitoring matrix includes physical Fn/Control/Option/Shift/Command
+The Accessibility matrix includes physical Fn/Control/Option/Shift/Command
 press and release, configured chords, hold and toggle modes, swallowed matched
 keys, Escape cancellation, event-tap timeout recovery, and duplicate event
 suppression. Accessibility validation includes TextEdit plus representative
 third-party editors, focus switching, non-empty selections, secure fields, and
 clipboard restoration with multiple item types.
 
-The global event tap starts only while both Accessibility and Input Monitoring
-are available. A foreground permission refresh cancels an active capture before
+The global event tap starts when Accessibility is available. A foreground
+permission refresh cancels an active capture before
 stopping the tap, so a hidden hold release cannot leave the microphone running.
 
 TCC resets are optional diagnostic operations. Run them only with explicit user

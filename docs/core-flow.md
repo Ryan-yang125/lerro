@@ -35,7 +35,7 @@ modifier 集合和触发方式。捕获动作支持两种明确语义：
 迁移去重。左右 Command/Control/Option/Shift 在当前产品语义中等价。
 
 [`GlobalHotkeyMonitor`](../Sources/LerroMac/Hotkeys/GlobalHotkeyMonitor.swift) 使用 active
-session event tap 监听 `flagsChanged`、`keyDown` 与 `keyUp`。Fn、Control、Option、
+HID event tap 监听 `flagsChanged`、`keyDown` 与 `keyUp`。Fn、Control、Option、
 Shift、Command 等单修饰键通过 `flagsChanged` 进入候选；120 ms 意图确认窗口保护
 常用系统 chord。候选或已激活的 Fn 前缀遇到已配置的 Fn+Shift/Fn+Space 时，状态机
 依次取消前缀 capture、转交物理所有权并启动更具体 action。命中的普通键 down、repeat
@@ -95,7 +95,7 @@ preferences 后页面才继续，并允许无关设置在同一保存队列中�
   -> intelligenceMode 与对应配置授权检查
   -> 创建 capture generation
   -> HUD 同步展开（hold: waiting；toggle: hands-free 最终外壳）
-  -> 请求麦克风、Speech、Accessibility、Input Monitoring
+  -> 请求麦克风、Accessibility
   -> 捕获目标 app、PID/bundle、选区、焦点文本、role、安全状态
   -> 安全输入框 fail closed
   -> AppleSpeechService.start
@@ -111,10 +111,10 @@ preferences 后页面才继续，并允许无关设置在同一保存队列中�
 - `AppSession.ensureCapturePermissions()`
 - `CapturePrivacyPolicy.permitsCapture(in:)`
 
-系统要求四项权限全部可用。Accessibility 与 Input Monitoring 可用后幂等安装 global
-event tap；任一项缺失时停止监听。活动 capture 期间撤销其中任一权限会先取消 capture，
-随后停止 event tap，避免丢失 hold release 后继续收音。相同 definitions 的刷新保留当前
-按键手势。最长录音时间为九分钟，计时器到点后自动完成。
+capture 需要麦克风与 Accessibility 全部可用。Accessibility 可用后幂等安装 global
+event tap；麦克风缺失会阻止 capture，同时保留快捷键监听以便后续重试。活动 capture
+期间撤销任一权限会先取消 capture；Accessibility 撤销后停止 event tap。相同 definitions
+的刷新保留当前按键手势。最长录音时间为九分钟，计时器到点后自动完成。
 
 ## 原始听写
 
@@ -158,8 +158,8 @@ SpeechTranscription
 用户可分别控制应用、窗口标题、光标附近文字、选中文字、词典和语气六类上下文。
 
 Dictate 的模型调用异常或空结果会回退到 Apple Speech 原始 transcript，并把历史标记为
-未增强。任务取消继续作为取消传播。Translate、Ask 与 Rewrite 保留明确失败，避免把原文
-当作对应任务的有效结果。
+未增强。任务取消继续作为取消传播。Ask 与 Rewrite 保留明确失败，避免把原文当作对应任务
+的有效结果。
 
 远程 Dictate 使用版本化的七个 few-shot 提示词和结构化 JSON payload。payload 包含原始
 transcript、规范化规则、用户允许的工作区上下文、应用语气与最多 12 个命中词典条目。
@@ -171,16 +171,18 @@ transcript、规范化规则、用户允许的工作区上下文、应用语气�
 
 ```text
 SpeechTranscription
-  -> task .translate + targetLanguage
-  -> selected intelligence authorization
-  -> local PromptComposer 或 remote CloudPromptComposer
-  -> selected runtime generate
+  -> freeze transcription locale + targetLanguage
+  -> AppleTranslationService
+  -> installed Apple Translation resource
   -> disposition .insert
   -> text delivery
   -> translation HistoryEntry
 ```
 
-翻译失败会显示错误并停止交付，禁止使用原 transcript 冒充翻译结果。
+Apple Translation 资源通过 SwiftUI `translationTask` 与
+`prepareTranslation()` 在引导或设置中准备。快捷键运行时只使用
+`TranslationSession(installedSource:target:)`，缺少资源时显示错误并停止交付。
+翻译全程不调用 MLX、BYOK 或网络 provider，也不使用原 transcript 充当翻译结果。
 
 ## Ask
 

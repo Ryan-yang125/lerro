@@ -6,6 +6,76 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-04
+
+### Added
+
+- Traditional Apple Translation for device-side Translate sessions on macOS
+  26, with explicit Speech and Translation resource preparation states.
+- A visible blue download affordance when Sparkle discovers an update.
+- A concise website changelog with immutable downloads for every published
+  version.
+- A product-focused website and README with current v1.1 screenshots, an
+  animated web recreation of the native HUD, and a GitHub Release mirror.
+
+### Changed
+
+- Reduced the core permission flow to Microphone and Accessibility.
+- Made Fn and Fn-Shift toggle shortcuts the clean defaults, with an active HID
+  event tap that owns configured modifier gestures through release.
+- Refined onboarding and shortcut settings around Dictate and Translate action
+  cards, tap-or-hold selection, physical press feedback, and conflict guidance.
+- Translation now bypasses local and remote language models in every
+  intelligence mode.
+- The idle capture HUD is fully hidden and no longer exposes a hover target.
+- Strengthened Apple Speech handling for live range replacement, CJK and Latin
+  spacing, audio-buffer ownership, overflow failures, and converter tail flush.
+- Aligned the website with Motion Lexicon's Interior material, typography,
+  interaction, contrast, transparency, and reduced-motion system.
+
+### Fixed
+
+- Kept standard R2 validation enabled during immutable archive uploads; the
+  publication script continues only after a SHA-256 readback matches the
+  packaged release manifest.
+- Re-checks Accessibility immediately before Command-V so revoked access
+  restores the clipboard and records a recoverable delivery failure.
+
+## [1.0.3] - 2026-08-02
+
+### Changed
+
+- Advanced the public macOS release to build 5 and completed the first
+  production Sparkle update path from Lerro 1.0.2 (build 4).
+
+## [1.0.2] - 2026-08-02
+
+### Added
+
+- Sparkle 2 automatic updates with a signed HTTPS appcast, a daily background
+  check, automatic download, install on quit, and immediate in-app checks from
+  Home and Settings.
+- Cloudflare Worker distribution at `lerroapp.com` and `updates.lerroapp.com`,
+  backed by private R2 release archives and a private D1 stable-release index.
+- Release packaging and verification for embedded Sparkle helpers, arm64
+  linkage, Ed25519 archive signatures, and public release metadata.
+- Controlled Cloudflare publication script with ZIP readback, D1 release batch,
+  and public appcast/download verification.
+
+### Changed
+
+- Official website and direct macOS download now use `https://lerroapp.com` and
+  `https://updates.lerroapp.com/download/macos/latest`.
+- The Home and Settings update actions now open Sparkle's native updater flow.
+
+### Security
+
+- Public ZIPs are Developer ID signed, notarized, stapled, Gatekeeper-validated,
+  and signed with the Sparkle Ed25519 archive key held only in the maintainer
+  Keychain.
+- Update checks and downloads contain no speech, transcript, focused text,
+  dictionary, prompt, model answer, or provider API key data.
+
 ## [1.0.1-preview.1] - 2026-08-01
 
 ### Added
@@ -117,5 +187,8 @@ All notable changes to Lerro will be documented here. The project follows
   plaintext BYOK credentials; logs, history, errors, fixtures, and public exports
   exclude API keys and Authorization headers.
 
-[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.0.1-preview.1...HEAD
+[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Ryan-yang125/lerro/compare/v1.0.3...v1.1.0
+[1.0.3]: https://github.com/Ryan-yang125/lerro/compare/v1.0.2...v1.0.3
+[1.0.2]: https://github.com/Ryan-yang125/lerro/compare/v1.0.1-preview.1...v1.0.2
 [1.0.1-preview.1]: https://github.com/Ryan-yang125/lerro/releases/tag/v1.0.1-preview.1

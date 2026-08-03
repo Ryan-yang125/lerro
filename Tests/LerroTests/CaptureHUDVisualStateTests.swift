@@ -11,8 +11,7 @@ struct CaptureHUDVisualStateTests {
             #expect(CaptureHUDVisualState.resolve(
                 phase: phase,
                 isStartingCapture: true,
-                isHandsFreeCapture: false,
-                isHUDHovered: false
+                isHandsFreeCapture: false
             ) == .waiting)
         }
     }
@@ -23,8 +22,7 @@ struct CaptureHUDVisualStateTests {
             #expect(CaptureHUDVisualState.resolve(
                 phase: phase,
                 isStartingCapture: true,
-                isHandsFreeCapture: true,
-                isHUDHovered: false
+                isHandsFreeCapture: true
             ) == .handsFree)
         }
     }
@@ -34,14 +32,12 @@ struct CaptureHUDVisualStateTests {
         #expect(CaptureHUDVisualState.resolve(
             phase: .listening,
             isStartingCapture: false,
-            isHandsFreeCapture: false,
-            isHUDHovered: false
+            isHandsFreeCapture: false
         ) == .listening)
         #expect(CaptureHUDVisualState.resolve(
             phase: .listening,
             isStartingCapture: false,
-            isHandsFreeCapture: true,
-            isHUDHovered: false
+            isHandsFreeCapture: true
         ) == .handsFree)
     }
 
@@ -51,8 +47,7 @@ struct CaptureHUDVisualStateTests {
             #expect(CaptureHUDVisualState.resolve(
                 phase: phase,
                 isStartingCapture: false,
-                isHandsFreeCapture: false,
-                isHUDHovered: false
+                isHandsFreeCapture: false
             ) == .processing)
         }
     }
@@ -63,15 +58,13 @@ struct CaptureHUDVisualStateTests {
             #expect(CaptureHUDVisualState.resolve(
                 phase: phase,
                 isStartingCapture: false,
-                isHandsFreeCapture: false,
-                isHUDHovered: true
+                isHandsFreeCapture: false
             ) == .idleHidden)
         }
         #expect(CaptureHUDVisualState.resolve(
             phase: .inserting,
             isStartingCapture: false,
             isHandsFreeCapture: true,
-            isHUDHovered: false,
             isSuppressed: true
         ) == .idleHidden)
     }
@@ -169,8 +162,7 @@ struct CaptureHUDVisualStateTests {
             #expect(CaptureHUDVisualState.resolve(
                 phase: phase,
                 isStartingCapture: false,
-                isHandsFreeCapture: true,
-                isHUDHovered: false
+                isHandsFreeCapture: true
             ) == .processing)
         }
 
@@ -178,7 +170,6 @@ struct CaptureHUDVisualStateTests {
             phase: .inserting,
             isStartingCapture: false,
             isHandsFreeCapture: true,
-            isHUDHovered: false,
             isSuppressed: true
         ) == .idleHidden)
     }
