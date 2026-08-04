@@ -8,6 +8,7 @@ archive_path="$outputs_path/Lerro-macOS-arm64.zip"
 dsym_archive_path="$outputs_path/Lerro-macOS-arm64.dSYM.zip"
 manifest_path="$outputs_path/Lerro-release-manifest.json"
 checksum_path="$outputs_path/SHA256SUMS.txt"
+sbom_path="$outputs_path/Lerro-macOS-arm64.cdx.json"
 temporary_directory=$(mktemp -d "${TMPDIR:-/tmp}/Lerro Release Verify.XXXXXX")
 application_extract_path="$temporary_directory/Application Archive"
 symbols_extract_path="$temporary_directory/Debug Symbols Archive"
@@ -93,7 +94,7 @@ print "[5/8] Building and packaging the Release app"
 "$script_dir/package_release.sh"
 
 print "[6/8] Verifying checksums and extracting through paths containing spaces"
-for required_path in "$archive_path" "$dsym_archive_path" "$manifest_path" "$checksum_path"; do
+for required_path in "$archive_path" "$dsym_archive_path" "$manifest_path" "$checksum_path" "$sbom_path"; do
     [[ -f "$required_path" ]] || { print -u2 "Missing release artifact: $required_path"; exit 1; }
 done
 (cd "$outputs_path" && shasum -a 256 -c "$(basename "$checksum_path")")
@@ -386,6 +387,8 @@ elif sparkle.get("edSignature") is not None or sparkle.get("length") is not None
     raise SystemExit("Non-public package unexpectedly carries a Sparkle archive signature")
 PY
 
+python3 "$script_dir/verify_sbom.py" "$project_dir" "$sbom_path" "$app_path" "$manifest_path"
+
 if [[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["signing"]["resolvedMode"])' "$manifest_path")" == "developer-id" ]]; then
     xcrun stapler validate "$app_path"
     spctl -a -vv "$app_path"
@@ -435,5 +438,6 @@ print "Release verification passed"
 print "Archive: $archive_path"
 print "dSYM UUID: $dsym_uuid"
 print "Manifest: $manifest_path"
+print "CycloneDX SBOM: $sbom_path"
 print "Home fixture log bytes: $fixture_log_bytes (no integration errors)"
 print "Ask fixture log bytes: $ask_fixture_log_bytes (panel opened without crash)"

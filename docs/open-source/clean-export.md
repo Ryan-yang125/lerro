@@ -42,6 +42,9 @@ The scanner checks:
 - Legacy identity strings occur only in explicitly allowlisted migration or
   compatibility files that also contain migration context.
 - Vendored packages retain nonempty `LICENSE` and `UPSTREAM.md` files.
+- `script/generate_sbom.py` and `script/verify_sbom.py` are public source;
+  generated `outputs/Lerro-macOS-arm64.cdx.json` remains a release artifact
+  outside the export boundary.
 - Brand assets have an asset-license manifest when the Brand directory exists.
 - Binary executables and release containers are absent; approved source assets
   such as icons and images remain allowed in their designated directories,
@@ -84,8 +87,10 @@ built-in checks.
 7. Configure the official remote and enable branch protection, secret scanning,
    Dependabot, code scanning, Private Vulnerability Reporting, and immutable
    releases.
-8. Build the public release from a clean signed tag and attach the source-bound
-   manifest, SBOM, checksums, licenses, dSYM archive, and attestation.
+8. Build the public release from a clean signed tag; generate and validate the
+   CycloneDX SBOM from the current `Package.resolved` and resolved license evidence,
+   then attach the source-bound manifest, SBOM, checksums, licenses, dSYM archive,
+   and attestation.
 
 The public repository's first commit should be treated as a release input. Any
 change after scanning requires a fresh scan and release build.

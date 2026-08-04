@@ -34,6 +34,7 @@ site/
 script/build_and_run.sh
 script/check_third_party_licenses.py
 script/export_public_repo.sh
+script/generate_sbom.py
 script/package_release.sh
 script/publish_cloudflare_release.sh
 script/public_repo_allowlist.txt
@@ -42,6 +43,7 @@ script/scan_public_repo.sh
 script/signing_support.zsh
 script/test_live_model.sh
 script/test_live_remote.sh
+script/verify_sbom.py
 script/verify_release.sh
 
 # Public documentation

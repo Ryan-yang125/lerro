@@ -4,9 +4,12 @@ Lerro depends on open-source packages and optional model assets. Exact revisions
 for a source checkout are recorded in `Package.resolved`; vendored source origins
 and local patches are recorded in each `Vendor/*/UPSTREAM.md`. Release artifacts
 carry the license files collected from the resolved checkouts and vendored
-packages. The source-bound manifest identifies the inputs used for that build;
-the Phase 6 public-distribution pipeline must attach an SBOM derived from the
-same resolved graph.
+packages. The source-bound manifest identifies the inputs used for that build.
+`script/generate_sbom.py` writes the release CycloneDX JSON SBOM as
+`outputs/Lerro-macOS-arm64.cdx.json`; it reuses the `Package.resolved` lock graph
+and the resolved-checkout, binary-artifact, and Vendor license evidence used by
+`script/check_third_party_licenses.py`. `script/verify_sbom.py` rechecks that
+binding before the SBOM is released.
 
 ## Source-package inventory
 
@@ -39,7 +42,7 @@ same evidence after dependency resolution.
 
 `Package.resolved` remains authoritative for remote identities and revisions.
 Dependency updates must refresh this verified table, the packaged license and
-notice inventory, and the Phase 6 release SBOM together. Upstream `NOTICE` files are
+notice inventory, and the release SBOM together. Upstream `NOTICE` files are
 distributed alongside their corresponding licenses when present.
 
 ## Default model

@@ -12,14 +12,17 @@ archive_name=Lerro-macOS-arm64.zip
 dsym_archive_name=Lerro-macOS-arm64.dSYM.zip
 manifest_name=Lerro-release-manifest.json
 checksum_name=SHA256SUMS.txt
+sbom_name=Lerro-macOS-arm64.cdx.json
 archive_path="$outputs_path/$archive_name"
 dsym_archive_path="$outputs_path/$dsym_archive_name"
 manifest_path="$outputs_path/$manifest_name"
 checksum_path="$outputs_path/$checksum_name"
+sbom_path="$outputs_path/$sbom_name"
 pending_archive_path="$outputs_path/.$archive_name.pending"
 pending_dsym_archive_path="$outputs_path/.$dsym_archive_name.pending"
 pending_manifest_path="$outputs_path/.$manifest_name.pending"
 pending_checksum_path="$outputs_path/.$checksum_name.pending"
+pending_sbom_path="$outputs_path/.$sbom_name.pending"
 requested_signing_mode=${LERRO_SIGNING_MODE:-auto}
 notary_profile=${LERRO_NOTARY_PROFILE:-}
 sparkle_key_account=${LERRO_SPARKLE_KEY_ACCOUNT:-app.lerro.mac}
@@ -50,7 +53,8 @@ cleanup_pending_artifacts() {
         "$pending_archive_path" \
         "$pending_dsym_archive_path" \
         "$pending_manifest_path" \
-        "$pending_checksum_path"
+        "$pending_checksum_path" \
+        "$pending_sbom_path"
 }
 cleanup_all() {
     cleanup_pending_artifacts
@@ -182,6 +186,14 @@ PY
     }
 fi
 
+print "Verifying resolved third-party license evidence and generating CycloneDX SBOM"
+python3 "$script_dir/check_third_party_licenses.py" "$project_dir"
+python3 "$script_dir/generate_sbom.py" \
+    "$project_dir" "$app_path" "$pending_sbom_path" \
+    --source-snapshot "$source_before_path"
+sbom_hash=$(shasum -a 256 "$pending_sbom_path" | awk '{print $1}')
+sbom_bytes=$(stat -f '%z' "$pending_sbom_path")
+
 LERRO_MANIFEST_REQUESTED_MODE="$requested_signing_mode" \
 LERRO_MANIFEST_RESOLVED_MODE="$signing_mode" \
 LERRO_MANIFEST_IDENTITY="$signing_identity" \
@@ -198,7 +210,10 @@ python3 - \
     "$archive_hash" \
     "$pending_dsym_archive_path" \
     "$dsym_archive_name" \
-    "$dsym_archive_hash" <<'PY'
+    "$dsym_archive_hash" \
+    "$sbom_name" \
+    "$sbom_hash" \
+    "$sbom_bytes" <<'PY'
 import datetime
 import hashlib
 import json
@@ -219,6 +234,9 @@ import sys
     dsym_archive_raw,
     dsym_archive_name,
     dsym_archive_hash,
+    sbom_name,
+    sbom_hash,
+    sbom_bytes,
 ) = sys.argv[1:]
 project = pathlib.Path(project_raw)
 source_snapshot = json.loads(pathlib.Path(source_raw).read_text())
@@ -334,6 +352,13 @@ manifest = {
             "sha256": dsym_archive_hash,
             "bytes": dsym_archive.stat().st_size,
         },
+        "softwareBillOfMaterials": {
+            "file": sbom_name,
+            "sha256": sbom_hash,
+            "bytes": int(sbom_bytes),
+            "format": "CycloneDX",
+            "specVersion": "1.7",
+        },
     },
 }
 destination.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
@@ -343,11 +368,13 @@ manifest_hash=$(shasum -a 256 "$pending_manifest_path" | awk '{print $1}')
 {
     print "$archive_hash  $archive_name"
     print "$dsym_archive_hash  $dsym_archive_name"
+    print "$sbom_hash  $sbom_name"
     print "$manifest_hash  $manifest_name"
 } > "$pending_checksum_path"
 
 mv -f "$pending_archive_path" "$archive_path"
 mv -f "$pending_dsym_archive_path" "$dsym_archive_path"
+mv -f "$pending_sbom_path" "$sbom_path"
 mv -f "$pending_manifest_path" "$manifest_path"
 mv -f "$pending_checksum_path" "$checksum_path"
 source_tree_dirty=$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1]))["dirty"]).lower())' "$source_before_path")
@@ -357,6 +384,7 @@ rm -rf -- "$temporary_directory"
 (cd "$outputs_path" && shasum -a 256 -c "$checksum_name")
 print "Packaged $archive_path"
 print "Debug symbols: $dsym_archive_path"
+print "CycloneDX SBOM: $sbom_path"
 print "Release manifest: $manifest_path"
 print "Source tree dirty: $source_tree_dirty"
 if [[ -n "$sparkle_ed_signature" ]]; then

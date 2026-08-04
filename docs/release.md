@@ -16,11 +16,14 @@ dist/Lerro.app
 dist/Lerro.app.dSYM
 outputs/Lerro-macOS-arm64.zip
 outputs/Lerro-macOS-arm64.dSYM.zip
+outputs/Lerro-macOS-arm64.cdx.json
 outputs/Lerro-release-manifest.json
 outputs/SHA256SUMS.txt
 ```
 
-ZIP 和 dSYM ZIP 属于可再生产物，通常由 `.gitignore` 排除。manifest 与 checksum 是否纳入版本控制由发布策略决定；它们必须与同一次打包生成的二进制一致。
+`Lerro-macOS-arm64.cdx.json` 是本次 release 的 CycloneDX JSON SBOM；它从本次
+`Package.resolved` 锁定图和第三方许可证证据生成。ZIP、dSYM ZIP 与 SBOM 都属于可再生产物，
+通常由 `.gitignore` 排除。manifest 与 checksum 是否纳入版本控制由发布策略决定；它们必须与同一次打包生成的二进制一致。
 
 ## 前置条件
 
@@ -260,7 +263,9 @@ cmp -s \
 - 校验 Brand ICNS、菜单栏导出与 `Sources/Lerro/Resources` 逐字节一致。
 - 运行全量 `swift test` 并调用 `package_release.sh` 生成当前产物。
 - 读取 `outputs/Lerro-release-manifest.json`。
-- 校验 `SHA256SUMS.txt` 中 app ZIP、dSYM ZIP 和 manifest。
+- 生成并校验 `outputs/Lerro-macOS-arm64.cdx.json`：CycloneDX 格式、
+  `Package.resolved` 锁定图、已解析依赖身份、Vendor 来源记录和许可证证据必须一致。
+- 校验 `SHA256SUMS.txt` 中 app ZIP、dSYM ZIP、SBOM 和 manifest。
 - 解压到 `mktemp -d` 创建的隔离目录。
 - 验证 app 根布局、Info.plist、PrivacyInfo、资源、许可证和 executable。
 - 验证本地 Vendor 的 `swift-huggingface` 与 `swift-transformers` 许可证及来源记录非空，并与仓库源文件 byte-identical。
@@ -285,7 +290,7 @@ manifest 是本次打包的机器可读证据，包含：
 - executable hash、binary UUID、dSYM UUID 和 resource bundles。
 - requested/resolved signing mode、identity、authority、Team ID、CDHash、designated requirement、公证状态。
 - Swift、Xcode、Metal 版本和 `Package.resolved` hash。
-- app ZIP、dSYM ZIP 的文件名、hash 和字节数，以及公开 Developer ID ZIP 的 Sparkle Ed25519 签名和长度。
+- app ZIP、dSYM ZIP、CycloneDX SBOM 的文件名、hash 和字节数，以及公开 Developer ID ZIP 的 Sparkle Ed25519 签名和长度。
 
 文档或人工记录中的产物信息应引用 manifest，避免手动复制后与新产物漂移。
 
@@ -403,9 +408,10 @@ SHA-256 复验完成后，同步执行以下 GitHub 镜像流程：
 2. 在该公开 commit 创建 `v<version>` annotated tag。
 3. 创建稳定 GitHub Release，并上传同一次打包产生的
    `Lerro-macOS-arm64.zip`、`Lerro-macOS-arm64.dSYM.zip`、
-   `Lerro-release-manifest.json` 与 `SHA256SUMS.txt`。
-4. 通过 GitHub API 读取每个 asset 的 `digest`，逐项确认与 canonical 本地产物相同；
-   `releases/latest` 必须解析到新稳定版本。
+   `Lerro-macOS-arm64.cdx.json`、`Lerro-release-manifest.json` 与
+   `SHA256SUMS.txt`。
+4. 通过 GitHub API 读回这五个 asset 的名称、字节数与 `digest`，逐项确认与 canonical
+   本地产物及 `SHA256SUMS.txt` 相同；`releases/latest` 必须解析到新稳定版本。
 
 GitHub Release 文案链接 canonical 下载与官网 changelog。GitHub 自动生成的 tag source
 archive 提供源码快照，`outputs/Lerro-public-source.zip` 不重复上传。
@@ -424,7 +430,8 @@ archive 提供源码快照，`outputs/Lerro-public-source.zip` 不重复上传�
 - [ ] 实际 signing mode 与目标一致。
 - [ ] `package_release.sh` 通过且 source tree 在构建期间稳定。
 - [ ] `verify_release.sh` 通过。
-- [ ] release manifest 与 checksums 已归档。
+- [ ] CycloneDX SBOM 已从当前 `Package.resolved` 和许可证证据生成并通过校验。
+- [ ] release manifest、SBOM 与 checksums 已归档。
 - [ ] 真实 Release 人工矩阵的受影响行已通过。
 - [ ] 真实缓存模型 smoke 已通过，或交付记录已经列明跳过原因与剩余边界。
 - [ ] 真实 BYOK Provider smoke 已通过，或交付记录已经列明跳过原因与剩余边界。
@@ -433,6 +440,6 @@ archive 提供源码快照，`outputs/Lerro-public-source.zip` 不重复上传�
 - [ ] `publish_cloudflare_release.sh` 已完成 R2 读回、D1 batch 与公开 appcast/download SHA-256 验证。
 - [ ] `lerroapp.com` 和 `www.lerroapp.com` 已返回预期站点，`updates.lerroapp.com` 已返回预期 feed。
 - [ ] clean export 已同步到 GitHub `main`，公开扫描与 CI 已通过。
-- [ ] GitHub tag、稳定 Release、四个镜像资产和 `releases/latest` 已复验，asset digest 与 canonical 产物一致。
+- [ ] GitHub tag、稳定 Release、五个镜像资产和 `releases/latest` 已复验；每个 asset 的名称、字节数和 digest 均与 canonical 产物及 checksum 一致。
 - [ ] 已记录当前版本的首次手动安装边界，以及下一版本的真实 Sparkle N 到 N+1 验收计划。
 - [ ] 已记录仍未执行的模型、TCC、硬件或多显示器边界。
