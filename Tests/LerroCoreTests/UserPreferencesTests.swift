@@ -11,6 +11,7 @@ struct UserPreferencesTests {
         #expect(preferences.localProfileEmail.isEmpty)
         #expect(preferences.recognitionLocaleIdentifier == "zh_CN")
         #expect(preferences.translationLanguageIdentifiers == ["en_US"])
+        #expect(preferences.appLanguage == .system)
         #expect(preferences.microphoneDeviceUID == nil)
         #expect(preferences.muteOtherAudio)
         #expect(preferences.appearance == .system)
@@ -173,6 +174,7 @@ struct UserPreferencesTests {
         let preferences = UserPreferences(
             localProfileEmail: "local@example.com",
             localInvitationCode: "LOCAL-2026",
+            appLanguage: .english,
             intelligenceMode: .remote,
             remoteProvider: RemoteProviderConfiguration(
                 provider: .custom,
@@ -196,6 +198,7 @@ struct UserPreferencesTests {
         #expect(decoded.remoteProvider.apiKey == "secret-test-key")
         #expect(decoded.hasApprovedModelDownload)
         #expect(decoded.onboardingStepIndex == 17)
+        #expect(decoded.appLanguage == .english)
     }
 
     @Test("Older preference documents keep their saved values and default model consent to off")
@@ -213,6 +216,7 @@ struct UserPreferencesTests {
         #expect(!decoded.hasApprovedModelDownload)
         #expect(decoded.localInvitationCode.isEmpty)
         #expect(decoded.translationLanguageIdentifiers == ["en_US"])
+        #expect(decoded.appLanguage == .system)
         #expect(!reencoded.contains("interactionSoundsEnabled"))
     }
 

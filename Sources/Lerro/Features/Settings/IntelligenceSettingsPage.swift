@@ -116,6 +116,7 @@ struct IntelligenceProviderDraft: Equatable {
 
 struct IntelligenceSettingsPage: View {
     @Bindable var session: AppSession
+    @Environment(\.locale) private var locale
 
     @State private var providerDraft = IntelligenceProviderDraft()
     @State private var connectionOutcome: RemoteConnectionTestOutcome?
@@ -196,17 +197,21 @@ struct IntelligenceSettingsPage: View {
                 Text("当前模式")
                     .font(LerroTheme.font(12, weight: .medium))
                     .foregroundStyle(LerroTheme.secondaryText)
-                Text(session.preferences.intelligenceMode.lerroDisplayName)
+                Text(LocalizedStringKey(session.preferences.intelligenceMode.lerroDisplayName))
                     .lerroTypography(.title)
                     .foregroundStyle(LerroTheme.text)
-                Text(session.preferences.intelligenceMode.lerroDetail)
+                Text(LocalizedStringKey(session.preferences.intelligenceMode.lerroDetail))
                     .font(LerroTheme.font(13))
                     .foregroundStyle(LerroTheme.secondaryText)
             }
 
             Spacer(minLength: 16)
 
-            Label(currentModeStatusText, systemImage: currentModeStatusIcon)
+            Label {
+                Text(LocalizedStringKey(currentModeStatusText))
+            } icon: {
+                Image(systemName: currentModeStatusIcon)
+            }
                 .font(LerroTheme.font(12, weight: .medium))
                 .foregroundStyle(currentModeStatusColor)
         }
@@ -219,8 +224,14 @@ struct IntelligenceSettingsPage: View {
                 .stroke(LerroTheme.thinBorder, lineWidth: 1)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("当前智能处理模式：\(session.preferences.intelligenceMode.lerroDisplayName)")
-        .accessibilityValue(currentModeStatusText)
+        .accessibilityLabel(Text(verbatim:
+            String(
+                format: localized("当前智能处理模式：%@"),
+                locale: locale,
+                localized(session.preferences.intelligenceMode.lerroDisplayName)
+            )
+        ))
+        .accessibilityValue(Text(verbatim: localized(currentModeStatusText)))
     }
 
     private var modePicker: some View {
@@ -230,7 +241,7 @@ struct IntelligenceSettingsPage: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("选择智能处理模式")
+        .accessibilityLabel(Text(verbatim: localized("选择智能处理模式")))
     }
 
     private func modeButton(_ mode: IntelligenceMode) -> some View {
@@ -249,10 +260,10 @@ struct IntelligenceSettingsPage: View {
                     Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(selected ? LerroTheme.accent : LerroTheme.tertiaryText)
                 }
-                Text(mode.lerroDisplayName)
+                Text(LocalizedStringKey(mode.lerroDisplayName))
                     .lerroTypography(.heading)
                     .foregroundStyle(LerroTheme.text)
-                Text(mode.lerroDetail)
+                Text(LocalizedStringKey(mode.lerroDetail))
                     .font(LerroTheme.font(12))
                     .foregroundStyle(LerroTheme.secondaryText)
                     .lineLimit(3)
@@ -262,9 +273,9 @@ struct IntelligenceSettingsPage: View {
             .frame(maxWidth: .infinity, minHeight: 126, alignment: .topLeading)
         }
         .buttonStyle(LerroCardButtonStyle(selected: selected))
-        .accessibilityLabel(mode.lerroDisplayName)
-        .accessibilityValue(selected ? "当前模式" : "未选择")
-        .accessibilityHint(mode.lerroDetail)
+        .accessibilityLabel(Text(verbatim: localized(mode.lerroDisplayName)))
+        .accessibilityValue(Text(verbatim: localized(selected ? "当前模式" : "未选择")))
+        .accessibilityHint(Text(verbatim: localized(mode.lerroDetail)))
     }
 
     private var localModelCard: some View {
@@ -290,19 +301,25 @@ struct IntelligenceSettingsPage: View {
                     Text("约 3.03 GB · 下载后在当前 Mac 运行")
                         .font(LerroTheme.font(13))
                         .foregroundStyle(LerroTheme.secondaryText)
-                    Label(localModelStatusText, systemImage: localModelStatusIcon)
+                    Label {
+                        Text(LocalizedStringKey(localModelStatusText))
+                    } icon: {
+                        Image(systemName: localModelStatusIcon)
+                    }
                         .font(LerroTheme.font(12))
                         .foregroundStyle(localModelStatusColor)
                 }
 
                 Spacer(minLength: 12)
 
-                Button(localModelActionTitle) {
+                Button {
                     if session.preferences.hasApprovedModelDownload {
                         session.activateIntelligenceMode(.local)
                     } else {
                         session.requestLocalModelPreparation()
                     }
+                } label: {
+                    Text(LocalizedStringKey(localModelActionTitle))
                 }
                 .buttonStyle(LerroPillButtonStyle(prominent: true))
                 .disabled(localModelActionDisabled)
@@ -310,7 +327,7 @@ struct IntelligenceSettingsPage: View {
 
             if showsLocalModelProgress {
                 ProgressView(value: min(1, max(0, session.modelStatus.progress)))
-                    .accessibilityLabel("本地模型准备进度")
+                    .accessibilityLabel(Text(verbatim: localized("本地模型准备进度")))
             }
 
             Text("听写内容、上下文与生成结果留在这台 Mac；模型缓存可在停用后继续保留。")
@@ -337,7 +354,7 @@ struct IntelligenceSettingsPage: View {
                     fieldLabel("Provider")
                     Picker("Provider", selection: $providerDraft.provider) {
                         ForEach(RemoteProviderKind.allCases) { provider in
-                            Text(provider.lerroDisplayName).tag(provider)
+                            Text(LocalizedStringKey(provider.lerroDisplayName)).tag(provider)
                         }
                     }
                     .labelsHidden()
@@ -346,9 +363,9 @@ struct IntelligenceSettingsPage: View {
 
                 GridRow {
                     fieldLabel("Model ID")
-                    TextField(providerDraft.provider.lerroModelPlaceholder, text: $providerDraft.modelIdentifier)
+                    TextField(LocalizedStringKey(providerDraft.provider.lerroModelPlaceholder), text: $providerDraft.modelIdentifier)
                         .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("Model ID")
+                        .accessibilityLabel(localized("Model ID"))
                 }
 
                 GridRow {
@@ -356,10 +373,10 @@ struct IntelligenceSettingsPage: View {
                     if providerDraft.provider == .custom {
                         TextField("https://example.com/v1", text: customBaseURLBinding)
                             .textFieldStyle(.roundedBorder)
-                            .accessibilityLabel("自定义 API Base URL")
+                            .accessibilityLabel(localized("自定义 API Base URL"))
                     } else {
                         HStack(spacing: 8) {
-                            Text(providerDraft.baseURL)
+                            Text(verbatim: providerDraft.baseURL)
                                 .font(LerroTheme.font(13))
                                 .foregroundStyle(LerroTheme.secondaryText)
                                 .textSelection(.enabled)
@@ -373,7 +390,13 @@ struct IntelligenceSettingsPage: View {
                         .background(LerroTheme.fillContainerTough)
                         .clipShape(RoundedRectangle(cornerRadius: LerroTheme.navigationRadius, style: .continuous))
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("API Base URL，预设只读，\(providerDraft.baseURL)")
+                        .accessibilityLabel(Text(verbatim:
+                            String(
+                                format: localized("API Base URL，预设只读，%@"),
+                                locale: locale,
+                                providerDraft.baseURL
+                            )
+                        ))
                     }
                 }
 
@@ -381,7 +404,7 @@ struct IntelligenceSettingsPage: View {
                     fieldLabel("API Key")
                     SecureField("输入 API Key", text: $providerDraft.apiKey)
                         .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("API Key")
+                        .accessibilityLabel(localized("API Key"))
                         .privacySensitive()
                 }
             }
@@ -483,20 +506,30 @@ struct IntelligenceSettingsPage: View {
     @ViewBuilder
     private var remoteFeedback: some View {
         if let validationMessage = providerDraft.validationMessage {
-            Label(validationMessage, systemImage: "info.circle")
+            Label {
+                Text(LocalizedStringKey(validationMessage))
+            } icon: {
+                Image(systemName: "info.circle")
+            }
                 .font(LerroTheme.font(12))
                 .foregroundStyle(LerroTheme.secondaryText)
-                .accessibilityLabel("配置提示：\(validationMessage)")
+                .accessibilityLabel(Text(verbatim:
+                    String(
+                        format: localized("配置提示：%@"),
+                        locale: locale,
+                        localized(validationMessage)
+                    )
+                ))
         } else if let connectionOutcome {
             HStack(spacing: 8) {
                 Image(systemName: connectionOutcome.succeeded ? "checkmark.circle.fill" : "xmark.circle.fill")
-                Text(connectionOutcome.message)
+                Text(verbatim: localized(connectionOutcome.message))
                 if let latency = connectionOutcome.latencyMilliseconds {
-                    Text("· \(latency) ms")
+                    Text(verbatim: "· \(latency) ms")
                         .monospacedDigit()
                 }
                 if let model = connectionOutcome.modelIdentifier, !model.isEmpty {
-                    Text("· \(model)")
+                    Text(verbatim: "· \(model)")
                         .lineLimit(1)
                 }
             }
@@ -504,21 +537,25 @@ struct IntelligenceSettingsPage: View {
             .foregroundStyle(connectionOutcome.succeeded ? LerroTheme.green : LerroTheme.red)
             .accessibilityElement(children: .combine)
         } else if let inlineMessage {
-            Label(inlineMessage, systemImage: "info.circle.fill")
+            Label {
+                Text(LocalizedStringKey(inlineMessage))
+            } icon: {
+                Image(systemName: "info.circle.fill")
+            }
                 .font(LerroTheme.font(12, weight: .medium))
                 .foregroundStyle(LerroTheme.accent)
         }
     }
 
     private func fieldLabel(_ title: String) -> some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(LerroTheme.font(13, weight: .medium))
             .foregroundStyle(LerroTheme.secondaryText)
             .frame(width: 102, alignment: .leading)
     }
 
     private func contextToggle(_ title: String, value: Binding<Bool>) -> some View {
-        Toggle(title, isOn: value)
+        Toggle(LocalizedStringKey(title), isOn: value)
             .toggleStyle(.switch)
             .tint(LerroTheme.accent)
             .font(LerroTheme.font(13))
@@ -542,7 +579,7 @@ struct IntelligenceSettingsPage: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .lerroTypography(.label)
                 .foregroundStyle(LerroTheme.metadataText)
             content()
@@ -551,7 +588,7 @@ struct IntelligenceSettingsPage: View {
 
     private var localModelStatusText: String {
         if !session.modelStatus.message.isEmpty {
-            return session.modelStatus.message
+            return LerroInterfaceLocalization.statusString(session.modelStatus.message, locale: locale)
         }
         return switch session.modelStatus.state {
         case .unavailable: "等待下载"
@@ -709,6 +746,10 @@ struct IntelligenceSettingsPage: View {
             connectionOutcome = nil
             inlineMessage = "已从 preferences.json 清除 API Key，并切换到原始听写。"
         }
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
     }
 }
 

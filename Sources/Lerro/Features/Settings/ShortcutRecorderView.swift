@@ -432,6 +432,7 @@ struct ShortcutRecorderCard: View {
     var onEscape: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
     @State private var recorderState: ShortcutRecorderState
 
     init(
@@ -457,28 +458,31 @@ struct ShortcutRecorderCard: View {
                 Text("按一下开关").tag(ShortcutActivation.toggle)
             }
             .pickerStyle(.segmented)
-            .accessibilityHint("选择松开后完成，或再次按下后完成")
+            .accessibilityHint(localized("选择松开后完成，或再次按下后完成"))
 
             HStack(spacing: 10) {
-                Label(
-                    recorderState.isRecording ? "按键检测中" : "按键检测已暂停",
-                    systemImage: recorderState.isRecording ? "record.circle" : "keyboard"
-                )
+                Label {
+                    Text(verbatim: localized(recorderState.isRecording ? "按键检测中" : "按键检测已暂停"))
+                } icon: {
+                    Image(systemName: recorderState.isRecording ? "record.circle" : "keyboard")
+                }
                 .font(LerroTheme.font(12, weight: .medium))
                 .foregroundStyle(recorderState.isRecording ? LerroTheme.accent : LerroTheme.secondaryText)
 
                 Spacer()
 
-                Button(recorderState.isRecording ? "停止检测" : "开始检测") {
+                Button {
                     setRecordingActive(!recorderState.isRecording)
+                } label: {
+                    Text(verbatim: localized(recorderState.isRecording ? "停止检测" : "开始检测"))
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .accessibilityHint(
+                .accessibilityHint(localized(
                     recorderState.isRecording
                         ? "恢复 Tab 和 Return 的标准键盘导航"
                         : "开始读取按键，麦克风保持关闭"
-                )
+                ))
             }
 
             ZStack {
@@ -492,12 +496,16 @@ struct ShortcutRecorderCard: View {
 
                 VStack(spacing: 10) {
                     ShortcutLiveKeycap(
-                        title: displayedShortcut?.displayName ?? "尚未选择快捷键",
+                        title: displayedShortcut?.displayName ?? localized("尚未选择快捷键"),
                         isPressed: recorderState.isPressed,
                         reduceMotion: reduceMotion
                     )
 
-                    Label(statusText, systemImage: statusIcon)
+                    Label {
+                        Text(verbatim: statusText)
+                    } icon: {
+                        Image(systemName: statusIcon)
+                    }
                         .font(LerroTheme.font(12, weight: .medium))
                         .foregroundStyle(statusColor)
                 }
@@ -512,19 +520,19 @@ struct ShortcutRecorderCard: View {
             }
             .frame(height: 112)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("快捷键录制")
-            .accessibilityValue(accessibilityValue)
-            .accessibilityHint(
+            .accessibilityLabel(localized("快捷键录制"))
+            .accessibilityValue(Text(verbatim: accessibilityValue))
+            .accessibilityHint(localized(
                 recorderState.isRecording
                     ? "按下并松开快捷键完成识别，检测会继续运行"
                     : "选择开始检测后可以读取按键"
-            )
+            ))
 
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: recorderState.validationMessage.isEmpty ? "checkmark.shield" : "exclamationmark.triangle.fill")
                     .foregroundStyle(recorderState.validationMessage.isEmpty ? Color.secondary : LerroTheme.orange)
                     .accessibilityHidden(true)
-                Text(recorderState.validationMessage.isEmpty ? guidanceText : recorderState.validationMessage)
+                Text(LocalizedStringKey(recorderState.validationMessage.isEmpty ? guidanceText : recorderState.validationMessage))
                     .font(LerroTheme.font(12))
                     .foregroundStyle(recorderState.validationMessage.isEmpty ? LerroTheme.secondaryText : LerroTheme.orange)
                     .fixedSize(horizontal: false, vertical: true)
@@ -555,18 +563,30 @@ struct ShortcutRecorderCard: View {
 
     private var statusText: String {
         if recorderState.isPressed {
-            return "已检测到 \(recorderState.liveShortcut?.displayName ?? "按键") 按下"
+            return String(
+                format: localized("已检测到 %@ 按下"),
+                locale: locale,
+                recorderState.liveShortcut?.displayName ?? localized("按键")
+            )
         }
         if recorderState.isRecording {
             if let shortcut = recorderState.validatedShortcut {
-                return "已识别 \(shortcut.displayName)，可以继续测试"
+                return String(
+                    format: localized("已识别 %@，可以继续测试"),
+                    locale: locale,
+                    shortcut.displayName
+                )
             }
-            return "正在等待按键"
+            return localized("正在等待按键")
         }
         if let shortcut = recorderState.validatedShortcut {
-            return "当前快捷键为 \(shortcut.displayName)"
+            return String(
+                format: localized("当前快捷键为 %@"),
+                locale: locale,
+                shortcut.displayName
+            )
         }
-        return "点击开始检测"
+        return localized("点击开始检测")
     }
 
     private var statusIcon: String {
@@ -594,17 +614,23 @@ struct ShortcutRecorderCard: View {
     }
 
     private var accessibilityValue: String {
-        let binding = displayedShortcut?.displayName ?? "尚未选择"
+        let binding = displayedShortcut?.displayName ?? localized("尚未选择")
         let state: String
         if recorderState.isPressed {
-            state = "当前按下"
+            state = localized("当前按下")
         } else if recorderState.isRecording {
-            state = "正在检测"
+            state = localized("正在检测")
         } else {
-            state = "检测已暂停"
+            state = localized("检测已暂停")
         }
-        let mode = activation.resolved == .hold ? "按住说话" : "按一下开关"
-        return "\(binding)，\(state)，\(mode)"
+        let mode = localized(activation.resolved == .hold ? "按住说话" : "按一下开关")
+        return String(
+            format: localized("快捷键状态：%@，%@，%@"),
+            locale: locale,
+            binding,
+            state,
+            mode
+        )
     }
 
     private func setRecordingActive(_ active: Bool, announce: Bool = true) {
@@ -659,10 +685,35 @@ struct ShortcutRecorderCard: View {
             element: NSApplication.shared,
             notification: .announcementRequested,
             userInfo: [
-                .announcement: message,
+                .announcement: localizedAnnouncement(message),
                 .priority: NSAccessibilityPriorityLevel.high.rawValue
             ]
         )
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
+    }
+
+    private func localizedAnnouncement(_ message: String) -> String {
+        let unavailablePrefix = "快捷键无法使用："
+        if message.hasPrefix(unavailablePrefix) {
+            let detail = String(message.dropFirst(unavailablePrefix.count))
+            return String(
+                format: localized("快捷键无法使用：%@"),
+                locale: locale,
+                localized(detail)
+            )
+        }
+        let recognizedPrefix = "已识别快捷键 "
+        if message.hasPrefix(recognizedPrefix) {
+            return String(
+                format: localized("已识别快捷键 %@"),
+                locale: locale,
+                String(message.dropFirst(recognizedPrefix.count))
+            )
+        }
+        return localized(message)
     }
 
     private static func keyName(for event: ShortcutRecorderEvent) -> String? {
@@ -705,7 +756,7 @@ private struct ShortcutLiveKeycap: View {
     let reduceMotion: Bool
 
     var body: some View {
-        Text(title)
+        Text(verbatim: title)
             .font(LerroTheme.font(14, weight: .medium))
             .tracking(LerroTheme.uiTracking)
             .foregroundStyle(isPressed ? LerroTheme.pivotText : LerroTheme.text)

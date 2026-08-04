@@ -253,15 +253,16 @@ PY
         # The exact GET above proved this immutable key absent. ZIP archives are
         # application data, so the R2 Data Catalog prompt is irrelevant here.
         # SHA-256 readback remains the publication gate before any D1
-        # record becomes public; Wrangler 4.118.0 can otherwise report a large
-        # binary upload as complete while leaving the key absent.
+        # record becomes public. Wrangler 4.118.0 can report a large binary
+        # --file upload as complete while leaving the key absent; the --pipe
+        # path is verified against the same immutable key below.
         "$worker_binary" r2 object put "$r2_bucket/$r2_key" \
             --remote \
             --config "$distribution_config" \
-            --file "$archive_path" \
+            --pipe \
             --content-type application/zip \
             --cache-control "public, max-age=31536000, immutable" \
-            --force
+            < "$archive_path"
         r2_readback_succeeded=0
         for readback_attempt in {1..5}; do
             if "$worker_binary" r2 object get "$r2_bucket/$r2_key" \

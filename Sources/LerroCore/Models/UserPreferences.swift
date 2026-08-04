@@ -6,6 +6,25 @@ public enum AppAppearance: String, CaseIterable, Codable, Sendable {
     case dark
 }
 
+/// Controls the language used by the Lerro interface. Speech recognition and
+/// translation keep their independent locale preferences.
+public enum AppLanguage: String, CaseIterable, Codable, Sendable {
+    case system
+    case simplifiedChinese
+    case english
+
+    public var localeIdentifier: String {
+        switch self {
+        case .system:
+            Locale.autoupdatingCurrent.identifier
+        case .simplifiedChinese:
+            "zh-Hans"
+        case .english:
+            "en"
+        }
+    }
+}
+
 public enum HistoryRetention: String, CaseIterable, Codable, Sendable {
     case oneDay
     case oneWeek
@@ -30,6 +49,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     public var localInvitationCode: String
     public var recognitionLocaleIdentifier: String
     public var translationLanguageIdentifiers: [String]
+    public var appLanguage: AppLanguage
     public var microphoneDeviceUID: String?
     public var muteOtherAudio: Bool
     public var appearance: AppAppearance
@@ -72,6 +92,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         localInvitationCode: String = "",
         recognitionLocaleIdentifier: String = "zh_CN",
         translationLanguageIdentifiers: [String] = ["en_US"],
+        appLanguage: AppLanguage = .system,
         microphoneDeviceUID: String? = nil,
         muteOtherAudio: Bool = true,
         appearance: AppAppearance = .system,
@@ -93,6 +114,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         self.localInvitationCode = localInvitationCode
         self.recognitionLocaleIdentifier = recognitionLocaleIdentifier
         self.translationLanguageIdentifiers = Array(translationLanguageIdentifiers.prefix(3))
+        self.appLanguage = appLanguage
         self.microphoneDeviceUID = microphoneDeviceUID
         self.muteOtherAudio = muteOtherAudio
         self.appearance = appearance
@@ -117,6 +139,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         case localInvitationCode
         case recognitionLocaleIdentifier
         case translationLanguageIdentifiers
+        case appLanguage
         case microphoneDeviceUID
         case muteOtherAudio
         case appearance
@@ -163,6 +186,10 @@ public struct UserPreferences: Codable, Equatable, Sendable {
                 [String].self,
                 forKey: .translationLanguageIdentifiers
             ) ?? defaults.translationLanguageIdentifiers,
+            appLanguage: try container.decodeIfPresent(
+                AppLanguage.self,
+                forKey: .appLanguage
+            ) ?? defaults.appLanguage,
             microphoneDeviceUID: try container.decodeIfPresent(
                 String.self,
                 forKey: .microphoneDeviceUID

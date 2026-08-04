@@ -183,6 +183,17 @@ dd {
   font-weight: 600;
 }
 
+.language-switch {
+  color: var(--interior-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.language-switch:hover {
+  color: var(--interior-ink);
+}
+
 .download-label-short {
   display: none;
 }

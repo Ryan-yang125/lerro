@@ -5,6 +5,7 @@ struct RootView: View {
     @Bindable var session: AppSession
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.locale) private var locale
 
     var body: some View {
         ZStack {
@@ -73,7 +74,7 @@ struct RootView: View {
         )) {
             Button("好") { session.currentError = nil }
         } message: {
-            Text(session.currentError ?? "")
+            Text(verbatim: LerroInterfaceLocalization.string(session.currentError ?? "", locale: locale))
         }
     }
 

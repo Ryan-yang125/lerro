@@ -3,6 +3,7 @@ import LerroCore
 
 struct HomeView: View {
     @Bindable var session: AppSession
+    @Environment(\.locale) private var locale
 
     var body: some View {
         ScrollView {
@@ -57,10 +58,10 @@ struct HomeView: View {
     private func metric(value: String, label: String) -> some View {
         LerroCard(padding: 16) {
             VStack(alignment: .leading, spacing: 7) {
-                Text(label)
+                Text(verbatim: localized(label))
                     .lerroTypography(.caption)
                     .foregroundStyle(LerroTheme.secondaryText)
-                Text(value)
+                Text(verbatim: value)
                     .lerroTypography(.title)
                     .foregroundStyle(LerroTheme.text)
                     .lineLimit(1)
@@ -163,10 +164,10 @@ struct HomeView: View {
                     .foregroundStyle(LerroTheme.secondaryText)
                     .frame(width: 22)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
+                    Text(verbatim: localized(title))
                         .lerroTypography(.label)
                         .foregroundStyle(LerroTheme.text)
-                    Text(shortcut(for: mode, fallback: detail))
+                    Text(verbatim: shortcut(for: mode, fallback: localized(detail)))
                         .lerroTypography(.caption)
                         .foregroundStyle(LerroTheme.secondaryText)
                 }
@@ -177,7 +178,11 @@ struct HomeView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(LerroNavigationButtonStyle(selected: false))
-        .accessibilityLabel("\(title)，快捷键 \(shortcut(for: mode, fallback: detail))")
+        .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+            "快捷键 %@：%@",
+            locale: locale,
+            arguments: localized(title), shortcut(for: mode, fallback: localized(detail))
+        )))
     }
 
     private func infoCard(
@@ -191,10 +196,10 @@ struct HomeView: View {
                 Image(systemName: icon)
                     .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
                     .foregroundStyle(LerroTheme.text)
-                Text(title)
+                Text(verbatim: localized(title))
                     .lerroTypography(.heading)
                     .foregroundStyle(LerroTheme.text)
-                Text(detail)
+                Text(verbatim: localized(detail))
                     .lerroTypography(.caption)
                     .foregroundStyle(LerroTheme.secondaryText)
                     .lineLimit(2)
@@ -223,9 +228,13 @@ struct HomeView: View {
     }
 
     private func durationString(_ duration: TimeInterval) -> String {
-        if duration >= 3_600 { return String(format: "%.1f 小时", duration / 3_600) }
-        if duration >= 60 { return "\(Int(duration / 60)) 分钟" }
-        return "\(Int(duration)) 秒"
+        if duration >= 3_600 {
+            return LerroInterfaceLocalization.format("%.1f 小时", locale: locale, arguments: duration / 3_600)
+        }
+        if duration >= 60 {
+            return LerroInterfaceLocalization.format("%lld 分钟", locale: locale, arguments: Int64(duration / 60))
+        }
+        return LerroInterfaceLocalization.format("%lld 秒", locale: locale, arguments: Int64(duration))
     }
 
     private func compactNumber(_ value: Int) -> String {
@@ -237,10 +246,15 @@ struct HomeView: View {
     private func showSettings(_ entryPoint: SettingsEntryPoint) {
         session.presentSettings(entryPoint)
     }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
+    }
 }
 
 private struct HomeIntelligenceCard: View {
     @Bindable var session: AppSession
+    @Environment(\.locale) private var locale
 
     var body: some View {
         Button {
@@ -253,7 +267,7 @@ private struct HomeIntelligenceCard: View {
                 Text("智能处理")
                     .lerroTypography(.heading)
                     .foregroundStyle(LerroTheme.text)
-                Text(summary)
+                Text(verbatim: summary)
                     .lerroTypography(.caption)
                     .foregroundStyle(LerroTheme.secondaryText)
                     .lineLimit(2)
@@ -267,9 +281,9 @@ private struct HomeIntelligenceCard: View {
     private var summary: String {
         switch session.preferences.intelligenceMode {
         case .raw:
-            "原始听写"
+            localized("原始听写")
         case .local:
-            session.modelStatus.message.isEmpty ? "Qwen3.5 4B 本地 AI" : session.modelStatus.message
+            localizedStatus(session.modelStatus.message.isEmpty ? "Qwen3.5 4B 本地 AI" : session.modelStatus.message)
         case .remote:
             "\(session.preferences.remoteProvider.provider.lerroDisplayName) · \(session.preferences.remoteProvider.modelIdentifier)"
         }
@@ -281,5 +295,13 @@ private struct HomeIntelligenceCard: View {
         case .local: "cpu"
         case .remote: "network"
         }
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
+    }
+
+    private func localizedStatus(_ message: String) -> String {
+        LerroInterfaceLocalization.statusString(message, locale: locale)
     }
 }

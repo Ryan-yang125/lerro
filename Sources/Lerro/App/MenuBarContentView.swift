@@ -5,10 +5,15 @@ import LerroCore
 struct MenuBarContentView: View {
     let session: AppSession
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.locale) private var locale
 
     var body: some View {
         Button(action: {}) {
-            Label("Lerro · \(statusTitle)", systemImage: statusSystemImage)
+            Label {
+                Text(verbatim: statusMenuTitle)
+            } icon: {
+                Image(systemName: statusSystemImage)
+            }
         }
         .disabled(true)
 
@@ -36,13 +41,21 @@ struct MenuBarContentView: View {
         Button {
             showSettings(.settings)
         } label: {
-            Label(microphoneStatusTitle, systemImage: "mic")
+            Label {
+                Text(verbatim: microphoneStatusTitle)
+            } icon: {
+                Image(systemName: "mic")
+            }
         }
 
         Button {
             showSettings(.intelligence)
         } label: {
-            Label("智能处理 · \(intelligenceStatus)", systemImage: intelligenceIcon)
+            Label {
+                Text(verbatim: intelligenceMenuTitle)
+            } icon: {
+                Image(systemName: intelligenceIcon)
+            }
         }
 
         Divider()
@@ -80,19 +93,27 @@ struct MenuBarContentView: View {
         fallbackShortcut: String,
         icon: String
     ) -> some View {
-        Button {
+        let localizedTitle = localized(title)
+        let activeTitle = switch mode {
+        case .dictation: localized("完成听写")
+        case .translation: localized("完成翻译")
+        case .ask: localized("完成问答")
+        }
+        return Button {
             session.toggleCapture(mode)
         } label: {
-            Label(
-                LerroNativeMenuPresentation.captureTitle(
-                    title: title,
-                    shortcut: shortcut(for: mode, fallback: fallbackShortcut),
+            Label {
+                Text(verbatim: LerroNativeMenuPresentation.captureTitle(
+                    title: localizedTitle,
+                    activeTitle: activeTitle,
+                    shortcut: shortcut(for: mode, fallback: localized(fallbackShortcut)),
                     phase: session.phase,
                     activeMode: session.activeMode,
                     mode: mode
-                ),
-                systemImage: icon
-            )
+                ))
+            } icon: {
+                Image(systemName: icon)
+            }
         }
         .disabled(!LerroNativeMenuPresentation.captureActionEnabled(
             mode: mode,
@@ -123,12 +144,20 @@ struct MenuBarContentView: View {
     }
 
     private var microphoneStatusTitle: String {
-        let device = session.audioInputDevices.first(where: \.isDefault)?.name ?? "系统麦克风"
-        let permission = session.microphonePermission ? "已授权" : "待授权"
+        let device = session.audioInputDevices.first(where: \.isDefault)?.name ?? localized("系统麦克风")
+        let permission = localized(session.microphonePermission ? "已授权" : "待授权")
         return LerroNativeMenuPresentation.shortTitle("\(device) · \(permission)")
     }
 
-    private var statusTitle: String {
+    private var statusMenuTitle: String {
+        "Lerro · \(localized(statusTitleKey))"
+    }
+
+    private var intelligenceMenuTitle: String {
+        "\(localized("智能处理")) · \(intelligenceStatus)"
+    }
+
+    private var statusTitleKey: String {
         switch session.phase {
         case .idle, .success, .cancelled: "就绪"
         case .listening: "正在听"
@@ -157,18 +186,22 @@ struct MenuBarContentView: View {
     private var intelligenceStatus: String {
         switch session.preferences.intelligenceMode {
         case .raw:
-            "原始听写"
+            localized("原始听写")
         case .remote:
             session.preferences.remoteProvider.provider.lerroDisplayName
         case .local:
             switch session.modelStatus.state {
-            case .loaded: "本地 AI 已就绪"
-            case .loading, .downloading: "本地 AI 准备中"
-            case .failed: "本地 AI 需重试"
-            case .ready: "本地 AI 可加载"
-            case .unavailable: "本地 AI 未下载"
+            case .loaded: localized("本地 AI 已就绪")
+            case .loading, .downloading: localized("本地 AI 准备中")
+            case .failed: localized("本地 AI 需重试")
+            case .ready: localized("本地 AI 可加载")
+            case .unavailable: localized("本地 AI 未下载")
             }
         }
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
     }
 }
 
@@ -192,14 +225,13 @@ enum LerroNativeMenuPresentation {
 
     static func captureTitle(
         title: String,
+        activeTitle: String,
         shortcut: String,
         phase: CapturePhase,
         activeMode: CaptureMode,
         mode: CaptureMode
     ) -> String {
-        let actionTitle = phase == .listening && activeMode == mode
-            ? "完成\(title)"
-            : title
+        let actionTitle = phase == .listening && activeMode == mode ? activeTitle : title
         return shortTitle("\(actionTitle) · \(shortcut)")
     }
 

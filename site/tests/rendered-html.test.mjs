@@ -32,6 +32,7 @@ test("server-renders the complete Lerro landing page", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Lerro — Native voice typing for macOS<\/title>/i);
+  assert.match(html, /<html[^>]+lang="en"/i);
   assert.match(html, /Speak\./);
   assert.match(html, /Your Mac writes\./);
   assert.match(html, /Download for macOS/);
@@ -45,13 +46,34 @@ test("server-renders the complete Lerro landing page", async () => {
   assert.match(html, /hero-hud--listening/);
   assert.equal((html.match(/hero-hud__bar/g) ?? []).length, 10);
   assert.match(html, /data-interior-link/);
-  assert.match(html, /lerro-home-light\.png/);
-  assert.match(html, /lerro-onboarding-shortcuts-light\.png/);
-  assert.match(html, /lerro-settings-light\.png/);
+  assert.match(html, /screenshots\/en\/lerro-home-light\.png/);
+  assert.match(html, /screenshots\/en\/lerro-onboarding-shortcuts-light\.png/);
+  assert.match(html, /screenshots\/en\/lerro-settings-light\.png/);
   assert.match(html, /https:\/\/updates\.lerroapp\.com\/download\/macos\/latest/);
   assert.match(html, /href="\/changelog"/);
+  assert.match(html, /href="\/zh"/);
   assert.match(html, /https:\/\/lerroapp\.com/);
   assert.doesNotMatch(html, /releases\/latest|codex-preview|SkeletonPreview|react-loading-skeleton/i);
+});
+
+test("server-renders the Simplified Chinese landing page with localized metadata and assets", async () => {
+  const response = await render("/zh");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+
+  assert.match(html, /<title>Lerro — macOS 原生语音输入<\/title>/);
+  assert.match(html, /<html[^>]+lang="zh-Hans"/i);
+  assert.match(html, /开口说话。/);
+  assert.match(html, /Mac 为你打字。/);
+  assert.match(html, /下载 macOS 版/);
+  assert.match(html, /screenshots\/zh\/lerro-home-light\.png/);
+  assert.match(html, /screenshots\/zh\/lerro-onboarding-shortcuts-light\.png/);
+  assert.match(html, /screenshots\/zh\/lerro-settings-light\.png/);
+  assert.match(html, /href="\/zh\/changelog"/);
+  assert.match(html, /href="\/"/);
+  assert.match(html, /rel="canonical" href="https:\/\/lerroapp\.com\/zh"/i);
+  assert.match(html, /hreflang="en"/i);
+  assert.match(html, /hreflang="zh-CN"/i);
 });
 
 test("server-renders the changelog with permanent release downloads", async () => {
@@ -74,6 +96,30 @@ test("server-renders the changelog with permanent release downloads", async () =
   assert.match(html, /August 2, 2026/);
   assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.0\.3\/5\/Lerro-macOS-arm64\.zip/);
   assert.match(html, /href="\/changelog"/);
+  assert.match(html, /Version(?:\s|<[^>]+>)*1\.2\.0/);
+  assert.match(html, /Build(?:\s|<[^>]+>)*8/);
+  assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.2\.0\/8\/Lerro-macOS-arm64\.zip/);
+  assert.match(html, /href="\/zh\/changelog"/);
+});
+
+test("server-renders the Simplified Chinese changelog with permanent downloads", async () => {
+  const response = await render("/zh/changelog");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+
+  assert.match(html, /<title>更新日志 — Lerro<\/title>/);
+  assert.match(html, /<html[^>]+lang="zh-Hans"/i);
+  assert.match(html, /Lerro 的最新变化。/);
+  assert.match(html, /版本(?:\s|<[^>]+>)*1\.1\.1/);
+  assert.match(html, /构建(?:\s|<[^>]+>)*7/);
+  assert.match(html, /2026 年 8 月 4 日/);
+  assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.1\.1\/7\/Lerro-macOS-arm64\.zip/);
+  assert.match(html, /版本(?:\s|<[^>]+>)*1\.2\.0/);
+  assert.match(html, /构建(?:\s|<[^>]+>)*8/);
+  assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.2\.0\/8\/Lerro-macOS-arm64\.zip/);
+  assert.match(html, /href="\/zh\/changelog"/);
+  assert.match(html, /href="\/changelog"/);
+  assert.match(html, /rel="canonical" href="https:\/\/lerroapp\.com\/zh\/changelog"/i);
 });
 
 test("publishes crawler metadata for the custom domain", async () => {
@@ -92,6 +138,8 @@ test("publishes crawler metadata for the custom domain", async () => {
   assert.match(robots, /Sitemap: https:\/\/lerroapp\.com\/sitemap\.xml/);
   assert.match(sitemap, /<loc>https:\/\/lerroapp\.com\/<\/loc>/);
   assert.match(sitemap, /<loc>https:\/\/lerroapp\.com\/changelog<\/loc>/);
+  assert.match(sitemap, /<loc>https:\/\/lerroapp\.com\/zh<\/loc>/);
+  assert.match(sitemap, /<loc>https:\/\/lerroapp\.com\/zh\/changelog<\/loc>/);
 });
 
 test("keeps the public site free of starter surfaces", async () => {
@@ -115,9 +163,12 @@ test("keeps the public site free of starter surfaces", async () => {
     access(new URL("public/lerro-symbol.svg", projectRoot)),
     access(new URL("public/favicon.png", projectRoot)),
     access(new URL("public/og.png", projectRoot)),
-    access(new URL("public/screenshots/lerro-home-light.png", projectRoot)),
-    access(new URL("public/screenshots/lerro-onboarding-shortcuts-light.png", projectRoot)),
-    access(new URL("public/screenshots/lerro-settings-light.png", projectRoot)),
+    access(new URL("public/screenshots/en/lerro-home-light.png", projectRoot)),
+    access(new URL("public/screenshots/en/lerro-onboarding-shortcuts-light.png", projectRoot)),
+    access(new URL("public/screenshots/en/lerro-settings-light.png", projectRoot)),
+    access(new URL("public/screenshots/zh/lerro-home-light.png", projectRoot)),
+    access(new URL("public/screenshots/zh/lerro-onboarding-shortcuts-light.png", projectRoot)),
+    access(new URL("public/screenshots/zh/lerro-settings-light.png", projectRoot)),
     access(new URL("app/components/interior/README.md", projectRoot)),
   ]);
 

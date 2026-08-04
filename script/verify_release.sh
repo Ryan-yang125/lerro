@@ -39,6 +39,14 @@ zsh -n \
     "$project_dir/Brand/scripts"/*.sh \
     "$script_dir"/*.sh \
     "$script_dir"/*.zsh
+if grep -q -- '--force' "$project_dir/script/publish_cloudflare_release.sh"; then
+    print -u2 "Cloudflare publication must keep Wrangler's standard R2 upload validation enabled."
+    exit 1
+fi
+if ! grep -q -- '--pipe' "$project_dir/script/publish_cloudflare_release.sh"; then
+    print -u2 "Cloudflare publication must use the verified R2 streaming upload path."
+    exit 1
+fi
 plutil -lint config/Info.plist config/Lerro.entitlements Sources/Lerro/Resources/PrivacyInfo.xcprivacy
 
 print "[2/8] Verifying deterministic Brand Kit assets"
@@ -169,6 +177,10 @@ required_resources=(
     PrivacyPolicy.html
     TermsOfUse.html
     icon.icns
+    en.lproj/Localizable.strings
+    en.lproj/InfoPlist.strings
+    zh-Hans.lproj/Localizable.strings
+    zh-Hans.lproj/InfoPlist.strings
     MenuBar/LerroMenuIdleTemplate.png
     MenuBar/LerroMenuIdleTemplate@2x.png
     MenuBar/LerroMenuListeningTemplate.png
@@ -181,6 +193,19 @@ required_resources=(
 for relative_path in "${required_resources[@]}"; do
     [[ -r "$app_path/Contents/Resources/$relative_path" ]] || {
         print -u2 "Missing release resource: $relative_path"
+        exit 1
+    }
+done
+for localization_resource in \
+    en.lproj/Localizable.strings \
+    en.lproj/InfoPlist.strings \
+    zh-Hans.lproj/Localizable.strings \
+    zh-Hans.lproj/InfoPlist.strings; do
+    packaged_localization="$app_path/Contents/Resources/$localization_resource"
+    source_localization="$project_dir/Sources/Lerro/Resources/$localization_resource"
+    plutil -lint "$packaged_localization"
+    cmp -s "$packaged_localization" "$source_localization" || {
+        print -u2 "Packaged localization differs from source: $localization_resource"
         exit 1
     }
 done
@@ -331,6 +356,10 @@ with (app / "Contents/Info.plist").open("rb") as handle:
     info = plistlib.load(handle)
 if manifest["application"]["bundleIdentifier"] != info["CFBundleIdentifier"]:
     raise SystemExit("Bundle identifier differs from manifest")
+if info.get("CFBundleDevelopmentRegion") != "en":
+    raise SystemExit("English must remain the unsupported-language fallback")
+if info.get("CFBundleLocalizations") != ["en", "zh-Hans"]:
+    raise SystemExit("Supported interface-localization inventory differs")
 
 if info.get("SUFeedURL") != "https://updates.lerroapp.com/appcast/stable.xml":
     raise SystemExit("Sparkle feed URL differs from the production update endpoint")

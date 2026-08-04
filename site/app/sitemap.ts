@@ -16,5 +16,17 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 0.8,
     },
+    {
+      url: "https://lerroapp.com/zh",
+      lastModified: new Date("2026-08-04T00:00:00.000Z"),
+      changeFrequency: "weekly",
+      priority: 0.9,
+    },
+    {
+      url: "https://lerroapp.com/zh/changelog",
+      lastModified: new Date("2026-08-04T00:00:00.000Z"),
+      changeFrequency: "weekly",
+      priority: 0.7,
+    },
   ];
 }

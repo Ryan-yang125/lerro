@@ -196,7 +196,7 @@ private actor FixtureTranslationService: TranslationServicing {
             state: .ready,
             sourceLanguageIdentifier: sourceLanguageIdentifier,
             targetLanguageIdentifier: targetLanguageIdentifier,
-            message: "Fixture translation adapter"
+            message: "翻译资源已准备"
         )
     }
 

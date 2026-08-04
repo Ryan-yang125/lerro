@@ -1,3 +1,5 @@
+import type { Locale } from "../i18n";
+
 export type Release = {
   version: string;
   build: string;
@@ -10,7 +12,21 @@ export type Release = {
 
 // Add each published release here. Immutable URLs stay attached to the version
 // they shipped with, while the homepage always points to the latest release.
-export const releases: readonly Release[] = [
+const releases: readonly Release[] = [
+  {
+    version: "1.2.0",
+    build: "8",
+    publishedAt: "2026-08-04",
+    publishedLabel: "August 4, 2026",
+    summary: "Lerro now speaks English and Simplified Chinese across the app and its public home.",
+    highlights: [
+      "The app interface now supports English and Simplified Chinese.",
+      "The website and public documentation now offer matching English and Simplified Chinese routes.",
+      "Release screenshots now ship in language-specific sets for both product surfaces.",
+    ],
+    downloadUrl:
+      "https://updates.lerroapp.com/releases/1.2.0/8/Lerro-macOS-arm64.zip",
+  },
   {
     version: "1.1.1",
     build: "7",
@@ -55,3 +71,31 @@ export const releases: readonly Release[] = [
       "https://updates.lerroapp.com/releases/1.0.3/5/Lerro-macOS-arm64.zip",
   },
 ];
+
+const chineseReleaseCopy = [
+  {
+    publishedLabel: "2026 年 8 月 4 日",
+    summary: "Lerro 现已在应用和公开官网中支持英文与简体中文。",
+    highlights: ["应用界面现已支持英文与简体中文。", "网站和公开文档现已提供对应的英文与简体中文路由。", "发布截图现已按语言提供两套产品界面。"],
+  },
+  {
+    publishedLabel: "2026 年 8 月 4 日",
+    summary: "更可靠的 Fn 快捷键，让 macOS Emoji 不再干扰录音。",
+    highlights: ["内建 Fn 和外接 Globe 键现在使用统一的物理按键所有权模型。", "每个已配置的 Fn 序列都会持续捕获到最终松开，包括重复的修饰键事件。", "快捷键监听现在仅观察键盘事件，并保持同样的两项权限设置。"],
+  },
+  {
+    publishedLabel: "2026 年 8 月 4 日",
+    summary: "更快的快捷键、更深入的 Apple Speech 集成，以及设备端翻译。",
+    highlights: ["Fn 快捷键采用更清晰的两项权限设置，并避开 Globe 菜单。", "Apple Speech 更可靠地处理实时修订和音频结束。", "翻译现在在设备端使用 Apple Translation，并提供更清晰的语言资源设置。", "引导、快捷键设置、空闲 HUD 和更新下载都更容易使用。", "网站和 GitHub 现已展示当前产品、真实截图和镜像发布产物。"],
+  },
+  {
+    publishedLabel: "2026 年 8 月 2 日",
+    summary: "首个公开稳定版更新。",
+    highlights: ["自动更新会在 Lerro 内交付已签名、已公证的发布版本。", "公开下载已针对 Apple 芯片上的 macOS 26 完成验证。"],
+  },
+] as const;
+
+export function getReleases(locale: Locale): readonly Release[] {
+  if (locale === "en") return releases;
+  return releases.map((release, index) => ({ ...release, ...chineseReleaseCopy[index] }));
+}

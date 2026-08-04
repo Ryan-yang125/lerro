@@ -3,6 +3,7 @@ import LerroCore
 
 struct SidebarView: View {
     @Bindable var session: AppSession
+    @Environment(\.locale) private var locale
     @FocusState private var focusedDestination: SidebarDestination?
 
     var body: some View {
@@ -68,7 +69,7 @@ struct SidebarView: View {
                 Image(systemName: systemName)
                     .font(.system(size: LerroTheme.navigationIconSize, weight: .medium))
                     .frame(width: 18)
-                Text(title)
+                Text(verbatim: localized(title))
                     .lerroTypography(selected ? .label : .secondary)
                 Spacer(minLength: 0)
             }
@@ -78,13 +79,17 @@ struct SidebarView: View {
         .onMoveCommand { direction in
             moveNavigationFocus(from: destination, direction: direction)
         }
-        .accessibilityLabel(title)
-        .accessibilityValue(selected ? "已选择" : "")
+        .accessibilityLabel(Text(verbatim: localized(title)))
+        .accessibilityValue(Text(verbatim: selected ? localized("已选择") : ""))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private func showSettings(_ entryPoint: SettingsEntryPoint) {
         session.presentSettings(entryPoint)
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
     }
 
     private func moveNavigationFocus(

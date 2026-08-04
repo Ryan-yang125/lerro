@@ -4,6 +4,7 @@ struct AskAnswerCardView: View {
     @Bindable var session: AppSession
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
     @State private var promptExpanded = false
     @State private var promptCopied = false
     @State private var answerCopied = false
@@ -63,7 +64,7 @@ struct AskAnswerCardView: View {
                 }
                 .buttonStyle(LerroPressButtonStyle())
                 .help("关闭 · Esc")
-                .accessibilityLabel("关闭问答面板")
+                .accessibilityLabel(localized("关闭问答面板"))
                 .keyboardShortcut(.cancelAction)
             }
         }
@@ -76,7 +77,13 @@ struct AskAnswerCardView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(LerroTheme.secondaryText)
                     .frame(width: 14, height: 22)
-                Text(session.answerQuestion.isEmpty ? "请说出问题" : session.answerQuestion)
+                Group {
+                    if session.answerQuestion.isEmpty {
+                        Text("请说出问题")
+                    } else {
+                        Text(verbatim: session.answerQuestion)
+                    }
+                }
                     .font(LerroTheme.font(14))
                     .foregroundStyle(LerroTheme.secondaryText)
                     .lineSpacing(4)
@@ -93,14 +100,16 @@ struct AskAnswerCardView: View {
                 }
                 .buttonStyle(LerroPressButtonStyle())
                 .help("复制问题")
-                .accessibilityLabel(promptCopied ? "问题已复制" : "复制问题")
+                .accessibilityLabel(localized(promptCopied ? "问题已复制" : "复制问题"))
                 .disabled(session.answerQuestion.isEmpty)
             }
             if session.answerQuestion.count > 110 {
-                Button(promptExpanded ? "收起" : "更多") {
+                Button {
                     withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
                         promptExpanded.toggle()
                     }
+                } label: {
+                    Text(LocalizedStringKey(promptExpanded ? "收起" : "更多"))
                 }
                 .buttonStyle(LerroPressButtonStyle())
                 .font(LerroTheme.font(12, weight: .medium))
@@ -134,7 +143,7 @@ struct AskAnswerCardView: View {
                 }
                 .buttonStyle(LerroPressButtonStyle())
                 .help("复制回答")
-                .accessibilityLabel(answerCopied ? "回答已复制" : "复制回答")
+                .accessibilityLabel(localized(answerCopied ? "回答已复制" : "复制回答"))
                 .disabled(session.answerText?.isEmpty != false)
             }
             .foregroundStyle(LerroTheme.secondaryText)
@@ -186,6 +195,10 @@ struct AskAnswerCardView: View {
             try? await Task.sleep(for: .seconds(3))
             answerCopied = false
         }
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
     }
 
     private var answerSectionHeight: CGFloat {

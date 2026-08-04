@@ -31,6 +31,7 @@ private extension SettingsDestination {
 struct SettingsOverlayView: View {
     @Bindable var session: AppSession
     @FocusState private var focusedDestination: SettingsDestination?
+    @Environment(\.locale) private var locale
 
     var body: some View {
         HStack(spacing: 0) {
@@ -111,7 +112,7 @@ struct SettingsOverlayView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             if let title {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .lerroTypography(.captionMedium)
                     .foregroundStyle(LerroTheme.metadataText)
                     .padding(.horizontal, 10)
@@ -136,7 +137,7 @@ struct SettingsOverlayView: View {
                     .font(.system(size: LerroTheme.navigationIconSize, weight: .medium))
                     .frame(width: 18)
                     .accessibilityHidden(true)
-                Text(item.title)
+                Text(LocalizedStringKey(item.title))
                     .lerroTypography(.label)
                 Spacer(minLength: 0)
             }
@@ -146,8 +147,8 @@ struct SettingsOverlayView: View {
         .onMoveCommand { direction in
             moveNavigationFocus(from: item, direction: direction)
         }
-        .accessibilityLabel(item.title)
-        .accessibilityValue(selected ? "已选择" : "")
+        .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.string(item.title, locale: locale)))
+        .accessibilityValue(Text(verbatim: selected ? LerroInterfaceLocalization.string("已选择", locale: locale) : ""))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -196,7 +197,7 @@ private struct SettingsPageContainer<Content: View>: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .lerroTypography(.title)
                     .foregroundStyle(LerroTheme.text)
                     .frame(height: 32, alignment: .leading)
@@ -214,6 +215,7 @@ private struct SettingsPageContainer<Content: View>: View {
 
 private struct MainSettingsPage: View {
     @Bindable var session: AppSession
+    @Environment(\.locale) private var locale
     @State private var recordingAction: HotkeyAction?
     @State private var editingShortcut: HotkeyDefinition?
     @State private var editingTranslationLanguages = false
@@ -234,8 +236,19 @@ private struct MainSettingsPage: View {
 
                 settingsGroup("语言") {
                     VStack(spacing: 0) {
-                        settingsRow("界面与听写语言", detail: "识别语言与首选地区变体") {
-                            Picker("界面与听写语言", selection: $session.preferences.recognitionLocaleIdentifier) {
+                        settingsRow("界面语言", detail: "跟随系统，或在 Lerro 中单独选择") {
+                            Picker("界面语言", selection: $session.preferences.appLanguage) {
+                                Text("跟随系统").tag(AppLanguage.system)
+                                Text("简体中文").tag(AppLanguage.simplifiedChinese)
+                                Text("English").tag(AppLanguage.english)
+                            }
+                            .labelsHidden()
+                            .accessibilityLabel("界面语言")
+                            .frame(width: 170)
+                        }
+                        Divider().overlay(LerroTheme.thinBorder)
+                        settingsRow("听写语言", detail: "识别语言与首选地区变体") {
+                            Picker("听写语言", selection: $session.preferences.recognitionLocaleIdentifier) {
                                 Text("简体中文").tag("zh_CN")
                                 Text("繁體中文").tag("zh_TW")
                                 Text("English (US)").tag("en_US")
@@ -243,7 +256,7 @@ private struct MainSettingsPage: View {
                                 Text("日本語").tag("ja_JP")
                             }
                             .labelsHidden()
-                            .accessibilityLabel("界面与听写语言")
+                            .accessibilityLabel("听写语言")
                             .frame(width: 170)
                         }
                         Divider().overlay(LerroTheme.thinBorder)
@@ -251,16 +264,18 @@ private struct MainSettingsPage: View {
                             HStack(spacing: 8) {
                                 Picker("翻译目标语言", selection: primaryTranslationLanguage) {
                                     ForEach(TranslationLanguageOption.all) { language in
-                                        Text(language.title).tag(language.identifier)
+                                        Text(verbatim: localized(language.title)).tag(language.identifier)
                                     }
                                 }
                                 .labelsHidden()
                                 .accessibilityLabel("翻译目标语言")
                                 .frame(width: 138)
-                                Button(session.preferences.translationLanguageIdentifiers.count > 1
-                                    ? "\(session.preferences.translationLanguageIdentifiers.count)/3"
-                                    : "添加") {
+                                Button {
                                     editingTranslationLanguages = true
+                                } label: {
+                                    Text(verbatim: session.preferences.translationLanguageIdentifiers.count > 1
+                                        ? "\(session.preferences.translationLanguageIdentifiers.count)/3"
+                                        : localized("添加"))
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
@@ -293,7 +308,9 @@ private struct MainSettingsPage: View {
                             Picker("麦克风", selection: microphoneSelection) {
                                 Text("系统默认").tag("")
                                 ForEach(session.audioInputDevices) { device in
-                                    Text(device.isDefault ? "\(device.name)（默认）" : device.name)
+                                    Text(verbatim: device.isDefault
+                                        ? LerroInterfaceLocalization.format("%@（默认）", locale: locale, arguments: device.name)
+                                        : device.name)
                                         .tag(device.uid)
                                 }
                             }
@@ -399,10 +416,10 @@ private struct MainSettingsPage: View {
         return VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
+                    Text(verbatim: localized(title))
                         .font(LerroTheme.font(14, weight: .medium))
                         .foregroundStyle(LerroTheme.text)
-                    Text(detail)
+                    Text(verbatim: localized(detail))
                         .font(LerroTheme.font(13))
                         .foregroundStyle(LerroTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -412,7 +429,11 @@ private struct MainSettingsPage: View {
                     .font(LerroTheme.font(12, weight: .medium))
                     .foregroundStyle(reachedLimit ? LerroTheme.secondaryText : LerroTheme.tertiaryText)
                     .monospacedDigit()
-                    .accessibilityLabel("\(title)已设置 \(definitions.count) 个快捷键，最多四个")
+                    .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                        "%@已设置 %lld 个快捷键，最多四个",
+                        locale: locale,
+                        arguments: localized(title), Int64(definitions.count)
+                    )))
             }
             .padding(12)
 
@@ -452,25 +473,29 @@ private struct MainSettingsPage: View {
                 .controlSize(.small)
                 .font(LerroTheme.font(12, weight: .medium))
                 .disabled(reachedLimit || configurationUnavailable)
-                .help(
-                    configurationUnavailable
-                        ? "完成当前语音输入后可以修改快捷键"
-                        : reachedLimit
-                            ? "每项功能最多设置四个快捷键"
-                            : "为\(title)添加另一个快捷键"
-                )
-                .accessibilityLabel("为\(title)添加快捷键")
-                .accessibilityHint(
+                .help(Text(verbatim: addShortcutHelp(title: title, unavailable: configurationUnavailable, reachedLimit: reachedLimit)))
+                .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                    "为%@添加快捷键",
+                    locale: locale,
+                    arguments: localized(title)
+                )))
+                .accessibilityHint(Text(verbatim: localized(
                     configurationUnavailable
                         ? "完成当前语音输入后可以修改"
                         : reachedLimit
                             ? "已达到四个快捷键上限"
                             : "打开快捷键录制界面"
-                )
+                )))
 
                 Spacer()
 
-                Text(reachedLimit ? "已达到 4 个上限" : "还可添加 \(4 - definitions.count) 个")
+                Text(verbatim: reachedLimit
+                    ? localized("已达到 4 个上限")
+                    : LerroInterfaceLocalization.format(
+                        "还可添加 %lld 个",
+                        locale: locale,
+                        arguments: Int64(4 - definitions.count)
+                    ))
                     .font(LerroTheme.font(12))
                     .foregroundStyle(LerroTheme.tertiaryText)
             }
@@ -491,12 +516,24 @@ private struct MainSettingsPage: View {
 
         return HStack(spacing: 12) {
             ShortcutBadge(title: definition.displayName)
-                .accessibilityLabel("快捷键 \(definition.displayName)")
+                .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                    "快捷键 %@",
+                    locale: locale,
+                    arguments: definition.displayName
+                )))
 
-            Label(mode, systemImage: modeIcon)
+            Label {
+                Text(verbatim: localized(mode))
+            } icon: {
+                Image(systemName: modeIcon)
+            }
                 .font(LerroTheme.font(12, weight: .medium))
                 .foregroundStyle(LerroTheme.secondaryText)
-                .accessibilityLabel("触发方式：\(mode)")
+                .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                    "触发方式：%@",
+                    locale: locale,
+                    arguments: localized(mode)
+                )))
 
             Spacer(minLength: 8)
 
@@ -512,12 +549,14 @@ private struct MainSettingsPage: View {
             .buttonStyle(.borderless)
             .controlSize(.small)
             .disabled(configurationUnavailable)
-            .help(
-                configurationUnavailable
-                    ? "完成当前语音输入后可以修改快捷键"
-                    : "编辑 \(definition.displayName)"
-            )
-            .accessibilityLabel("编辑\(actionTitle)快捷键 \(definition.displayName)")
+            .help(Text(verbatim: configurationUnavailable
+                ? localized("完成当前语音输入后可以修改快捷键")
+                : LerroInterfaceLocalization.format("编辑 %@", locale: locale, arguments: definition.displayName)))
+            .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                "编辑%@快捷键 %@",
+                locale: locale,
+                arguments: localized(actionTitle), definition.displayName
+            )))
             .accessibilityHint("可重新录制按键并更改触发方式")
 
             Button {
@@ -534,15 +573,23 @@ private struct MainSettingsPage: View {
                     : LerroTheme.secondaryText
             )
             .disabled(isOnlyBinding || configurationUnavailable)
-            .help(
-                configurationUnavailable
-                    ? "完成当前语音输入后可以修改快捷键"
-                    : isOnlyBinding
-                        ? "每项功能至少保留一个快捷键"
-                        : "删除 \(definition.displayName)"
-            )
-            .accessibilityLabel("删除\(actionTitle)快捷键 \(definition.displayName)")
-            .accessibilityHint(isOnlyBinding ? "每项功能至少保留一个快捷键" : "从\(actionTitle)中移除此快捷键")
+            .help(Text(verbatim: configurationUnavailable
+                ? localized("完成当前语音输入后可以修改快捷键")
+                : isOnlyBinding
+                    ? localized("每项功能至少保留一个快捷键")
+                    : LerroInterfaceLocalization.format("删除 %@", locale: locale, arguments: definition.displayName)))
+            .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                "删除%@快捷键 %@",
+                locale: locale,
+                arguments: localized(actionTitle), definition.displayName
+            )))
+            .accessibilityHint(Text(verbatim: isOnlyBinding
+                ? localized("每项功能至少保留一个快捷键")
+                : LerroInterfaceLocalization.format(
+                    "从%@中移除此快捷键",
+                    locale: locale,
+                    arguments: localized(actionTitle)
+                )))
         }
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
@@ -560,9 +607,9 @@ private struct MainSettingsPage: View {
     private var permissionSummary: some View {
         settingsGroup("系统权限") {
             VStack(spacing: 0) {
-                permissionRow("麦克风", granted: session.microphonePermission, settingsAnchor: "Privacy_Microphone")
+                permissionRow("麦克风", granted: session.microphonePermission, settingsAnchor: "Privacy_Microphone", locale: locale)
                 Divider().overlay(LerroTheme.thinBorder)
-                permissionRow("辅助功能", granted: session.accessibilityPermission, settingsAnchor: "Privacy_Accessibility")
+                permissionRow("辅助功能", granted: session.accessibilityPermission, settingsAnchor: "Privacy_Accessibility", locale: locale)
                 Divider().overlay(LerroTheme.thinBorder)
                 HStack {
                     Button("重新检查权限") { Task { await session.refreshPermissions(prompt: true) } }
@@ -580,7 +627,7 @@ private struct MainSettingsPage: View {
         status: LanguageResourceStatus,
         prepare: @escaping () -> Void
     ) -> some View {
-        settingsRow(title, detail: status.message) {
+        settingsRow(title, detail: LerroInterfaceLocalization.statusString(status.message, locale: locale)) {
             switch status.state {
             case .ready:
                 Label("已准备", systemImage: "checkmark.circle.fill")
@@ -605,11 +652,29 @@ private struct MainSettingsPage: View {
     }
 
     private func shortcutDetail(for action: HotkeyAction, primary: String) -> String {
-        guard let definition = shortcuts(action).first else { return primary }
+        guard let definition = shortcuts(action).first else { return localized(primary) }
         let mode = definition.activation.resolved == .hold
-            ? "按下开始，松开完成"
-            : "按一下开始，再按一下完成"
-        return "\(primary)；\(mode)"
+            ? localized("按下开始，松开完成")
+            : localized("按一下开始，再按一下完成")
+        return LerroInterfaceLocalization.format(
+            "%@；%@",
+            locale: locale,
+            arguments: localized(primary), mode
+        )
+    }
+
+    private func addShortcutHelp(title: String, unavailable: Bool, reachedLimit: Bool) -> String {
+        if unavailable { return localized("完成当前语音输入后可以修改快捷键") }
+        if reachedLimit { return localized("每项功能最多设置四个快捷键") }
+        return LerroInterfaceLocalization.format(
+            "为%@添加另一个快捷键",
+            locale: locale,
+            arguments: localized(title)
+        )
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
     }
 
     private var primaryTranslationLanguage: Binding<String> {
@@ -691,6 +756,7 @@ private struct AccountSettingsPage: View {
 
 private struct PersonalSettingsPage: View {
     @Bindable var session: AppSession
+    @Environment(\.locale) private var locale
 
     var body: some View {
         SettingsPageContainer("个性化") {
@@ -722,9 +788,13 @@ private struct PersonalSettingsPage: View {
                     ProgressView(value: Double(session.usage.personalizationPercent), total: 100)
 
                     Divider().overlay(LerroTheme.thinBorder)
-                    reportLine("个人词典", value: "\(session.dictionaryEntries.count) 个词条")
-                    reportLine("应用语气", value: "\(session.preferences.appToneProfiles.count) 个配置")
-                    reportLine("智能处理", value: session.preferences.intelligenceMode.lerroDisplayName)
+                    reportLine("个人词典", value: LerroInterfaceLocalization.format(
+                        "%lld 个词条", locale: locale, arguments: Int64(session.dictionaryEntries.count)
+                    ))
+                    reportLine("应用语气", value: LerroInterfaceLocalization.format(
+                        "%lld 个配置", locale: locale, arguments: Int64(session.preferences.appToneProfiles.count)
+                    ))
+                    reportLine("智能处理", value: localized(session.preferences.intelligenceMode.lerroDisplayName))
 
                     Divider().overlay(LerroTheme.thinBorder)
                     HStack(alignment: .center, spacing: 12) {
@@ -735,9 +805,13 @@ private struct PersonalSettingsPage: View {
                             .background(LerroTheme.fillSelected)
                             .clipShape(RoundedRectangle(cornerRadius: LerroTheme.navigationRadius, style: .continuous))
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("当前使用：\(session.preferences.intelligenceMode.lerroDisplayName)")
+                            Text(verbatim: LerroInterfaceLocalization.format(
+                                "当前使用：%@",
+                                locale: locale,
+                                arguments: localized(session.preferences.intelligenceMode.lerroDisplayName)
+                            ))
                                 .font(LerroTheme.font(14, weight: .medium))
-                            Text(intelligenceModeDetail)
+                            Text(verbatim: localized(intelligenceModeDetail))
                                 .font(LerroTheme.font(12))
                                 .foregroundStyle(LerroTheme.secondaryText)
                                 .lineLimit(2)
@@ -778,15 +852,24 @@ private struct PersonalSettingsPage: View {
             "\(session.preferences.remoteProvider.provider.lerroDisplayName) · \(session.preferences.remoteProvider.modelIdentifier)"
         }
     }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
+    }
 }
 
 private struct AboutSettingsPage: View {
     @Bindable var session: AppSession
+    @Environment(\.locale) private var locale
 
     var body: some View {
         SettingsPageContainer("关于") {
             VStack(spacing: 0) {
-                settingsRow("Lerro for Mac", detail: "版本 \(AppMetadata.version) · Swift 原生") {
+                settingsRow("Lerro for Mac", detail: LerroInterfaceLocalization.format(
+                    "版本 %@ · Swift 原生",
+                    locale: locale,
+                    arguments: AppMetadata.version
+                )) {
                     Button("检查更新") {
                         AppUpdateController.shared.checkForUpdates()
                     }
@@ -818,12 +901,18 @@ private struct HelpSettingsPage: View {
 }
 
 private struct ReleaseNotesPage: View {
+    @Environment(\.locale) private var locale
+
     var body: some View {
         SettingsPageContainer("版本说明") {
             VStack(alignment: .leading, spacing: 16) {
-                Text("\(AppMetadata.version)（构建 \(AppMetadata.build)）")
+                Text(verbatim: LerroInterfaceLocalization.format(
+                    "%@（构建 %@）",
+                    locale: locale,
+                    arguments: AppMetadata.version, AppMetadata.build
+                ))
                     .font(LerroTheme.font(14, weight: .medium))
-                Text("强化核心链路：录音准备与取消隔离、快捷键精确匹配、焦点安全交付、失败结果恢复、并发存储，以及可追溯的 Release 验证。")
+                Text("新增中英文界面，并让 App、网站与 GitHub README 使用对应语言；状态、错误、快捷键和独立面板保持一致。")
                     .font(LerroTheme.font(14))
                     .foregroundStyle(LerroTheme.secondaryText)
                     .lineSpacing(5)
@@ -839,7 +928,7 @@ private struct ReleaseNotesPage: View {
 @MainActor
 private func settingsGroup<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
     VStack(alignment: .leading, spacing: 16) {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(LerroTheme.font(13, weight: .medium))
             .foregroundStyle(LerroTheme.metadataText)
         content()
@@ -854,10 +943,10 @@ private func settingsRow<Content: View>(
 ) -> some View {
     HStack(spacing: 16) {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title)
+            LocalizedCopyText(title)
                 .font(LerroTheme.font(14, weight: .medium))
                 .foregroundStyle(LerroTheme.text)
-            Text(detail)
+            LocalizedCopyText(detail)
                 .font(LerroTheme.font(14))
                 .foregroundStyle(LerroTheme.secondaryText)
                 .lineLimit(1)
@@ -873,7 +962,7 @@ private func settingsRow<Content: View>(
 @MainActor
 private func settingsToggle(_ title: String, detail: String, value: Binding<Bool>) -> some View {
     settingsRow(title, detail: detail) {
-        Toggle(title, isOn: value)
+        Toggle(LocalizedStringKey(title), isOn: value)
             .labelsHidden()
             .toggleStyle(.switch)
             .tint(LerroTheme.accent)
@@ -881,10 +970,19 @@ private func settingsToggle(_ title: String, detail: String, value: Binding<Bool
 }
 
 @MainActor
-private func permissionRow(_ title: String, granted: Bool, settingsAnchor: String) -> some View {
+private func permissionRow(
+    _ title: String,
+    granted: Bool,
+    settingsAnchor: String,
+    locale: Locale
+) -> some View {
     settingsRow(title, detail: granted ? "已获得系统授权" : "需要在系统设置中开启") {
         HStack(spacing: 10) {
-            Label(granted ? "已开启" : "待开启", systemImage: granted ? "checkmark.circle.fill" : "exclamationmark.circle")
+            Label {
+                Text(verbatim: LerroInterfaceLocalization.string(granted ? "已开启" : "待开启", locale: locale))
+            } icon: {
+                Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.circle")
+            }
                 .foregroundStyle(granted ? LerroTheme.green : LerroTheme.orange)
             if !granted {
                 Button("打开系统设置") {
@@ -892,7 +990,11 @@ private func permissionRow(_ title: String, granted: Bool, settingsAnchor: Strin
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .accessibilityLabel("为\(title)打开系统设置")
+                .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                    "为%@打开系统设置",
+                    locale: locale,
+                    arguments: LerroInterfaceLocalization.string(title, locale: locale)
+                )))
             }
         }
     }
@@ -907,9 +1009,9 @@ private func openPrivacySettings(_ anchor: String) {
 @MainActor
 private func reportLine(_ title: String, value: String) -> some View {
     HStack {
-        Text(title).font(LerroTheme.font(14))
+        Text(LocalizedStringKey(title)).font(LerroTheme.font(14))
         Spacer()
-        Text(value).font(LerroTheme.font(14)).foregroundStyle(LerroTheme.secondaryText)
+        Text(verbatim: value).font(LerroTheme.font(14)).foregroundStyle(LerroTheme.secondaryText)
     }
 }
 
@@ -921,7 +1023,7 @@ private func bundledDocumentRow(_ title: String, resource: String) -> some View 
         }
     } label: {
         HStack {
-            Text(title)
+            Text(LocalizedStringKey(title))
             Spacer()
             Image(systemName: "arrow.up.right")
         }
@@ -940,13 +1042,26 @@ private func helpRow(_ title: String, detail: String, icon: String) -> some View
             .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
             .frame(width: 28)
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(LerroTheme.font(14, weight: .medium))
-            Text(detail).font(LerroTheme.font(14)).foregroundStyle(LerroTheme.secondaryText)
+            Text(LocalizedStringKey(title)).font(LerroTheme.font(14, weight: .medium))
+            Text(LocalizedStringKey(detail)).font(LerroTheme.font(14)).foregroundStyle(LerroTheme.secondaryText)
         }
         Spacer()
     }
     .padding(.horizontal, 12)
     .frame(minHeight: 72)
+}
+
+private struct LocalizedCopyText: View {
+    let key: String
+    @Environment(\.locale) private var locale
+
+    init(_ key: String) {
+        self.key = key
+    }
+
+    var body: some View {
+        Text(verbatim: LerroInterfaceLocalization.string(key, locale: locale))
+    }
 }
 
 private struct TranslationLanguageOption: Identifiable, Hashable {
@@ -966,6 +1081,7 @@ private struct TranslationLanguageOption: Identifiable, Hashable {
 private struct TranslationLanguagesSheet: View {
     @Binding var languages: [String]
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -980,16 +1096,18 @@ private struct TranslationLanguagesSheet: View {
             VStack(spacing: 10) {
                 ForEach(Array(languages.enumerated()), id: \.offset) { index, language in
                     HStack(spacing: 12) {
-                        Text(index == 0 ? "首选" : "备选 \(index)")
+                        Text(verbatim: languagePositionTitle(index))
                             .font(LerroTheme.font(14, weight: .medium))
                             .frame(width: 56, alignment: .leading)
-                        Picker(index == 0 ? "首选翻译语言" : "备选翻译语言 \(index)", selection: languageBinding(at: index)) {
+                        Picker(selection: languageBinding(at: index)) {
                             ForEach(TranslationLanguageOption.all) { option in
-                                Text(option.title).tag(option.identifier)
+                                Text(verbatim: localized(option.title)).tag(option.identifier)
                             }
+                        } label: {
+                            Text(verbatim: languagePickerTitle(index))
                         }
                         .labelsHidden()
-                        .accessibilityLabel(index == 0 ? "首选翻译语言" : "备选翻译语言 \(index)")
+                        .accessibilityLabel(Text(verbatim: languagePickerTitle(index)))
                         .frame(maxWidth: .infinity)
                         Button {
                             removeLanguage(at: index)
@@ -999,7 +1117,11 @@ private struct TranslationLanguagesSheet: View {
                         .buttonStyle(LerroPressButtonStyle())
                         .foregroundStyle(LerroTheme.secondaryText)
                         .disabled(languages.count == 1)
-                        .accessibilityLabel("移除\(index == 0 ? "首选" : "备选 \(index)")翻译语言")
+                        .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                            "移除%@翻译语言",
+                            locale: locale,
+                            arguments: languagePositionTitle(index)
+                        )))
                     }
                 }
             }
@@ -1022,6 +1144,22 @@ private struct TranslationLanguagesSheet: View {
         TranslationLanguageOption.all
             .map(\.identifier)
             .first { !languages.contains($0) }
+    }
+
+    private func languagePositionTitle(_ index: Int) -> String {
+        index == 0
+            ? localized("首选")
+            : LerroInterfaceLocalization.format("备选 %lld", locale: locale, arguments: Int64(index))
+    }
+
+    private func languagePickerTitle(_ index: Int) -> String {
+        index == 0
+            ? localized("首选翻译语言")
+            : LerroInterfaceLocalization.format("备选翻译语言 %lld", locale: locale, arguments: Int64(index))
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
     }
 
     private func languageBinding(at index: Int) -> Binding<String> {
@@ -1062,6 +1200,7 @@ private struct ShortcutCaptureSheet: View {
     @State private var validationMessage = ""
     @State private var isSaving = false
     @State private var isConfigurationPrepared = false
+    @Environment(\.locale) private var locale
 
     init(
         action: HotkeyAction,
@@ -1084,7 +1223,11 @@ private struct ShortcutCaptureSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(existing == nil ? "为\(actionTitle)添加快捷键" : "编辑\(actionTitle)快捷键")
+                Text(verbatim: LerroInterfaceLocalization.format(
+                    existing == nil ? "为%@添加快捷键" : "编辑%@快捷键",
+                    locale: locale,
+                    arguments: localized(actionTitle)
+                ))
                     .font(LerroTheme.font(24, weight: .medium))
                 Text("直接按下想使用的键，界面会立即显示按下与松开状态。")
                     .font(LerroTheme.font(14))
@@ -1104,7 +1247,7 @@ private struct ShortcutCaptureSheet: View {
             }
 
             if !validationMessage.isEmpty {
-                Text(validationMessage)
+                Text(verbatim: localized(validationMessage))
                     .font(LerroTheme.font(12))
                     .foregroundStyle(LerroTheme.orange)
             }
@@ -1177,6 +1320,10 @@ private struct ShortcutCaptureSheet: View {
         case .cancel:
             "取消"
         }
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
     }
 }
 

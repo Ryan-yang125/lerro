@@ -45,7 +45,12 @@ const worker = {
       }, allowedWidths);
     }
 
-    return handler.fetch(request, env, ctx);
+    const localizedHeaders = new Headers(request.headers);
+    localizedHeaders.set(
+      "x-lerro-interface-language",
+      url.pathname === "/zh" || url.pathname.startsWith("/zh/") ? "zh-Hans" : "en",
+    );
+    return handler.fetch(new Request(request, { headers: localizedHeaders }), env, ctx);
   },
 };
 

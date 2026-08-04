@@ -279,6 +279,16 @@ open -F -n \
   dist/Lerro.app
 ```
 
+双语视觉 fixture 使用同一份 inert 组合。`LERRO_FIXTURE_LANGUAGE` 只在
+`LERRO_FIXTURE_MODE=1` 时覆盖界面语言，支持 `en` 与 `zh-Hans`：
+
+```zsh
+open -F -n --env LERRO_FIXTURE_MODE=1 --env LERRO_FIXTURE_LANGUAGE=en dist/Lerro.app
+open -F -n --env LERRO_FIXTURE_MODE=1 --env LERRO_FIXTURE_LANGUAGE=zh-Hans dist/Lerro.app
+```
+
+该覆盖不写入 `preferences.json`。Speech 听写语言与翻译目标语言继续由各自设置决定。
+
 Onboarding：
 
 ```zsh

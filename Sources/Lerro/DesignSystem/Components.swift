@@ -438,7 +438,7 @@ struct LerroMenuBarIcon: View {
                     .symbolRenderingMode(.monochrome)
             }
         }
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(Text(verbatim: accessibilityLabel))
     }
 
     private var templateImage: NSImage? {
@@ -551,6 +551,7 @@ struct LerroIconButton: View {
     var selected = false
     var foreground: Color? = nil
     let action: () -> Void
+    @Environment(\.locale) private var locale
 
     var body: some View {
         Button(action: action) {
@@ -560,8 +561,12 @@ struct LerroIconButton: View {
         }
         .buttonStyle(LerroIconButtonStyle(selected: selected, foreground: foreground))
         .contentShape(Rectangle().inset(by: -6))
-        .help(help)
-        .accessibilityLabel(help.isEmpty ? systemName : help)
+        .help(Text(verbatim: localizedHelp))
+        .accessibilityLabel(Text(verbatim: localizedHelp))
+    }
+
+    private var localizedHelp: String {
+        help.isEmpty ? systemName : LerroInterfaceLocalization.string(help, locale: locale)
     }
 }
 
@@ -623,7 +628,7 @@ struct FilterChip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .lerroTypography(selected ? .label : .secondary)
                 .foregroundStyle(selected ? LerroTheme.text : LerroTheme.secondaryText)
                 .padding(.horizontal, 12)
@@ -639,7 +644,7 @@ struct ShortcutBadge: View {
     let title: String
 
     var body: some View {
-        Text(title)
+        Text(verbatim: title)
             .lerroTypography(.captionMedium)
             .foregroundStyle(LerroTheme.secondaryText)
             .padding(.horizontal, 9)
@@ -656,9 +661,10 @@ struct ShortcutBadge: View {
 struct LerroPageTitle: View {
     let title: String
     var size: CGFloat = LerroTheme.titleSize
+    @Environment(\.locale) private var locale
 
     var body: some View {
-        Text(title)
+        Text(verbatim: LerroInterfaceLocalization.string(title, locale: locale))
             .font(.system(size: size, weight: .medium))
             .foregroundStyle(LerroTheme.text)
             .tracking(LerroTheme.uiTracking)
@@ -675,7 +681,7 @@ struct LerroSearchField: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: LerroTheme.navigationIconSize, weight: .medium))
                 .foregroundStyle(LerroTheme.tertiaryText)
-            TextField(placeholder, text: $text)
+            TextField(LocalizedStringKey(placeholder), text: $text)
                 .textFieldStyle(.plain)
                 .lerroTypography(.body)
             if !text.isEmpty {
@@ -709,10 +715,10 @@ struct EmptyStateView: View {
             Image(systemName: systemImage)
                 .font(.system(size: LerroTheme.cardIconSize, weight: .regular))
                 .foregroundStyle(LerroTheme.tertiaryText)
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .lerroTypography(.heading)
                 .foregroundStyle(LerroTheme.text)
-            Text(detail)
+            Text(LocalizedStringKey(detail))
                 .lerroTypography(.secondary)
                 .foregroundStyle(LerroTheme.secondaryText)
                 .multilineTextAlignment(.center)

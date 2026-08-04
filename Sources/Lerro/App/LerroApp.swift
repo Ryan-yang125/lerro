@@ -23,6 +23,7 @@ struct LerroApp: App {
     var body: some Scene {
         Window("Lerro", id: "main") {
             RootView(session: session)
+                .environment(\.locale, LerroInterfaceLocalization.locale(for: session.preferences.appLanguage))
                 .background(TranslationResourcePreparationHost(session: session))
                 .task { await session.start() }
                 .onReceive(NotificationCenter.default.publisher(
@@ -37,11 +38,15 @@ struct LerroApp: App {
 
         MenuBarExtra {
             MenuBarContentView(session: session)
+                .environment(\.locale, LerroInterfaceLocalization.locale(for: session.preferences.appLanguage))
         } label: {
             LerroMenuBarIcon(
                 assetName: LerroMenuBarPresentation.assetName(for: session.phase),
                 fallbackSystemName: LerroMenuBarPresentation.systemImage(for: session.phase),
-                accessibilityLabel: LerroMenuBarPresentation.accessibilityLabel(for: session.phase)
+                accessibilityLabel: LerroMenuBarPresentation.accessibilityLabel(
+                    for: session.phase,
+                    locale: LerroInterfaceLocalization.locale(for: session.preferences.appLanguage)
+                )
             )
         }
         .menuBarExtraStyle(.menu)
@@ -55,26 +60,35 @@ private struct LerroCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .appSettings) {
-            Button("设置…") {
+            Button {
                 presentSettings()
+            } label: {
+                Text(verbatim: copy("设置…"))
             }
             .keyboardShortcut(",", modifiers: .command)
 
         }
 
         CommandMenu("Lerro") {
-            Button("开始听写") { session.toggleCapture(.dictation) }
+            Button { session.toggleCapture(.dictation) } label: { Text(verbatim: copy("开始听写")) }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
-            Button("开始翻译") { session.toggleCapture(.translation) }
+            Button { session.toggleCapture(.translation) } label: { Text(verbatim: copy("开始翻译")) }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
-            Button("开始问答") { session.toggleCapture(.ask) }
+            Button { session.toggleCapture(.ask) } label: { Text(verbatim: copy("开始问答")) }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
             Divider()
-            Button("粘贴上次结果") { session.pasteLastResult() }
+            Button { session.pasteLastResult() } label: { Text(verbatim: copy("粘贴上次结果")) }
                 .keyboardShortcut("v", modifiers: [.command, .control])
             Divider()
-            Button("检查更新…") { AppUpdateController.shared.checkForUpdates() }
+            Button { AppUpdateController.shared.checkForUpdates() } label: { Text(verbatim: copy("检查更新…")) }
         }
+    }
+
+    private func copy(_ key: String) -> String {
+        LerroInterfaceLocalization.string(
+            key,
+            locale: LerroInterfaceLocalization.locale(for: session.preferences.appLanguage)
+        )
     }
 
     private func presentSettings() {
@@ -103,12 +117,14 @@ enum LerroMenuBarPresentation {
         }
     }
 
-    static func accessibilityLabel(for phase: CapturePhase) -> String {
+    static func accessibilityLabel(for phase: CapturePhase, locale: Locale) -> String {
+        let key: String
         switch phase {
-        case .idle, .success, .cancelled: "Lerro，空闲"
-        case .listening: "Lerro，正在听写"
-        case .transcribing, .enhancing, .inserting: "Lerro，正在处理"
-        case .failed: "Lerro，需要处理"
+        case .idle, .success, .cancelled: key = "Lerro，空闲"
+        case .listening: key = "Lerro，正在听写"
+        case .transcribing, .enhancing, .inserting: key = "Lerro，正在处理"
+        case .failed: key = "Lerro，需要处理"
         }
+        return LerroInterfaceLocalization.string(key, locale: locale)
     }
 }

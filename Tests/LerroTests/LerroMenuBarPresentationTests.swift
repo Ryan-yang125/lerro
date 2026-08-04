@@ -5,16 +5,33 @@ import LerroCore
 
 @Suite("Menu bar presentation")
 struct LerroMenuBarPresentationTests {
+    @Test("Fixture language override applies only to inert fixture runs")
+    func fixtureLanguageOverride() {
+        #expect(LerroInterfaceLocalization.locale(
+            for: .system,
+            environment: ["LERRO_FIXTURE_MODE": "1", "LERRO_FIXTURE_LANGUAGE": "en"]
+        ).language.languageCode?.identifier == "en")
+        #expect(LerroInterfaceLocalization.locale(
+            for: .english,
+            environment: ["LERRO_FIXTURE_LANGUAGE": "zh-Hans"]
+        ).language.languageCode?.identifier == "en")
+        #expect(LerroInterfaceLocalization.locale(
+            for: .english,
+            environment: ["LERRO_FIXTURE_MODE": "1", "LERRO_FIXTURE_LANGUAGE": "zh-Hans"]
+        ).language.languageCode?.identifier == "zh")
+    }
+
     @Test("Every capture phase maps to the documented VoiceOver state")
     func accessibilityLabels() {
         for phase in [CapturePhase.idle, .success, .cancelled] {
-            #expect(LerroMenuBarPresentation.accessibilityLabel(for: phase) == "Lerro，空闲")
+            #expect(LerroMenuBarPresentation.accessibilityLabel(for: phase, locale: Locale(identifier: "zh-Hans")) == "Lerro，空闲")
         }
-        #expect(LerroMenuBarPresentation.accessibilityLabel(for: .listening) == "Lerro，正在听写")
+        #expect(LerroMenuBarPresentation.accessibilityLabel(for: .listening, locale: Locale(identifier: "zh-Hans")) == "Lerro，正在听写")
         for phase in [CapturePhase.transcribing, .enhancing, .inserting] {
-            #expect(LerroMenuBarPresentation.accessibilityLabel(for: phase) == "Lerro，正在处理")
+            #expect(LerroMenuBarPresentation.accessibilityLabel(for: phase, locale: Locale(identifier: "zh-Hans")) == "Lerro，正在处理")
         }
-        #expect(LerroMenuBarPresentation.accessibilityLabel(for: .failed) == "Lerro，需要处理")
+        #expect(LerroMenuBarPresentation.accessibilityLabel(for: .failed, locale: Locale(identifier: "zh-Hans")) == "Lerro，需要处理")
+        #expect(LerroMenuBarPresentation.accessibilityLabel(for: .listening, locale: Locale(identifier: "en")) == "Lerro is dictating")
     }
 
     @Test("Every state maps to the matching branded menu asset")
@@ -56,6 +73,7 @@ struct LerroMenuBarPresentationTests {
     func nativeMenuTitles() {
         #expect(LerroNativeMenuPresentation.captureTitle(
             title: "听写",
+            activeTitle: "完成听写",
             shortcut: "Fn",
             phase: .idle,
             activeMode: .dictation,
@@ -63,6 +81,7 @@ struct LerroMenuBarPresentationTests {
         ) == "听写 · Fn")
         #expect(LerroNativeMenuPresentation.captureTitle(
             title: "听写",
+            activeTitle: "完成听写",
             shortcut: "Fn",
             phase: .listening,
             activeMode: .dictation,

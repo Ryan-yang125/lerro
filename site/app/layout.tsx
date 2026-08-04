@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 
 const siteUrl = "https://lerroapp.com";
@@ -49,33 +50,15 @@ export const viewport: Viewport = {
   colorScheme: "light dark",
 };
 
-const softwareApplicationJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  name: "Lerro",
-  url: siteUrl,
-  operatingSystem: "macOS 26 or later on Apple silicon",
-  applicationCategory: "UtilitiesApplication",
-  softwareVersion: "1.1.1",
-  description: "Native Apple Speech voice typing for macOS 26 with on-device translation and optional local MLX refinement.",
-  offers: {
-    "@type": "Offer",
-    price: "0",
-    priceCurrency: "USD",
-  },
-  downloadUrl: "https://updates.lerroapp.com/download/macos/latest",
-  softwareHelp: `${siteUrl}/#faq`,
-};
-
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const requestHeaders = await headers();
+  const language = requestHeaders.get("x-lerro-interface-language") === "zh-Hans"
+    ? "zh-Hans"
+    : "en";
   return (
-    <html lang="en">
+    <html lang={language}>
       <body>
         {children}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationJsonLd) }}
-        />
       </body>
     </html>
   );

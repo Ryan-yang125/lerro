@@ -56,6 +56,7 @@ struct HistoryView: View {
     @State private var showDeleteAllConfirmation = false
     @State private var lastAutoRequest: HistoryAutoRequest?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
 
     init(session: AppSession) {
         self.session = session
@@ -70,7 +71,7 @@ struct HistoryView: View {
 
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                LerroPageTitle(title: "历史")
+                LerroPageTitle(title: localized("历史"))
                     .frame(height: 40)
                 Spacer()
                 if !session.historyEntries.isEmpty {
@@ -87,7 +88,7 @@ struct HistoryView: View {
             HStack(spacing: 12) {
                 Picker("历史类型", selection: $tab) {
                     ForEach(HistoryTab.allCases) { item in
-                        Text(item.rawValue).tag(item)
+                        Text(LocalizedStringKey(item.rawValue)).tag(item)
                     }
                 }
                 .labelsHidden()
@@ -135,7 +136,7 @@ struct HistoryView: View {
                     LazyVStack(alignment: .leading, spacing: 18) {
                         ForEach(dayGroups) { group in
                             VStack(alignment: .leading, spacing: 8) {
-                                Text(group.title)
+                                Text(LocalizedStringKey(group.title))
                                     .font(LerroTheme.font(12, weight: .medium))
                                     .foregroundStyle(LerroTheme.tertiaryText)
                                     .padding(.horizontal, 12)
@@ -173,14 +174,16 @@ struct HistoryView: View {
         }
         .alert("更改保存时长", isPresented: $showRetentionConfirmation) {
             Button("取消", role: .cancel) { pendingRetention = nil }
-            Button(retentionActionTitle) {
+            Button {
                 if let pendingRetention {
                     session.setHistoryRetention(pendingRetention)
                 }
                 pendingRetention = nil
+            } label: {
+                Text(LocalizedStringKey(retentionActionTitle))
             }
         } message: {
-            Text(retentionConfirmationMessage)
+            Text(LocalizedStringKey(retentionConfirmationMessage))
         }
         .alert("删除所有历史？", isPresented: $showDeleteAllConfirmation) {
             Button("取消", role: .cancel) {}
@@ -200,7 +203,7 @@ struct HistoryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("正在加载历史记录")
+                .accessibilityLabel(localized("正在加载历史记录"))
     }
 
     private var historyPaginationFooter: some View {
@@ -214,22 +217,28 @@ struct HistoryView: View {
                 .font(LerroTheme.font(12))
                 .foregroundStyle(LerroTheme.secondaryText)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("正在加载更多历史记录")
+                .accessibilityLabel(localized("正在加载更多历史记录"))
             } else if session.historyHasMore {
                 Button("加载更多") {
                     Task { await loadNextHistoryPageManually() }
                 }
                 .buttonStyle(LerroPillButtonStyle())
-                .accessibilityHint("加载下一页历史记录")
+                    .accessibilityHint(localized("加载下一页历史记录"))
             }
 
             if session.historyTotalCount > 0 {
-                Text("已加载 \(session.historyEntries.count) / \(session.historyTotalCount)")
+                Text(verbatim: LerroInterfaceLocalization.format(
+                    "已加载 %lld / %lld",
+                    locale: locale,
+                    arguments: Int64(session.historyEntries.count), Int64(session.historyTotalCount)
+                ))
                     .lerroTypography(.caption)
                     .foregroundStyle(LerroTheme.tertiaryText)
-                    .accessibilityLabel(
-                        "已加载 \(session.historyEntries.count) 条，共 \(session.historyTotalCount) 条历史记录"
-                    )
+                    .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                        "已加载 %lld 条，共 %lld 条历史记录",
+                        locale: locale,
+                        arguments: Int64(session.historyEntries.count), Int64(session.historyTotalCount)
+                    )))
             }
         }
         .frame(maxWidth: .infinity, minHeight: 34)
@@ -322,7 +331,9 @@ struct HistoryView: View {
             } else if calendar.isDateInYesterday(date) {
                 title = "昨天"
             } else {
-                title = date.formatted(date: .abbreviated, time: .omitted)
+                title = date.formatted(
+                    Date.FormatStyle(date: .abbreviated, time: .omitted).locale(locale)
+                )
             }
             result.append(HistoryDayGroup(id: date, title: title, entries: [entry]))
         }
@@ -384,6 +395,10 @@ struct HistoryView: View {
         }
         await session.loadNextHistoryPage()
     }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
+    }
 }
 
 private struct HistoryListRow: View {
@@ -392,6 +407,7 @@ private struct HistoryListRow: View {
     @State private var hovering = false
     @State private var showDeleteConfirmation = false
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.locale) private var locale
 
     var body: some View {
         HStack(spacing: 12) {
@@ -401,16 +417,18 @@ private struct HistoryListRow: View {
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(primaryText)
+                Text(verbatim: primaryText)
                     .font(LerroTheme.font(14))
                     .foregroundStyle(entry.status == .failed ? LerroTheme.red : LerroTheme.text)
                     .lineLimit(entry.mode == .ask ? 2 : 1)
                 HStack(spacing: 5) {
-                    Text(modeTitle)
+                    Text(LocalizedStringKey(modeTitle))
                     Text("·")
-                    Text(entry.applicationName)
+                    Text(verbatim: entry.applicationName)
                     Text("·")
-                    Text(entry.createdAt.formatted(date: .omitted, time: .shortened))
+                    Text(verbatim: entry.createdAt.formatted(
+                        Date.FormatStyle(date: .omitted, time: .shortened).locale(locale)
+                    ))
                 }
                 .lerroTypography(.caption)
                 .foregroundStyle(LerroTheme.metadataText)
@@ -430,7 +448,7 @@ private struct HistoryListRow: View {
                 }
                 .buttonStyle(LerroPressButtonStyle())
                 .help("复制")
-                .accessibilityLabel("复制结果")
+                .accessibilityLabel(localized("复制结果"))
                 Menu {
                     Button("复制原始转写") { session.copyText(entry.rawText) }
                     if !entry.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -447,7 +465,7 @@ private struct HistoryListRow: View {
                 }
                 .menuStyle(.borderlessButton)
                 .frame(width: 28)
-                .accessibilityLabel("更多操作")
+                .accessibilityLabel(localized("更多操作"))
             }
             .foregroundStyle(LerroTheme.secondaryText)
             .opacity(hovering || colorSchemeContrast == .increased ? 1 : 0.62)
@@ -498,5 +516,9 @@ private struct HistoryListRow: View {
         case .translation: "character.bubble"
         case .ask: "sparkles"
         }
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
     }
 }

@@ -6,6 +6,26 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-04
+
+### Added
+
+- English and Simplified Chinese App interfaces with a system-following default
+  and an explicit display-language setting.
+- English and Simplified Chinese website routes, changelogs, metadata, and
+  language-specific product screenshots served from the Cloudflare site.
+- A Simplified Chinese product README paired with the English GitHub landing
+  page and matching localized App screenshots.
+
+### Changed
+
+- Separated the App interface language from Speech recognition and Translation
+  language choices.
+- Reworked public product copy across the App, website, and GitHub around native
+  macOS 26 Speech, local-first privacy, optional local MLX processing, and BYOK.
+- Moved every public product screenshot onto version-controlled website assets
+  so the website and GitHub README share stable Cloudflare URLs.
+
 ## [1.1.1] - 2026-08-04
 
 ### Fixed
@@ -206,7 +226,8 @@ All notable changes to Lerro will be documented here. The project follows
   plaintext BYOK credentials; logs, history, errors, fixtures, and public exports
   exclude API keys and Authorization headers.
 
-[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Ryan-yang125/lerro/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/Ryan-yang125/lerro/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Ryan-yang125/lerro/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/Ryan-yang125/lerro/compare/v1.0.2...v1.0.3

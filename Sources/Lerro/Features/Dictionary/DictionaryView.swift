@@ -34,6 +34,7 @@ struct DictionaryView: View {
     @State private var editingEntry: DictionaryEntry?
     @State private var isEditorPresented = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
 
     init(session: AppSession) {
         self.session = session
@@ -52,7 +53,7 @@ struct DictionaryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                LerroPageTitle(title: "词典")
+                LerroPageTitle(title: localized("词典"))
                     .frame(height: 40)
                 Spacer()
                 Button("新建词条", systemImage: "plus") {
@@ -65,7 +66,7 @@ struct DictionaryView: View {
             HStack(spacing: 12) {
                 Picker("词条来源", selection: $tab) {
                     ForEach(DictionaryTab.allCases) { item in
-                        Text(item.rawValue).tag(item)
+                        Text(LocalizedStringKey(item.rawValue)).tag(item)
                     }
                 }
                 .labelsHidden()
@@ -210,15 +211,23 @@ struct DictionaryView: View {
         do {
             let values = try url.resourceValues(forKeys: [.fileSizeKey])
             guard (values.fileSize ?? 0) <= 2_000_000 else {
-                session.currentError = "词典导入失败：CSV 文件不能超过 2 MB"
+                session.currentError = localized("词典导入失败：CSV 文件不能超过 2 MB")
                 return false
             }
             let contents = try String(contentsOf: url, encoding: .utf8)
             return await session.importDictionaryCSV(contents)
         } catch {
-            session.currentError = "词典导入失败：\(error.localizedDescription)"
+            session.currentError = String(
+                format: localized("词典导入失败：%@"),
+                locale: locale,
+                error.localizedDescription
+            )
             return false
         }
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
     }
 }
 
@@ -229,19 +238,20 @@ private struct DictionaryListRow: View {
     @State private var hovering = false
     @State private var showDeleteConfirmation = false
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.locale) private var locale
 
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(entry.phrase)
+                Text(verbatim: entry.phrase)
                     .font(LerroTheme.font(14, weight: .medium))
                     .foregroundStyle(LerroTheme.text)
                     .lineLimit(1)
                 HStack(spacing: 6) {
-                    Text(entry.source == .manual ? "手动添加" : "自动添加")
+                    Text(LocalizedStringKey(entry.source == .manual ? "手动添加" : "自动添加"))
                     if entry.replacement != entry.phrase {
                         Text("·")
-                        Text(entry.replacement)
+                        Text(verbatim: entry.replacement)
                     }
                 }
                 .lerroTypography(.caption)
@@ -255,14 +265,22 @@ private struct DictionaryListRow: View {
                 }
                 .buttonStyle(LerroPressButtonStyle())
                 .help("编辑")
-                .accessibilityLabel("编辑 \(entry.phrase)")
+                .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                    "编辑 %@",
+                    locale: locale,
+                    arguments: entry.phrase
+                )))
                 Button { showDeleteConfirmation = true } label: {
                     Image(systemName: "trash")
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(LerroPressButtonStyle())
                 .help("删除")
-                .accessibilityLabel("删除 \(entry.phrase)")
+                .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                    "删除 %@",
+                    locale: locale,
+                    arguments: entry.phrase
+                )))
             }
             .foregroundStyle(LerroTheme.secondaryText)
             .opacity(hovering || colorSchemeContrast == .increased ? 1 : 0.62)
@@ -311,7 +329,7 @@ private struct DictionaryEditorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(existingEntry == nil ? "添加新词" : "编辑词语")
+            Text(LocalizedStringKey(existingEntry == nil ? "添加新词" : "编辑词语"))
                 .lerroTypography(.title)
                 .frame(height: 30)
 
@@ -338,7 +356,9 @@ private struct DictionaryEditorView: View {
                 Button("取消", action: cancel)
                     .buttonStyle(LerroPillButtonStyle())
                     .disabled(isWorking)
-                Button(existingEntry == nil ? "添加" : "保存", action: savePhrase)
+                Button(action: savePhrase) {
+                    Text(LocalizedStringKey(existingEntry == nil ? "添加" : "保存"))
+                }
                     .buttonStyle(LerroPillButtonStyle(prominent: true))
                     .disabled(trimmedPhrase.isEmpty || isWorking)
             }

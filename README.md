@@ -5,8 +5,12 @@
 <h1 align="center">Voice to text, native to Mac.</h1>
 
 <p align="center">
-  Lerro turns speech into text at your cursor with Apple Speech on macOS 26.<br>
-  Fast, accurate, local-first, and open source.
+  English · <a href="README.zh-CN.md">简体中文</a>
+</p>
+
+<p align="center">
+  Press once, speak, then press again. Lerro writes at your cursor with Apple Speech on macOS 26.<br>
+  Fast, accurate voice writing that keeps its core work on your Mac.
 </p>
 
 <p align="center">
@@ -16,73 +20,83 @@
 </p>
 
 <p align="center">
-  Free forever · Apple silicon · macOS 26+
+  Apple silicon · macOS 26+ · No account · No subscription
 </p>
 
-![Lerro 1.1 home screen](site/public/screenshots/lerro-home-light.png)
+![Lerro home screen](https://lerroapp.com/screenshots/en/lerro-home-light.png)
 
-## Speak. Your Mac writes.
+## One shortcut. A clear path to text.
 
-Press a shortcut, speak naturally, and keep working. Lerro uses Apple&apos;s native Speech framework to transcribe your voice, then places the result in the active Mac app.
+Press a shortcut to start, speak naturally, then press it again to place the
+result in the active app. Configure press-and-hold when releasing the key is the
+completion gesture you prefer.
 
-- **Native and fast.** Apple Speech gives Dictate a direct path from microphone to cursor.
-- **Private by architecture.** Lerro has no account system, subscription, product analytics, or telemetry. Audio saving is off by default.
-- **Translation on your Mac.** Apple Translation turns speech into another language after the required language resources are installed.
-- **Intelligence when you choose it.** Refine locally with an optional MLX model, or connect your own OpenAI-compatible API key.
-- **Open from app to release.** Source, tests, privacy policy, release scripts, and website are public under Apache-2.0.
-
-## One shortcut, three paths
-
-| Path | Flow | Best for |
+| Mode | What it does | Where it runs |
 | --- | --- | --- |
-| **Dictate** | Voice → Apple Speech → Cursor | The shortest native transcription path |
-| **Translate** | Voice → Apple Speech → Apple Translation → Cursor | On-device multilingual writing |
-| **Refine** | Transcript → Local MLX or BYOK → Cursor | Polish, rewrite, and Ask |
+| **Dictate** | Speech → text at the cursor | Apple Speech on your Mac |
+| **Translate** | Speech → another language → cursor | Apple Translation on your Mac |
+| **Refine, Ask, Rewrite** | Polish text, answer a spoken request, or replace a selected passage | Optional local MLX model or your own API |
 
-![Lerro onboarding detecting an Fn shortcut](site/public/screenshots/lerro-onboarding-shortcuts-light.png)
+![Lerro shortcut setup](https://lerroapp.com/screenshots/en/lerro-onboarding-shortcuts-light.png)
 
-Shortcut setup detects the exact press and release events before onboarding completes. Lerro requests two macOS permissions: **Microphone** for the speech you choose to capture and **Accessibility** for global shortcuts and cursor delivery. Input Monitoring and a separate Speech Recognition permission are not requested.
+Lerro asks for **Microphone** permission to capture speech and
+**Accessibility** permission for global shortcuts and text delivery. It checks
+secure input before capture. Standard Dictate and Translate paste into the
+keyboard focus present when delivery is committed; Rewrite verifies the original
+selection again before replacing it.
 
-## Local-first, with clear network boundaries
+## Private by default
 
-Core Dictate, Apple Translation, and optional local MLX processing work offline after their language resources or model are installed.
+- **Your voice and text stay local for core workflows.** Raw Dictate uses Apple
+  Speech, and Translate uses installed Apple Translation resources. After their
+  required language resources are ready, these paths work offline.
+- **Audio saving starts off.** Choose whether history is retained; selecting
+  “never save” prevents new history and recordings from being written.
+- **No telemetry.** Lerro has no account system, subscription, advertising SDK,
+  product analytics, or server-side storage for transcripts, prompts, and
+  answers.
+- **Clear optional network boundaries.** Apple may download language resources;
+  Lerro checks signed updates; an optional MLX model downloads only after your
+  approval; BYOK requests go directly to the provider you configure.
 
-Network access is limited to explicit boundaries:
+Read the exact data, permission, clipboard, update, and provider boundaries in
+the [Privacy Policy](PRIVACY.md).
 
-- Apple language-resource and optional model setup.
-- Signed update checks and downloads.
-- BYOK requests sent directly to the provider you configure, with only the context fields you enable.
+![Lerro settings](https://lerroapp.com/screenshots/en/lerro-settings-light.png)
 
-Lerro&apos;s update service handles release metadata and downloads. It never receives audio, transcripts, or app context. Read the full [privacy model](PRIVACY.md) and [security policy](SECURITY.md).
+## Start with the native path. Add intelligence when useful.
 
-## Download
+The core Dictate and on-device Translate workflows carry no Lerro charge and
+need no account. An optional Qwen MLX model refines text locally after you
+approve its approximately 3.03 GB download. You can also use your own
+OpenAI-compatible API configuration for cloud processing. BYOK requests can
+include the transcript and only the context fields you enable; provider pricing
+and privacy terms apply.
 
-[Download the latest signed and Apple-notarized build](https://updates.lerroapp.com/download/macos/latest), then move **Lerro.app** to Applications and complete the guided permission setup.
+## Install
 
-Requirements:
+1. [Download the latest signed and Apple-notarized build](https://updates.lerroapp.com/download/macos/latest).
+2. Move **Lerro.app** to Applications.
+3. Complete the guided Microphone and Accessibility setup.
+4. Choose Dictate first, then add translation resources, a local model, or BYOK
+   only when you want those capabilities.
 
-- Apple silicon Mac.
-- macOS 26 or later.
-- About 3.03 GB only when you approve the optional local MLX model.
+Requirements: Apple silicon and macOS 26 or later. The optional local model
+needs about 3.03 GB of storage.
 
-Permanent downloads and concise release notes live in the [changelog](https://lerroapp.com/changelog). GitHub Releases mirrors the same public artifacts.
+## Open source and documentation
 
-## Build from source
-
-```zsh
-swift build
-swift test
-./script/build_and_run.sh
-```
-
-The product architecture and contributor details live in:
+Lerro is open source under [Apache-2.0](LICENSE). Product, release, privacy,
+and engineering documentation live in this repository:
 
 - [Architecture](docs/architecture.md)
 - [Core flow](docs/core-flow.md)
-- [Build guide](docs/build.md)
-- [Testing](docs/testing.md)
+- [Models and BYOK](docs/models.md)
+- [Privacy and security](docs/privacy-security.md)
+- [Build and testing](docs/build.md)
 - [Contributing](CONTRIBUTING.md)
 
-## License
-
-Lerro source code is available under [Apache-2.0](LICENSE). Documentation and first-party screenshots use [CC BY 4.0](LICENSES/CC-BY-4.0.txt). The name and logo follow [TRADEMARKS.md](TRADEMARKS.md); third-party notices are recorded in [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+See [TRADEMARKS.md](TRADEMARKS.md), [NOTICE](NOTICE), and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for brand and third-party
+notices. First-party documentation and screenshots use
+[CC BY 4.0](LICENSES/CC-BY-4.0.txt).

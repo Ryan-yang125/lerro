@@ -95,6 +95,7 @@ struct CaptureHUDView: View {
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
     @Environment(\.colorSchemeContrast) private var systemContrast
+    @Environment(\.locale) private var locale
 
     var body: some View {
         hudControl
@@ -103,7 +104,7 @@ struct CaptureHUDView: View {
             .onTapGesture(count: 2) { session.enterHandsFreeCapture(session.activeMode) }
             .accessibilityElement(children: .contain)
             .accessibilityHidden(visualState == .idleHidden)
-            .accessibilityLabel(accessibilityLabel)
+            .accessibilityLabel(localized(accessibilityLabel))
             .accessibilityActions {
                 if session.phase == .listening, !session.isHandsFreeCapture {
                     Button("进入免按住模式") {
@@ -284,7 +285,7 @@ struct CaptureHUDView: View {
     @ViewBuilder
     private var countdownLabel: some View {
         if isCountdownVisible {
-            Text(timeRemaining)
+            Text(verbatim: timeRemaining)
                 .font(LerroTheme.font(9, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(.white.opacity(increaseContrast ? 1 : 0.84))
@@ -339,7 +340,7 @@ struct CaptureHUDView: View {
                 .clipShape(Circle())
         }
         .buttonStyle(LerroPressButtonStyle())
-        .accessibilityLabel(label)
+        .accessibilityLabel(localized(label))
     }
 
     private func hudButtonSlot(
@@ -375,10 +376,14 @@ struct CaptureHUDView: View {
             element: NSApplication.shared,
             notification: .announcementRequested,
             userInfo: [
-                .announcement: message,
+                .announcement: localized(message),
                 .priority: NSAccessibilityPriorityLevel.high.rawValue
             ]
         )
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
     }
 }
 

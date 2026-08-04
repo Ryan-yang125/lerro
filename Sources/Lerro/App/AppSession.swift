@@ -234,7 +234,7 @@ final class AppSession {
         do {
             try await applyRetentionAndClean(preferences.historyRetention, now: .now)
         } catch {
-            currentError = error.localizedDescription
+            currentError = userFacingError(error, context: "本地数据处理失败")
         }
         await refreshData()
         await refreshLanguageResources()
@@ -326,7 +326,7 @@ final class AppSession {
                 speechResourceStatus = LanguageResourceStatus(
                     state: .failed,
                     sourceLanguageIdentifier: source,
-                    message: error.localizedDescription
+                    message: userFacingError(error, context: "语音识别暂不可用")
                 )
             }
             if speechPreparationRequestID == requestID {
@@ -682,7 +682,7 @@ final class AppSession {
                 } catch is CancellationError {
                     // Expected when the user leaves the microphone-test page.
                 } catch {
-                    onboardingMicrophoneTestError = error.localizedDescription
+                    onboardingMicrophoneTestError = userFacingError(error, context: "麦克风测试错误")
                 }
 
                 await dependencies.microphoneTest.stop(sessionID: test.id)
@@ -695,7 +695,7 @@ final class AppSession {
             } catch {
                 finishOnboardingMicrophoneTest(
                     generation: generation,
-                    error: error.localizedDescription
+                    error: userFacingError(error, context: "麦克风测试错误")
                 )
             }
         }
@@ -814,7 +814,7 @@ final class AppSession {
         } catch is CancellationError {
             return .failure("连接测试已取消")
         } catch {
-            return .failure(error.localizedDescription)
+            return .failure(userFacingError(error, context: "远程模型暂不可用"))
         }
     }
 
@@ -922,7 +922,7 @@ final class AppSession {
                     targetPolicy: .requireCurrent
                 )
             } catch {
-                currentError = error.localizedDescription
+                currentError = userFacingError(error, context: "文本写入失败")
             }
         }
     }
@@ -983,7 +983,7 @@ final class AppSession {
                         try await applyRetentionAndClean(snapshot.historyRetention, now: .now)
                         await refreshHistoryAndUsage()
                     } catch {
-                        currentError = error.localizedDescription
+                        currentError = userFacingError(error, context: "本地数据处理失败")
                     }
                 }
                 if let next {
@@ -1064,7 +1064,7 @@ final class AppSession {
             } catch is CancellationError {
                 return
             } catch {
-                currentError = error.localizedDescription
+                currentError = userFacingError(error, context: "本地模型暂不可用")
             }
             modelStatus = await dependencies.intelligence.modelStatus()
         }
@@ -1114,7 +1114,7 @@ final class AppSession {
                 try await deleteAudioFile(relativePath: entry.audioRelativePath)
                 try await dependencies.history.delete(id: entry.id)
             } catch {
-                currentError = error.localizedDescription
+                currentError = userFacingError(error, context: "本地数据处理失败")
             }
             await refreshHistoryAndUsage()
         }
@@ -1128,7 +1128,7 @@ final class AppSession {
                 try await deleteAudioFiles(relativePaths: allEntries.map(\.audioRelativePath))
                 try await dependencies.history.deleteAll()
             } catch {
-                currentError = error.localizedDescription
+                currentError = userFacingError(error, context: "本地数据处理失败")
             }
             await refreshHistoryAndUsage()
         }
@@ -1174,7 +1174,7 @@ final class AppSession {
                     try await dependencies.history.save(updated)
                     await refreshHistoryAndUsage()
                 } catch {
-                    currentError = error.localizedDescription
+                    currentError = userFacingError(error, context: "设备端翻译暂不可用")
                 }
             }
             return
@@ -1223,7 +1223,7 @@ final class AppSession {
                 await refreshHistoryAndUsage()
                 if updated.mode == .ask { showHistoryAnswer(updated) }
             } catch {
-                currentError = error.localizedDescription
+                currentError = userFacingError(error, context: "智能处理失败")
             }
         }
     }
@@ -1244,7 +1244,7 @@ final class AppSession {
             }
             try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
         } catch {
-            currentError = error.localizedDescription
+            currentError = userFacingError(error, context: "音频导出失败")
         }
     }
 
@@ -1281,7 +1281,9 @@ final class AppSession {
                 )
                 await MainActor.run { self.closeAnswer() }
             } catch {
-                await MainActor.run { self.currentError = error.localizedDescription }
+                await MainActor.run {
+                    self.currentError = self.userFacingError(error, context: "文本写入失败")
+                }
             }
         }
     }
@@ -1305,7 +1307,7 @@ final class AppSession {
             hotkeyDispatchEpoch &+= 1
             isHotkeyMonitorStarted = false
             if reportError {
-                currentError = error.localizedDescription
+                currentError = userFacingError(error, context: "快捷键服务启动失败")
             }
         }
     }
@@ -1690,7 +1692,7 @@ final class AppSession {
                 do {
                     try await deleteAudioFile(relativePath: recordedAudioRelativePath)
                 } catch {
-                    currentError = error.localizedDescription
+                    currentError = userFacingError(error, context: "本地数据处理失败")
                 }
                 return
             }
@@ -2220,7 +2222,7 @@ final class AppSession {
                 referencedRelativePaths: Set(allEntries.compactMap(\.audioRelativePath))
             )
         } catch {
-            currentError = error.localizedDescription
+            currentError = userFacingError(error, context: "本地数据处理失败")
         }
     }
 
@@ -2230,7 +2232,10 @@ final class AppSession {
             hudController.hide(animated: false)
             return
         }
-        let content = AnyView(CaptureHUDView(session: self))
+        let content = AnyView(
+            CaptureHUDView(session: self)
+                .environment(\.locale, LerroInterfaceLocalization.locale(for: preferences.appLanguage))
+        )
         hudController.show(
             content: content,
             size: LerroTheme.hudPanelSize,
@@ -2246,7 +2251,10 @@ final class AppSession {
         let estimatedLines = ceil(Double((answerText?.count ?? 0) + answerQuestion.count) / 54)
         let height = min(800, max(500, 250 + estimatedLines * 25))
         answerController.show(
-            content: AnyView(AskAnswerCardView(session: self)),
+            content: AnyView(
+                AskAnswerCardView(session: self)
+                    .environment(\.locale, LerroInterfaceLocalization.locale(for: preferences.appLanguage))
+            ),
             size: CGSize(width: 800, height: height)
         )
     }
@@ -2373,12 +2381,18 @@ final class AppSession {
         )
     }
 
+    private func userFacingError(_ error: any Error, context: String) -> String {
+        if error is LerroError { return error.localizedDescription }
+        return "\(context)：\(error.localizedDescription)"
+    }
+
     private func fail(_ error: any Error) {
         answerController.hide()
         answerText = nil
         answerQuestion = ""
         answerContext = nil
-        captureError = error.localizedDescription
+        let message = userFacingError(error, context: "语音输入失败")
+        captureError = message
         captureGeneration = nil
         committedTextDeliverySessionID = nil
         activeHotkeyOrigin = nil
@@ -2394,7 +2408,7 @@ final class AppSession {
         captureTimerTask = nil
         captureElapsed = 0
         phase = .failed
-        partialTranscript = error.localizedDescription
+        partialTranscript = message
         updateHUD()
         Task { @MainActor [weak self] in
             guard let self else { return }

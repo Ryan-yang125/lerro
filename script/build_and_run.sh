@@ -190,6 +190,9 @@ sanitize_runtime_search_paths
 
 ditto "$project_dir/config/Info.plist" "$contents_path/Info.plist"
 ditto "$project_dir/Sources/Lerro/Resources/PrivacyInfo.xcprivacy" "$resources_path/PrivacyInfo.xcprivacy"
+while IFS= read -r -d $'\0' localization_path; do
+    ditto "$localization_path" "$resources_path/$(basename "$localization_path")"
+done < <(find "$project_dir/Sources/Lerro/Resources" -mindepth 1 -maxdepth 1 -type d -name '*.lproj' -print0)
 while IFS= read -r -d $'\0' bundle_path; do
     bundle_name="$(basename "$bundle_path")"
     ditto "$bundle_path" "$resources_path/$bundle_name"

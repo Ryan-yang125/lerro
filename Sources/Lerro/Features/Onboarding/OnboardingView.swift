@@ -101,6 +101,7 @@ private enum OnboardingAccessibilityFocus: Hashable {
 struct OnboardingView: View {
     @Bindable var session: AppSession
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
     @Environment(\.scenePhase) private var scenePhase
     @AccessibilityFocusState private var accessibilityFocus: OnboardingAccessibilityFocus?
     @FocusState private var practiceEditorFocused: Bool
@@ -136,14 +137,14 @@ struct OnboardingView: View {
                             }
 
                             VStack(alignment: .leading, spacing: 10) {
-                                Text(step.title)
+                                Text(LocalizedStringKey(step.title))
                                     .font(LerroTheme.font(24, weight: .medium))
                                     .tracking(LerroTheme.uiTracking)
                                     .foregroundStyle(.primary)
                                     .accessibilityAddTraits(.isHeader)
                                     .accessibilityFocused($accessibilityFocus, equals: .heading)
 
-                                Text(step.detail)
+                                Text(LocalizedStringKey(step.detail))
                                     .font(LerroTheme.font(14))
                                     .foregroundStyle(.secondary)
                                     .lineSpacing(3)
@@ -161,7 +162,9 @@ struct OnboardingView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Button(primaryActionTitle, action: next)
+                                Button(action: next) {
+                                    Text(verbatim: localized(primaryActionTitle))
+                                }
                                     .buttonStyle(LerroPillButtonStyle(prominent: true))
                                     .controlSize(.large)
                                     .keyboardShortcut(.defaultAction)
@@ -219,6 +222,9 @@ struct OnboardingView: View {
             guard newPhase == .active, step == .permissions || step == .practice else { return }
             Task { await session.refreshPermissions(prompt: false) }
         }
+        .onChange(of: locale.identifier) { _, _ in
+            localizeDefaultSampleTextIfNeeded()
+        }
         .alert("快捷键没有反应", isPresented: $showShortcutHelp) {
             Button("打开辅助功能设置") {
                 openSystemSettings(for: .accessibility)
@@ -236,6 +242,7 @@ struct OnboardingView: View {
                 step = restoredStep
             }
             accessibilityFocus = .heading
+            localizeDefaultSampleTextIfNeeded()
         }
         .onDisappear {
             session.stopOnboardingMicrophoneTest()
@@ -249,10 +256,10 @@ struct OnboardingView: View {
                 LerroBrandBadge(compact: true)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(step.shortTitle)
+                    Text(LocalizedStringKey(step.shortTitle))
                         .font(LerroTheme.font(13, weight: .medium))
                         .foregroundStyle(.primary)
-                    Text("第 \(step.rawValue + 1) 步，共 \(OnboardingStep.allCases.count) 步")
+                    Text(verbatim: onboardingProgressText)
                         .font(LerroTheme.font(12))
                         .foregroundStyle(.secondary)
                 }
@@ -275,7 +282,7 @@ struct OnboardingView: View {
             )
             .progressViewStyle(.linear)
             .accessibilityLabel("设置进度")
-            .accessibilityValue("第 \(step.rawValue + 1) 步，共 \(OnboardingStep.allCases.count) 步")
+            .accessibilityValue(Text(verbatim: onboardingProgressText))
         }
         .padding(.horizontal, 24)
         .padding(.top, 10)
@@ -366,9 +373,9 @@ struct OnboardingView: View {
                         .frame(width: 28)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(onboardingIntelligenceTitle)
+                        Text(LocalizedStringKey(onboardingIntelligenceTitle))
                             .font(LerroTheme.font(14, weight: .medium))
-                        Text(localModeDetail)
+                        Text(LocalizedStringKey(localModeDetail))
                             .font(LerroTheme.font(13))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -383,17 +390,19 @@ struct OnboardingView: View {
                             Text("模型状态")
                                 .font(LerroTheme.font(12, weight: .medium))
                                 .foregroundStyle(.secondary)
-                            Text(localModelStatusText)
+                            Text(LocalizedStringKey(localModelStatusText))
                                 .font(LerroTheme.font(13, weight: .medium))
                                 .foregroundStyle(.primary)
                         }
                         Spacer()
-                        Button(localModelActionTitle) {
+                        Button {
                             if session.preferences.hasApprovedModelDownload {
                                 session.activateIntelligenceMode(.local)
                             } else {
                                 session.requestLocalModelPreparation()
                             }
+                        } label: {
+                            Text(verbatim: localized(localModelActionTitle))
                         }
                         .buttonStyle(.bordered)
                         .disabled(localModelActionDisabled)
@@ -409,10 +418,11 @@ struct OnboardingView: View {
                         .foregroundStyle(.secondary)
                 } else if session.preferences.intelligenceMode == .remote {
                     Divider()
-                    Label(
-                        "\(session.preferences.remoteProvider.provider.lerroDisplayName) · \(session.preferences.remoteProvider.modelIdentifier)",
-                        systemImage: "checkmark.circle.fill"
-                    )
+                    Label {
+                        Text(verbatim: "\(session.preferences.remoteProvider.provider.lerroDisplayName) · \(session.preferences.remoteProvider.modelIdentifier)")
+                    } icon: {
+                        Image(systemName: "checkmark.circle.fill")
+                    }
                     .font(LerroTheme.font(13, weight: .medium))
                     .foregroundStyle(LerroTheme.green)
 
@@ -507,7 +517,11 @@ struct OnboardingView: View {
             }
 
             if !shortcutSaveError.isEmpty {
-                Label(shortcutSaveError, systemImage: "exclamationmark.triangle.fill")
+                Label {
+                    Text(verbatim: localized(shortcutSaveError))
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                }
                     .font(LerroTheme.font(12))
                     .foregroundStyle(LerroTheme.orange)
             }
@@ -534,14 +548,18 @@ struct OnboardingView: View {
                 Picker("输入设备", selection: microphoneSelection) {
                     Text("系统默认麦克风").tag("")
                     ForEach(session.audioInputDevices) { device in
-                        Text(device.isDefault ? "\(device.name)（默认）" : device.name)
+                        Text(verbatim: device.isDefault
+                            ? LerroInterfaceLocalization.format("%@（默认）", locale: locale, arguments: device.name)
+                            : device.name)
                             .tag(device.uid)
                     }
                 }
                 .disabled(session.isOnboardingMicrophoneTestRunning)
 
-                Button(microphoneTestButtonTitle) {
+                Button {
                     session.toggleOnboardingMicrophoneTest()
+                } label: {
+                    Text(verbatim: localized(microphoneTestButtonTitle))
                 }
                 .buttonStyle(.bordered)
                 .disabled(!session.microphonePermission)
@@ -557,20 +575,28 @@ struct OnboardingView: View {
                 Image(systemName: microphoneTestStatusIcon)
                     .foregroundStyle(microphoneTestStatusColor)
                     .accessibilityHidden(true)
-                Text(microphoneTestStatusText)
+                Text(LocalizedStringKey(microphoneTestStatusText))
                     .font(LerroTheme.font(12))
                     .foregroundStyle(.secondary)
                 Spacer()
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("麦克风测试")
-            .accessibilityValue(microphoneTestStatusText)
+            .accessibilityValue(Text(verbatim: localized(microphoneTestStatusText)))
 
             if let error = session.onboardingMicrophoneTestError {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
+                Label {
+                    Text(verbatim: localized(error))
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                }
                     .font(LerroTheme.font(12))
                     .foregroundStyle(LerroTheme.red)
-                    .accessibilityLabel("麦克风测试错误：\(error)")
+                    .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                        "麦克风测试错误：%@",
+                        locale: locale,
+                        arguments: localized(error)
+                    )))
             }
 
             TextEditor(text: $sampleText)
@@ -589,7 +615,9 @@ struct OnboardingView: View {
                 .accessibilityHint("将光标放在这里，然后使用刚设置的快捷键听写")
 
             HStack(spacing: 10) {
-                Button(practiceCaptureButtonTitle, action: togglePracticeCapture)
+                Button(action: togglePracticeCapture) {
+                    Text(verbatim: localized(practiceCaptureButtonTitle))
+                }
                     .buttonStyle(LerroPillButtonStyle(prominent: true))
                     .controlSize(.large)
                     .disabled(practiceCaptureButtonDisabled)
@@ -602,10 +630,14 @@ struct OnboardingView: View {
 
                 Spacer()
 
-                Text(practicePhaseText)
+                Text(LocalizedStringKey(practicePhaseText))
                     .font(LerroTheme.font(12, weight: .medium))
                     .foregroundStyle(practicePhaseColor)
-                    .accessibilityLabel("听写状态：\(practicePhaseText)")
+                    .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                        "听写状态：%@",
+                        locale: locale,
+                        arguments: localized(practicePhaseText)
+                    )))
             }
         }
     }
@@ -628,8 +660,8 @@ struct OnboardingView: View {
                     Spacer()
                     if let definition { ShortcutBadge(title: definition.displayName) }
                 }
-                Text(title).font(LerroTheme.font(14, weight: .medium))
-                Text(detail)
+                Text(verbatim: localized(title)).font(LerroTheme.font(14, weight: .medium))
+                Text(verbatim: localized(detail))
                     .font(LerroTheme.font(12))
                     .foregroundStyle(LerroTheme.secondaryText)
                     .multilineTextAlignment(.leading)
@@ -644,8 +676,12 @@ struct OnboardingView: View {
             }
         }
         .buttonStyle(LerroPressButtonStyle())
-        .accessibilityLabel("设置\(title)快捷键")
-        .accessibilityValue(definition?.displayName ?? "尚未设置")
+        .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+            "设置%@快捷键",
+            locale: locale,
+            arguments: localized(title)
+        )))
+        .accessibilityValue(Text(verbatim: definition?.displayName ?? localized("尚未设置")))
     }
 
     private var visualPanel: some View {
@@ -666,10 +702,10 @@ struct OnboardingView: View {
                 .shadow(color: .black.opacity(0.12), radius: 18, y: 9)
 
                 VStack(spacing: 6) {
-                    Text(visualTitle)
+                    Text(verbatim: localized(visualTitle))
                         .font(LerroTheme.font(14, weight: .medium))
                         .foregroundStyle(.primary)
-                    Text(visualCaption)
+                    Text(verbatim: localizedVisualCaption)
                         .font(LerroTheme.font(13))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -683,7 +719,11 @@ struct OnboardingView: View {
             Divider()
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(visualTitle)。\(visualCaption)")
+        .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+            "%@。%@",
+            locale: locale,
+            arguments: localized(visualTitle), localizedVisualCaption
+        )))
     }
 
     private func informationRow(title: String, detail: String, icon: String) -> some View {
@@ -694,9 +734,9 @@ struct OnboardingView: View {
                 .frame(width: 24)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                Text(verbatim: localized(title))
                     .font(LerroTheme.font(14, weight: .medium))
-                Text(detail)
+                Text(verbatim: localized(detail))
                     .font(LerroTheme.font(12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -715,13 +755,17 @@ struct OnboardingView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 7) {
-                    Text(permission.title)
+                    Text(LocalizedStringKey(permission.title))
                         .font(LerroTheme.font(14, weight: .medium))
-                    Label(granted ? "已授权" : "等待授权", systemImage: granted ? "checkmark.circle.fill" : "circle.dashed")
+                    Label {
+                        Text(verbatim: localized(granted ? "已授权" : "等待授权"))
+                    } icon: {
+                        Image(systemName: granted ? "checkmark.circle.fill" : "circle.dashed")
+                    }
                         .font(LerroTheme.font(12, weight: .medium))
                         .foregroundStyle(granted ? LerroTheme.green : LerroTheme.orange)
                 }
-                Text(permission.detail)
+                Text(LocalizedStringKey(permission.detail))
                     .font(LerroTheme.font(12))
                     .foregroundStyle(.secondary)
             }
@@ -733,7 +777,11 @@ struct OnboardingView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .accessibilityLabel("打开\(permission.title)系统设置")
+            .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+                "打开%@系统设置",
+                locale: locale,
+                arguments: localized(permission.title)
+            )))
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 62)
@@ -758,8 +806,8 @@ struct OnboardingView: View {
                 .foregroundStyle(status.state == .ready ? LerroTheme.green : LerroTheme.accent)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(LerroTheme.font(14, weight: .medium))
-                Text(status.message.isEmpty ? detail : status.message)
+                Text(verbatim: localized(title)).font(LerroTheme.font(14, weight: .medium))
+                Text(verbatim: localizedStatus(status.message.isEmpty ? detail : status.message))
                     .font(LerroTheme.font(12))
                     .foregroundStyle(.secondary)
             }
@@ -795,9 +843,9 @@ struct OnboardingView: View {
                 .frame(width: 24)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                Text(verbatim: localized(title))
                     .font(LerroTheme.font(14, weight: .medium))
-                Text(detail)
+                Text(verbatim: localized(detail))
                     .font(LerroTheme.font(12))
                     .foregroundStyle(.secondary)
             }
@@ -814,8 +862,12 @@ struct OnboardingView: View {
                 .stroke(LerroTheme.thinBorder)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title)，快捷键 \(shortcut)")
-        .accessibilityValue(detail)
+        .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
+            "快捷键 %@：%@",
+            locale: locale,
+            arguments: localized(title), shortcut
+        )))
+        .accessibilityValue(Text(verbatim: localized(detail)))
     }
 
     private func permissionGranted(_ permission: OnboardingPermission) -> Bool {
@@ -828,7 +880,11 @@ struct OnboardingView: View {
     private func openSystemSettings(for permission: OnboardingPermission) {
         guard let url = URL(string: permission.systemSettingsURLString),
               NSWorkspace.shared.open(url) else {
-            session.currentError = "无法打开\(permission.title)设置，请在系统设置的隐私与安全性中手动打开。"
+            session.currentError = LerroInterfaceLocalization.format(
+                "无法打开%@设置，请在系统设置的隐私与安全性中手动打开。",
+                locale: locale,
+                arguments: localized(permission.title)
+            )
             return
         }
     }
@@ -940,8 +996,16 @@ struct OnboardingView: View {
         }
         shortcutSaveError = ""
         sampleText = dictateShortcutActivation.resolved == .hold
-            ? "把光标放在这里，然后按住 \(dictateShortcutDraft.displayName) 说一句话。"
-            : "把光标放在这里，按一下 \(dictateShortcutDraft.displayName) 开始，再按一下完成。"
+            ? LerroInterfaceLocalization.format(
+                "把光标放在这里，然后按住 %@ 说一句话。",
+                locale: locale,
+                arguments: dictateShortcutDraft.displayName
+            )
+            : LerroInterfaceLocalization.format(
+                "把光标放在这里，按一下 %@ 开始，再按一下完成。",
+                locale: locale,
+                arguments: dictateShortcutDraft.displayName
+            )
         return true
     }
 
@@ -950,6 +1014,34 @@ struct OnboardingView: View {
         Task { @MainActor in
             await Task.yield()
             session.toggleCapture(.dictation)
+        }
+    }
+
+    private var onboardingProgressText: String {
+        LerroInterfaceLocalization.format(
+            "第 %lld 步，共 %lld 步",
+            locale: locale,
+            arguments: Int64(step.rawValue + 1), Int64(OnboardingStep.allCases.count)
+        )
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
+    }
+
+    private func localizedStatus(_ message: String) -> String {
+        LerroInterfaceLocalization.statusString(message, locale: locale)
+    }
+
+    private func localizeDefaultSampleTextIfNeeded() {
+        let key = "把光标放在这里，然后按住 Fn 说一句话。"
+        let knownDefaults = [
+            key,
+            LerroInterfaceLocalization.string(key, locale: Locale(identifier: "en")),
+            LerroInterfaceLocalization.string(key, locale: Locale(identifier: "zh-Hans"))
+        ]
+        if knownDefaults.contains(sampleText) {
+            sampleText = localized(key)
         }
     }
 
@@ -1031,7 +1123,7 @@ struct OnboardingView: View {
             return "等待您的下载确认"
         }
         if !session.modelStatus.message.isEmpty {
-            return session.modelStatus.message
+            return localizedStatus(session.modelStatus.message)
         }
         return switch session.modelStatus.state {
         case .unavailable: "等待准备"
@@ -1152,12 +1244,22 @@ struct OnboardingView: View {
         case .practice: "自在说，清楚写。"
         }
     }
+
+    private var localizedVisualCaption: String {
+        guard step == .shortcuts else { return localized(visualCaption) }
+        let shortcut = selectedShortcutDraft.wrappedValue?.displayName ?? "Fn"
+        let activation = selectedShortcutActivation.wrappedValue.resolved == .hold
+            ? localized("按住说话")
+            : localized("按一下开关")
+        return "\(shortcut) · \(activation)"
+    }
 }
 
 private struct WaveLevelMeter: View {
     let level: Float
     let reduceMotion: Bool
     let isRunning: Bool
+    @Environment(\.locale) private var locale
 
     var body: some View {
         Group {
@@ -1165,7 +1267,7 @@ private struct WaveLevelMeter: View {
                 HStack(spacing: 8) {
                     Image(systemName: detectedSound ? "waveform.circle.fill" : "waveform.circle")
                         .foregroundStyle(detectedSound ? LerroTheme.accent : LerroTheme.tertiaryText)
-                    Text(detectedSound ? "检测到声音" : (isRunning ? "等待声音" : "麦克风测试未开始"))
+                    Text(verbatim: localized(detectedSound ? "检测到声音" : (isRunning ? "等待声音" : "麦克风测试未开始")))
                         .font(LerroTheme.font(12, weight: .medium))
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -1186,7 +1288,7 @@ private struct WaveLevelMeter: View {
         .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("麦克风音量")
-        .accessibilityValue(accessibilityValue)
+        .accessibilityValue(Text(verbatim: localized(accessibilityValue)))
     }
 
     private var detectedSound: Bool {
@@ -1196,5 +1298,9 @@ private struct WaveLevelMeter: View {
     private var accessibilityValue: String {
         if !isRunning { return "测试未开始" }
         return detectedSound ? "检测到声音" : "等待声音"
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: locale)
     }
 }
