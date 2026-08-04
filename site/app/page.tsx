@@ -73,12 +73,12 @@ export function HomePage({ locale }: { locale: Locale }) {
       <section className="section product-section" id="product">
         <div className="section-heading"><div><p className="eyebrow">{home.productEyebrow}</p><h2>{home.productHeadline}</h2></div><p>{home.productCopy}</p></div>
         <figure className="screenshot screenshot--hero">
-          <Image src={`${screenshotPath}/${home.screenshots[0].file}`} alt={home.screenshots[0].alt} width={1976} height={1420} sizes="(max-width: 720px) 100vw, 1180px" />
+          <Image src={`${screenshotPath}/${home.screenshots[0].file}`} alt={home.screenshots[0].alt} width={1976} height={1420} sizes="(max-width: 720px) 100vw, 1180px" unoptimized />
         </figure>
         <div className="screenshot-grid">
           {home.screenshots.slice(1).map((screenshot) => (
             <figure className="screenshot" key={screenshot.file}>
-              <Image src={`${screenshotPath}/${screenshot.file}`} alt={screenshot.alt} width={1976} height={1420} sizes="(max-width: 900px) 100vw, 50vw" />
+              <Image src={`${screenshotPath}/${screenshot.file}`} alt={screenshot.alt} width={1976} height={1420} sizes="(max-width: 900px) 100vw, 50vw" unoptimized />
               <figcaption>{screenshot.caption}</figcaption>
             </figure>
           ))}

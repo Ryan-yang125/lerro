@@ -49,6 +49,8 @@ test("server-renders the complete Lerro landing page", async () => {
   assert.match(html, /screenshots\/en\/lerro-home-light\.png/);
   assert.match(html, /screenshots\/en\/lerro-onboarding-shortcuts-light\.png/);
   assert.match(html, /screenshots\/en\/lerro-settings-light\.png/);
+  assert.match(html, /src="\/screenshots\/en\/lerro-home-light\.png"/);
+  assert.doesNotMatch(html, /_vinext\/image\?url=.*screenshots/i);
   assert.match(html, /https:\/\/updates\.lerroapp\.com\/download\/macos\/latest/);
   assert.match(html, /href="\/changelog"/);
   assert.match(html, /href="\/zh"/);
@@ -69,6 +71,8 @@ test("server-renders the Simplified Chinese landing page with localized metadata
   assert.match(html, /screenshots\/zh\/lerro-home-light\.png/);
   assert.match(html, /screenshots\/zh\/lerro-onboarding-shortcuts-light\.png/);
   assert.match(html, /screenshots\/zh\/lerro-settings-light\.png/);
+  assert.match(html, /src="\/screenshots\/zh\/lerro-home-light\.png"/);
+  assert.doesNotMatch(html, /_vinext\/image\?url=.*screenshots/i);
   assert.match(html, /href="\/zh\/changelog"/);
   assert.match(html, /href="\/"/);
   assert.match(html, /rel="canonical" href="https:\/\/lerroapp\.com\/zh"/i);
