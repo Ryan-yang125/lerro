@@ -250,15 +250,18 @@ PY
             exit 1
         }
     elif [[ "$r2_get_output" == *"The specified key does not exist."* ]]; then
-        # The exact GET above proved this immutable key absent. Keep Wrangler's
-        # standard R2 validation enabled; SHA-256 readback below remains the
-        # publication gate before any D1 record becomes public.
+        # The exact GET above proved this immutable key absent. ZIP archives are
+        # application data, so the R2 Data Catalog prompt is irrelevant here.
+        # SHA-256 readback remains the publication gate before any D1
+        # record becomes public; Wrangler 4.118.0 can otherwise report a large
+        # binary upload as complete while leaving the key absent.
         "$worker_binary" r2 object put "$r2_bucket/$r2_key" \
             --remote \
             --config "$distribution_config" \
             --file "$archive_path" \
             --content-type application/zip \
-            --cache-control "public, max-age=31536000, immutable"
+            --cache-control "public, max-age=31536000, immutable" \
+            --force
         r2_readback_succeeded=0
         for readback_attempt in {1..5}; do
             if "$worker_binary" r2 object get "$r2_bucket/$r2_key" \

@@ -378,6 +378,11 @@ curl --fail --silent --show-error https://lerroapp.com/changelog >/dev/null
 只接受读取请求；appcast 和下载路由只读取已发布的 stable head。发布完成后脚本以 cache-busting 请求复验 appcast enclosure 的版本、长度、
 Ed25519 签名、不可变 URL，以及 latest 与不可变 ZIP 的 SHA-256。
 
+发布 ZIP 属于普通二进制 application data。`r2 object put` 使用 `--force` 跳过 R2 Data
+Catalog 提示；项目完整性门禁保持有效。脚本必须从同一个不可变 key 读回完整对象并与
+release manifest 的 SHA-256、字节数一致，随后才允许写入 D1。Wrangler 仅输出
+`Upload complete` 不能作为上传成功证据。
+
 Sparkle framework 在 `dist/Lerro.app/Contents/Frameworks` 内签名并随 app 分发。`Info.plist`
 固定 `SUFeedURL`、`SUPublicEDKey`，并关闭 Sparkle 自带的定时检查和自动下载。应用在启动
 时及每 24 小时静默探测 feed；发现新版本后显示蓝色下载入口，用户点击后进入 Sparkle

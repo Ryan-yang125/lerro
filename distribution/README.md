@@ -60,6 +60,10 @@ npx wrangler@4.118.0 deploy
 releases/<version>/<build>/Lerro-macOS-arm64.zip
 ```
 
+ZIP 是普通二进制 application data；上传命令使用 `--force` 跳过 R2 Data Catalog 提示。
+发布脚本随后从同一个 key 读回全部字节并核对 release manifest SHA-256，读回成功前不会
+创建 D1 release 或推进 stable channel head。
+
 随后受控发布脚本将 publication JSON 交给唯一的 SQL 生成入口：
 
 ```zsh

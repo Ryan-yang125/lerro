@@ -21,6 +21,9 @@ All notable changes to Lerro will be documented here. The project follows
   recovery, full event-tap reconstruction, and Fn-prefix upgrades.
 - Excluded the private Cloudflare Wrangler configuration from clean public
   exports and made the public scanner reject it explicitly.
+- Skipped R2 Data Catalog prompting for binary release archives after Wrangler
+  4.118.0 produced empty successful uploads, while retaining mandatory
+  SHA-256 readback before the stable channel can advance.
 
 ## [1.1.0] - 2026-08-04
 
