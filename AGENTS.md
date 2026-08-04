@@ -3,6 +3,21 @@
 本文件约束所有在本仓库工作的 agent。开始修改前阅读本文件与
 [`docs/README.md`](docs/README.md)，再按改动范围阅读对应专题文档。
 
+## 零上下文接手
+
+- 新会话先读取 [`docs/handoff/README.md`](docs/handoff/README.md) 与
+  [`docs/handoff/current-state.md`](docs/handoff/current-state.md)，确认当前公开版本、发布边界和待复验项。
+- 项目级完整工作流以
+  [`.agents/skills/lerro-development/SKILL.md`](.agents/skills/lerro-development/SKILL.md)
+  为单一事实源。Codex 从 `.agents/skills` 发现它；Claude Code 通过根
+  [`CLAUDE.md`](CLAUDE.md) 和 `.claude/skills` 薄入口接入同一流程。
+- `.codex/environments/environment.toml` 只配置 Codex Desktop 的本地 Run 动作；仓库级 Codex Skill 位于 `.agents/skills`。
+- 开始实现前运行 `./script/validate_agent_workspace.sh`。准备真实发布时再运行
+  `./script/check_maintainer_readiness.sh --release --online`。
+- 发布机的非秘密标签和公开仓库工作树路径放在被忽略的
+  `config/maintainer.local.env`；模板为
+  [`config/maintainer.env.example`](config/maintainer.env.example)。禁止把凭据值、证书身份详情或个人路径写入受版本控制文件。
+
 ## 沟通硬规则
 
 - 避免先否定前项、随后肯定后项的对照句式；英文同构句式同样禁用。
@@ -25,6 +40,7 @@
    - 身份与迁移：[`docs/identity.md`](docs/identity.md)
    - 排障：[`docs/troubleshooting.md`](docs/troubleshooting.md)
    - 开源边界：[`docs/open-source/README.md`](docs/open-source/README.md)
+   - 陌生会话接手与完整交付：[`docs/handoff/README.md`](docs/handoff/README.md)
 4. 使用 `rg` 定位符号和调用者，再确定改动边界。
 5. 先跑最窄的相关验证，再跑改动类型要求的完整门禁。
 

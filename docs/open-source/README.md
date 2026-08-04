@@ -8,8 +8,8 @@ The research workspace remains a private engineering archive.
 
 The public repository contains the source package, tests, vendored source with
 provenance, application configuration, build and release scripts, governance,
-public documentation, GitHub templates, licensed brand assets, and the website
-source under `site/`.
+public documentation, project-level Claude/Codex agent entrypoints, GitHub
+templates, licensed brand assets, and the website source under `site/`.
 
 It excludes research captures, comparison material, reverse-engineering notes,
 third-party product screenshots, local manifests, personal data, credentials,
@@ -18,6 +18,10 @@ recordings, logs, caches, website dependencies and generated output, and the
 source repository's Git object database. Website exclusions include
 `node_modules`, `dist`, `out`, `.wrangler`, `.next`, `.vinext`, `coverage`,
 `outputs`, `work`, and generated `next-env.d.ts` files.
+
+Release-machine labels and local paths live in the ignored
+`config/maintainer.local.env`. The tracked `config/maintainer.env.example`
+contains placeholders only.
 
 ## License map
 

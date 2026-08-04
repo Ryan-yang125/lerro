@@ -102,6 +102,7 @@ while IFS= read -r entry; do
             --exclude='next-env.d.ts' \
             --exclude='out/' \
             --exclude='outputs/' \
+            --exclude='/maintainer.local.env' \
             --exclude='work/' \
             --exclude='xcuserdata/' \
             --exclude='.DS_Store' \

@@ -139,6 +139,10 @@ for path in root.rglob("*"):
         errors.append(
             f"private Wrangler configuration is excluded from the public export: {relative}"
         )
+    if relative == "config/maintainer.local.env":
+        errors.append(
+            "local maintainer configuration is excluded from the public export"
+        )
 
     parts = pathlib.PurePosixPath(relative).parts
     forbidden_parts = {

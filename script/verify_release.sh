@@ -49,6 +49,7 @@ if ! grep -q -- '--pipe' "$project_dir/script/publish_cloudflare_release.sh"; th
     exit 1
 fi
 plutil -lint config/Info.plist config/Lerro.entitlements Sources/Lerro/Resources/PrivacyInfo.xcprivacy
+"$project_dir/script/validate_agent_workspace.sh"
 
 print "[2/8] Verifying deterministic Brand Kit assets"
 "$project_dir/Brand/scripts/verify-assets.sh"

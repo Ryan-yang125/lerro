@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lerro Development"
+  short_description: "Develop, validate, and release Lerro safely"
+  default_prompt: "Use $lerro-development to implement and validate this Lerro change through the appropriate release boundary."

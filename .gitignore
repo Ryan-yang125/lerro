@@ -10,6 +10,7 @@ xcuserdata/
 *.xcuserstate
 *.log
 config/local.json
+config/maintainer.local.env
 .env
 .env.*
 !.env.example

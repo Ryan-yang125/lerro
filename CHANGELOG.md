@@ -6,6 +6,13 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+### Added
+
+- A zero-history Claude Code and Codex workspace entry with one canonical
+  development skill, task-to-document routing, maintainer readiness probes,
+  release evidence templates, and an end-to-end local validation and publication
+  workflow.
+
 ## [1.2.0] - 2026-08-04
 
 ### Added

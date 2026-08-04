@@ -2,6 +2,7 @@
 .gitattributes
 .gitignore
 AGENTS.md
+CLAUDE.md
 CHANGELOG.md
 CODE_OF_CONDUCT.md
 CONTRIBUTING.md
@@ -17,6 +18,8 @@ SECURITY.md
 SUPPORT.md
 THIRD_PARTY_NOTICES.md
 TRADEMARKS.md
+.agents/
+.claude/
 
 # Package, source, tests, and licensed assets
 Package.swift
@@ -32,6 +35,7 @@ site/
 # Public project automation
 .github/
 script/build_and_run.sh
+script/check_maintainer_readiness.sh
 script/check_third_party_licenses.py
 script/export_public_repo.sh
 script/generate_sbom.py
@@ -44,6 +48,7 @@ script/signing_support.zsh
 script/test_live_model.sh
 script/test_live_remote.sh
 script/test_sbom.py
+script/validate_agent_workspace.sh
 script/verify_sbom.py
 script/verify_release.sh
 
@@ -52,6 +57,7 @@ docs/README.md
 docs/architecture.md
 docs/build.md
 docs/core-flow.md
+docs/handoff/
 docs/decisions/
 docs/identity.md
 docs/models.md

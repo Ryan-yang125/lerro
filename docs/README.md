@@ -7,11 +7,13 @@ evidence remain authoritative when implementation and prose diverge.
 ## Reading path
 
 1. [`AGENTS.md`](../AGENTS.md) for repository rules and completion gates.
-2. [`architecture.md`](architecture.md) for targets, dependency direction, data
+2. [`handoff/README.md`](handoff/README.md) for a zero-history development,
+   validation, publication, and evidence workflow.
+3. [`architecture.md`](architecture.md) for targets, dependency direction, data
    ownership, and code routing.
-3. [`core-flow.md`](core-flow.md) for session states, cancellation, delivery,
+4. [`core-flow.md`](core-flow.md) for session states, cancellation, delivery,
    persistence, and recovery.
-4. Select the relevant boundary:
+5. Select the relevant boundary:
    - [`permissions.md`](permissions.md)
    - [`models.md`](models.md)
    - [`privacy-security.md`](privacy-security.md)
@@ -19,11 +21,11 @@ evidence remain authoritative when implementation and prose diverge.
    - [`testing.md`](testing.md)
    - [`release.md`](release.md)
    - [`troubleshooting.md`](troubleshooting.md)
-5. Read [`identity.md`](identity.md) before changing product, bundle, data,
+6. Read [`identity.md`](identity.md) before changing product, bundle, data,
    permission, or release identity.
-6. Read [`open-source/README.md`](open-source/README.md) before publishing source
+7. Read [`open-source/README.md`](open-source/README.md) before publishing source
    or release assets.
-7. Add an ADR under [`decisions/`](decisions/README.md) for a long-lived
+8. Add an ADR under [`decisions/`](decisions/README.md) for a long-lived
    architecture change.
 
 Brand and interface rules live in [`Brand/`](../Brand/), including the
@@ -34,6 +36,7 @@ licenses, and deterministic validation assets.
 
 | Document | Boundary |
 | --- | --- |
+| [`handoff/`](handoff/README.md) | Fresh-agent bootstrap, current release state, maintainer readiness, full-chain workflow, and evidence template |
 | [`architecture.md`](architecture.md) | Targets, dependencies, composition, concurrency, storage, and build shape |
 | [`core-flow.md`](core-flow.md) | Dictate, Translate, Ask, Rewrite, Hands-free, failure, cancellation, and cleanup |
 | [`permissions.md`](permissions.md) | Microphone, Accessibility, TCC, and manual checks |

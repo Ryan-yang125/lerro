@@ -55,6 +55,10 @@ The scanner checks:
 - Private Wrangler configuration files named `wrangler.toml` are absent. Public
   deployment structure is represented by committed `wrangler.toml.example` or
   `wrangler.jsonc` files only.
+- `config/maintainer.local.env` is absent. The public template contains only
+  placeholders for local paths and Keychain labels.
+- Project-level `AGENTS.md`, `CLAUDE.md`, `.agents/skills`, and `.claude/skills`
+  are present as regular text files; symbolic links remain excluded.
 - Generated website type declarations such as `next-env.d.ts` are recreated by
   the website build and stay outside the clean source export.
 - The new repository has no commits, no remotes, and no inherited Git objects.

@@ -59,6 +59,9 @@ jobs:
       - name: Validate shell entrypoints
         run: zsh -n Brand/scripts/*.sh script/*.sh script/*.zsh
 
+      - name: Validate agent workspace
+        run: ./script/validate_agent_workspace.sh
+
       - name: Prepare Metal toolchain
         run: |
           if ! xcrun metal --version >/dev/null 2>&1; then
