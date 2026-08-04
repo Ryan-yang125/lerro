@@ -43,6 +43,7 @@ script/scan_public_repo.sh
 script/signing_support.zsh
 script/test_live_model.sh
 script/test_live_remote.sh
+script/test_sbom.py
 script/verify_sbom.py
 script/verify_release.sh
 

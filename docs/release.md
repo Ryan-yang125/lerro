@@ -22,7 +22,11 @@ outputs/SHA256SUMS.txt
 ```
 
 `Lerro-macOS-arm64.cdx.json` 是本次 release 的 CycloneDX JSON SBOM；它从本次
-`Package.resolved` 锁定图和第三方许可证证据生成。ZIP、dSYM ZIP 与 SBOM 都属于可再生产物，
+`Package.resolved` 锁定图和第三方许可证证据生成。每个 Swift 组件使用公开 GitHub HTTPS
+VCS URL、GitHub owner/repository namespace 与仓库原生大小写生成 PURL。lockfile 仍保留的
+组件在当前 SwiftPM 图不可达时以 `lockfile-only` 标记和空依赖记录，确保 inventory 完整且图
+状态可审计。相同 app、manifest、lockfile 和依赖图会生成逐字节相同的 SBOM；serial UUIDv5
+绑定完整规范化 payload，内容变化会生成新的 serial。ZIP、dSYM ZIP 与 SBOM 都属于可再生产物，
 通常由 `.gitignore` 排除。manifest 与 checksum 是否纳入版本控制由发布策略决定；它们必须与同一次打包生成的二进制一致。
 
 ## 前置条件
@@ -263,8 +267,12 @@ cmp -s \
 - 校验 Brand ICNS、菜单栏导出与 `Sources/Lerro/Resources` 逐字节一致。
 - 运行全量 `swift test` 并调用 `package_release.sh` 生成当前产物。
 - 读取 `outputs/Lerro-release-manifest.json`。
-- 生成并校验 `outputs/Lerro-macOS-arm64.cdx.json`：CycloneDX 格式、
-  `Package.resolved` 锁定图、已解析依赖身份、Vendor 来源记录和许可证证据必须一致。
+- 生成并校验 `outputs/Lerro-macOS-arm64.cdx.json`：CycloneDX 格式、原始与解析后的
+  `Package.resolved`、Swift PURL、公开 GitHub VCS URL、已解析图或 `lockfile-only` 标记、
+  Vendor 来源记录和许可证证据必须一致。
+- 运行 `script/test_sbom.py`：覆盖正向校验、同输入的逐字节重复生成、无效 Swift PURL、含凭据
+  的 VCS URL、篡改 lockfile snapshot 与篡改依赖图；还覆盖当前图中全部 lockfile-only 组件的
+  生成和复验。
 - 校验 `SHA256SUMS.txt` 中 app ZIP、dSYM ZIP、SBOM 和 manifest。
 - 解压到 `mktemp -d` 创建的隔离目录。
 - 验证 app 根布局、Info.plist、PrivacyInfo、资源、许可证和 executable。
@@ -289,7 +297,7 @@ manifest 是本次打包的机器可读证据，包含：
 - app 名称、bundle ID、版本、build、最低系统、架构。
 - executable hash、binary UUID、dSYM UUID 和 resource bundles。
 - requested/resolved signing mode、identity、authority、Team ID、CDHash、designated requirement、公证状态。
-- Swift、Xcode、Metal 版本和 `Package.resolved` hash。
+- Swift、Xcode、Metal 版本、`Package.resolved` 原始 SHA-256 与解析后的完整 lockfile snapshot。
 - app ZIP、dSYM ZIP、CycloneDX SBOM 的文件名、hash 和字节数，以及公开 Developer ID ZIP 的 Sparkle Ed25519 签名和长度。
 
 文档或人工记录中的产物信息应引用 manifest，避免手动复制后与新产物漂移。

@@ -388,6 +388,7 @@ elif sparkle.get("edSignature") is not None or sparkle.get("length") is not None
 PY
 
 python3 "$script_dir/verify_sbom.py" "$project_dir" "$sbom_path" "$app_path" "$manifest_path"
+PYTHONDONTWRITEBYTECODE=1 python3 "$script_dir/test_sbom.py" "$project_dir" "$app_path" "$manifest_path"
 
 if [[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["signing"]["resolvedMode"])' "$manifest_path")" == "developer-id" ]]; then
     xcrun stapler validate "$app_path"

@@ -10,7 +10,6 @@ paths stay outside the artifact.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import hashlib
 import json
 import pathlib
@@ -19,7 +18,7 @@ import re
 import subprocess
 import sys
 import uuid
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 
 CYCLONEDX_SCHEMA = "https://cyclonedx.org/schema/bom-1.7.schema.json"
@@ -34,8 +33,9 @@ ABSOLUTE_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9+.-])/(?:Users|private|var|tmp|Volumes|Applications|Library|System|opt|usr|bin|sbin|etc)(?:/|$)"
 )
 SECRET_PATTERN = re.compile(
-    r"(?i)(?:api[_-]?key|authorization|bearer|credential|password|secret)\s*[:=]"
+    r"(?i)(?:api[_-]?key|authorization|bearer|credential|password|secret|token)\s*[\"']?\s*[:=]"
 )
+GITHUB_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 class SBOMError(RuntimeError):
@@ -114,6 +114,68 @@ def license_claims(notices_path: pathlib.Path) -> dict[str, str]:
     return claims
 
 
+def public_github_vcs(url: str) -> tuple[str, str, str]:
+    """Return the exact VCS URL plus the Swift PURL namespace and repository name."""
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except ValueError as error:
+        fail(f"invalid VCS URL: {error}")
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != "github.com"
+        or parsed.hostname != "github.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        fail(f"VCS URL must be a public GitHub HTTPS repository: {url}")
+    parts = parsed.path.split("/")
+    if len(parts) != 3 or parts[0] or not parts[1] or not parts[2]:
+        fail(f"VCS URL must identify exactly one GitHub repository: {url}")
+    owner = parts[1]
+    repository = parts[2][:-4] if parts[2].endswith(".git") else parts[2]
+    if not repository or not GITHUB_NAME_PATTERN.fullmatch(owner) or not GITHUB_NAME_PATTERN.fullmatch(repository):
+        fail(f"VCS URL has an unsupported GitHub owner or repository name: {url}")
+    return url, f"github.com/{owner}", repository
+
+
+def swift_purl(namespace: str, repository: str, version: str) -> str:
+    return (
+        f"pkg:swift/{quote(namespace, safe='/-._')}"
+        f"/{quote(repository, safe='.-_')}@{quote(version, safe='.-_')}"
+    )
+
+
+def current_resolved(project: pathlib.Path) -> tuple[dict[str, object], str]:
+    path = project / "Package.resolved"
+    if not path.is_file():
+        fail("missing SBOM input: Package.resolved")
+    try:
+        resolved = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        fail(f"Package.resolved is not JSON: {error}")
+    if not isinstance(resolved, dict):
+        fail("Package.resolved has an invalid shape")
+    return resolved, sha256(path)
+
+
+def verify_manifest_resolved_binding(
+    project: pathlib.Path, manifest: dict[str, object], manifest_resolved: object
+) -> tuple[dict[str, object], str]:
+    current, current_hash = current_resolved(project)
+    toolchains = manifest.get("toolchains")
+    if not isinstance(toolchains, dict):
+        fail("canonical manifest has no toolchain metadata")
+    if toolchains.get("packageResolvedSHA256") != current_hash:
+        fail("canonical manifest Package.resolved hash differs from the current raw lockfile")
+    if not isinstance(manifest_resolved, dict) or manifest_resolved != current:
+        fail("canonical manifest Package.resolved snapshot differs from the current parsed lockfile")
+    return current, current_hash
+
+
 def package_maps(project: pathlib.Path) -> tuple[dict[str, pathlib.Path], dict[str, pathlib.Path]]:
     checkouts_root = project / ".build" / "checkouts"
     artifacts_root = project / ".build" / "artifacts"
@@ -149,20 +211,23 @@ def vendor_metadata(vendor: pathlib.Path) -> tuple[str, str, str]:
 
 
 def resolved_graph(
-    project: pathlib.Path, expected: set[str]
-) -> tuple[dict[str, set[str]], set[str]]:
+    project: pathlib.Path, expected: set[str], graph_path: pathlib.Path | None = None
+) -> tuple[dict[str, set[str]], set[str], set[str]]:
     try:
-        result = subprocess.run(
-            ["swift", "package", "show-dependencies", "--format", "json"],
-            cwd=project,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
+        if graph_path is None:
+            result = subprocess.run(
+                ["swift", "package", "show-dependencies", "--format", "json"],
+                cwd=project,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            graph_json = result.stdout
+        else:
+            graph_json = graph_path.read_text(encoding="utf-8")
+        root = json.loads(graph_json)
     except (OSError, subprocess.CalledProcessError) as error:
         fail(f"cannot obtain the resolved SwiftPM dependency graph: {error}")
-    try:
-        root = json.loads(result.stdout)
     except json.JSONDecodeError as error:
         fail(f"SwiftPM dependency graph is not JSON: {error}")
 
@@ -199,10 +264,7 @@ def resolved_graph(
                 fail(f"SwiftPM graph has an unexpected direct dependency: {child_identity}")
 
     visit(root, None, is_root=True)
-    missing = sorted(expected - observed)
-    if missing:
-        fail("SwiftPM graph omitted components: " + ", ".join(missing))
-    return graph, direct_dependencies
+    return graph, direct_dependencies, observed
 
 
 def relative_packaged_license(resources: pathlib.Path, identity: str) -> pathlib.Path:
@@ -227,6 +289,7 @@ def safe_document(document: dict[str, object]) -> None:
 def package_component(
     *,
     identity: str,
+    name: str,
     version: str,
     revision: str,
     upstream: str,
@@ -235,16 +298,20 @@ def package_component(
     source_license_hash: str,
     resources: pathlib.Path,
     source_kind: str,
+    graph_reachable: bool,
 ) -> dict[str, object]:
-    purl = f"pkg:swift/{quote(identity, safe='.-_')}@{quote(version, safe='.-_')}"
+    vcs_url, namespace, repository = public_github_vcs(upstream)
+    if name != repository:
+        fail(f"component name does not match its GitHub repository: {identity}")
+    purl = swift_purl(namespace, repository, version)
     component: dict[str, object] = {
         "type": "library",
         "bom-ref": purl,
-        "name": identity,
+        "name": name,
         "version": version,
         "purl": purl,
         "licenses": [{"license": {"id": license_expression}}],
-        "externalReferences": [{"type": "vcs", "url": upstream}],
+        "externalReferences": [{"type": "vcs", "url": vcs_url}],
         "properties": [
             {"name": "lerro:package:identity", "value": identity},
             {"name": "lerro:package:source", "value": source_kind},
@@ -260,6 +327,14 @@ def package_component(
             {
                 "name": "lerro:package:source-license-sha256",
                 "value": source_license_hash,
+            },
+            {
+                "name": "lerro:package:graph-reachable",
+                "value": str(graph_reachable).lower(),
+            },
+            {
+                "name": "lerro:package:graph-source",
+                "value": "swiftpm-show-dependencies" if graph_reachable else "lockfile-only",
             },
         ],
     }
@@ -281,6 +356,11 @@ def main() -> None:
         type=pathlib.Path,
         help="source snapshot emitted by package_release.sh for a newly built release",
     )
+    parser.add_argument(
+        "--swiftpm-graph",
+        type=pathlib.Path,
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
 
     project = args.project.resolve()
@@ -295,11 +375,7 @@ def main() -> None:
             fail(f"missing SBOM input: {required.name}")
     manifest: dict[str, object] | None = None
     if args.manifest is None:
-        resolved_path = project / "Package.resolved"
-        if not resolved_path.is_file():
-            fail("missing SBOM input: Package.resolved")
-        resolved = json.loads(resolved_path.read_text(encoding="utf-8"))
-        lock_hash = sha256(resolved_path)
+        resolved, lock_hash = current_resolved(project)
         if args.source_snapshot is None:
             fail("--source-snapshot is required without --manifest")
         source = release_source(
@@ -308,13 +384,10 @@ def main() -> None:
     else:
         manifest_path = args.manifest.resolve()
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict):
+            fail("canonical manifest has an invalid shape")
         resolved = manifest.get("packageResolved")
-        if not isinstance(resolved, dict):
-            fail("canonical manifest has no Package.resolved snapshot")
-        toolchains = manifest.get("toolchains")
-        if not isinstance(toolchains, dict) or not isinstance(toolchains.get("packageResolvedSHA256"), str):
-            fail("canonical manifest has no Package.resolved hash")
-        lock_hash = toolchains["packageResolvedSHA256"]
+        resolved, lock_hash = verify_manifest_resolved_binding(project, manifest, resolved)
         source = release_source(manifest.get("source"))
         if args.source_snapshot is not None:
             supplied_source = release_source(
@@ -342,7 +415,9 @@ def main() -> None:
     if set(claims) != expected:
         fail("third-party notice inventory differs from the resolved package inventory")
     checkouts, artifacts = package_maps(project)
-    graph, direct_dependencies = resolved_graph(project, expected)
+    graph, direct_dependencies, reachable = resolved_graph(
+        project, expected, args.swiftpm_graph.resolve() if args.swiftpm_graph else None
+    )
 
     with info_path.open("rb") as handle:
         info = plistlib.load(handle)
@@ -384,6 +459,7 @@ def main() -> None:
             revision = str(state["revision"])
             component_version = str(state.get("version") or revision)
             upstream = str(pin["location"])
+            _, _, component_name = public_github_vcs(upstream)
             evidence = artifacts.get(identity, checkouts.get(identity))
             if evidence is None:
                 fail(f"missing source license evidence for {identity}")
@@ -393,6 +469,7 @@ def main() -> None:
             source_kind = "swiftpm-resolved"
         else:
             upstream, component_version, revision = vendor_metadata(vendors[identity])
+            _, _, component_name = public_github_vcs(upstream)
             source_license = first_license(vendors[identity])
             if detected_license(source_license) != actual_license:
                 fail(f"source and packaged license claims differ for {identity}")
@@ -402,6 +479,7 @@ def main() -> None:
             fail(f"source and packaged license hashes differ for {identity}")
         component = package_component(
             identity=identity,
+            name=component_name,
             version=component_version,
             revision=revision,
             upstream=upstream,
@@ -410,6 +488,7 @@ def main() -> None:
             source_license_hash=source_license_hash,
             resources=resources,
             source_kind=source_kind,
+            graph_reachable=identity in reachable,
         )
         references[identity] = str(component["bom-ref"])
         components.append(component)
@@ -434,12 +513,8 @@ def main() -> None:
         "$schema": CYCLONEDX_SCHEMA,
         "bomFormat": "CycloneDX",
         "specVersion": "1.7",
-        "serialNumber": "urn:uuid:" + str(
-            uuid.uuid5(uuid.NAMESPACE_URL, f"{bundle_identifier}|{version}|{build}|{binary_hash}|{lock_hash}")
-        ),
         "version": 1,
         "metadata": {
-            "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
             "component": {
                 "type": "application",
                 "bom-ref": application_purl,
@@ -468,6 +543,12 @@ def main() -> None:
         "components": components,
         "dependencies": dependencies,
     }
+    serial_payload = json.dumps(
+        document, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    document["serialNumber"] = "urn:uuid:" + str(
+        uuid.uuid5(uuid.NAMESPACE_URL, serial_payload)
+    )
     safe_document(document)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
