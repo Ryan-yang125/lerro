@@ -10,14 +10,19 @@
 
 Lerro 使用 `SpeechAnalyzer` 和 `SpeechTranscriber` 进行设备端转写，无需
 `SFSpeechRecognizer` 的 Speech Recognition TCC。全局快捷键和 Command-V 都依赖
-辅助功能权限。Fn 默认快捷键在 session event tap 下会把 Emoji/Globe 的最终事件交给系统。
+辅助功能权限。Fn 默认快捷键若只依赖 aggregate flags，重复 flags、Globe keyCode 与
+尾随 release 事件可能脱离同一物理手势，系统随后会执行“表情与符号”动作。
 
 ## 方案
 
 - 生产权限只请求麦克风与辅助功能。
-- 全局快捷键使用 active HID event tap。
-- 命中的 Fn modifier sequence 从首次 `flagsChanged` 到最终 release 均由 Lerro 吞键；
-  physical drain、timeout 和 definitions 更新继续保留该所有权。
+- 全局快捷键使用 HID/head-insert active event tap，mask 固定为 keyboard down、keyboard up
+  与 modifier changes（`0x1C00`）。
+- 实体 modifier keyCode 进入独立 pressed 集合；Fn 63 与 Globe 179 映射到同一
+  SecondaryFn 语义，左右同类 modifier 保留各自实体状态。
+- 命中的 Fn/Globe sequence 从首个事件到明确 key-up 或 flags-clear release 均由 Lerro
+  吞键；physical drain 和 definitions 更新继续保留该所有权。tap disabled 会先取消逻辑
+  手势，再在 main queue 完整重建 tap。
 - 普通插入与 Rewrite 的 Command-V 提交前均检查 `CGPreflightPostEventAccess()`。
 - 空闲 HUD 直接 `orderOut`，不建立鼠标追踪热区。
 
@@ -41,9 +46,11 @@ Lerro 使用 `SpeechAnalyzer` 和 `SpeechTranscriber` 进行设备端转写，�
 
 ## 验证
 
-- `GlobalHotkeyMonitorTests` 覆盖 Fn 按下、Fn+Shift、physical drain 与最终 release。
+- `GlobalHotkeyMonitorTests` 覆盖 Fn 63、Globe 179、flags-only、key-only、重复 flags、
+  混合重排、physical drain、tap-disabled 重建、连续手势与最终 release。
 - `AccessibilityTextDelivererTests` 覆盖普通插入和 Rewrite 的辅助功能提交检查。
-- Release app 复验 TextEdit、Emoji/Globe、内置/外接键盘和辅助功能撤权。
+- Release app 在系统“按下 Fn/Globe 键：显示表情与符号”的控制组下复验 TextEdit、
+  `CharacterPaletteIM`、内置/外接键盘、连续两轮手势和辅助功能撤权。
 
 ## 文档同步
 

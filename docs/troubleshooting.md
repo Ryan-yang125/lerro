@@ -312,12 +312,20 @@ system_profiler SPAudioDataType
 - 在快捷键录制器中按下目标键，确认 keycap 的 pressed/released 状态实时变化；按钮持有
   first responder 时仍应收到事件。
 - Fn、Control、Option、Shift、Command 单键的 `flagsChanged`。
+- 内置 Fn 的 keyCode 63 与新款/外接 Globe 的 keyCode 179；记录原始 event type、keyCode、
+  flags 和物理 down 状态，保留 aggregate flags 相同的重复事件。
 - Fn + Shift 与 Fn + Space 的 exact-modifier 匹配，包括 Fn 已保持超过 120 ms 后再补按第二个键。
 - hold 的 down → began → up → ended。
 - toggle 的第一次点按开始与第二次点按完成。
 - 命中普通键的 down、repeat 与 up 全部被吞掉，常用系统 chord 保持透传。
 - Escape。
-- event tap timeout 后自动 re-enable。
+- event tap timeout/user-input disable 后在 main queue 完整重建；排队重建去重，显式 stop 后取消。
+
+若 Fn 已触发 Lerro，同时仍出现“表情与符号”，把系统“按下 Fn/Globe 键”设置为该动作，
+先退出 Lerro 建立控制组，再启动最终 Release app 在 TextEdit 连续点按两轮。检查 tap 是否位于
+HID/head-insert active 模式、mask 是否为 `0x1C00`，以及命中的 63/179 是否从首个事件持续
+吞到明确 release。测试期间观察 `CharacterPaletteIM`；Lerro 运行时该进程
+或窗口不应因已配置 Fn/Globe 手势启动。
 
 快捷键使用统一的数据驱动匹配器，modifier 集合必须精确相等。单修饰键在 120 ms
 意图确认窗口内遇到另一个键时取消候选，使 Command-C 等系统 chord 保持原行为。

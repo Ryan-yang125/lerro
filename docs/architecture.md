@@ -189,7 +189,7 @@ PipelineIntelligenceService
 
 - Core 的 `HotkeyDefinition` 保存物理 binding 和 `hold` / `toggle` 语义；`HotkeyTrigger` 携带 began/ended 与 definition ID。
 - `HotkeySignature` 将 legacy modifier keyCode、Fn 标记和主要 modifier flags 规范化；冲突与迁移去重使用物理 signature。
-- `GlobalHotkeyMonitor` 独占 CGEventTap 生命周期、候选、前缀升级、吞键、physical drain、Secure Input watchdog 和 tap-reset。重复 `start` 与相同 definitions 的 `update` 保持当前手势。
+- `GlobalHotkeyMonitor` 独占 active HID CGEventTap 生命周期、候选、前缀升级、吞键、physical drain、Secure Input watchdog 和 tap restart。tap 只监听 `flagsChanged`、`keyDown` 与 `keyUp`；实体 modifier keyCode 集合区分 Fn 63、Globe 179 和左右同类修饰键，语义匹配继续使用规范化 modifier flags。disabled tap 先取消活动手势，再在 main queue 完整重建；重复 `start` 与相同 definitions 的 `update` 保持当前手势。
 - `AppSession` 通过单一 FIFO stream 消费 trigger，将其映射到 capture generation，并校验 hold release 的 definition ID。
 - `ShortcutRecorderView` 是一个窄 `NSViewRepresentable` first-responder bridge。SwiftUI reducer 分开维护 live chord、peak chord、已验证候选、模式、校验与视觉状态；AppKit view 只转发本窗口键盘事件，并在检测中被同窗口控件临时抢走焦点后自动恢复 first responder。
 - 录制器与生产 monitor 互斥，避免设置按键时触发真实捕获。

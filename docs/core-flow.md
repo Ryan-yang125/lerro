@@ -35,14 +35,18 @@ modifier 集合和触发方式。捕获动作支持两种明确语义：
 迁移去重。左右 Command/Control/Option/Shift 在当前产品语义中等价。
 
 [`GlobalHotkeyMonitor`](../Sources/LerroMac/Hotkeys/GlobalHotkeyMonitor.swift) 使用 active
-HID event tap 监听 `flagsChanged`、`keyDown` 与 `keyUp`。Fn、Control、Option、
-Shift、Command 等单修饰键通过 `flagsChanged` 进入候选；120 ms 意图确认窗口保护
-常用系统 chord。候选或已激活的 Fn 前缀遇到已配置的 Fn+Shift/Fn+Space 时，状态机
-依次取消前缀 capture、转交物理所有权并启动更具体 action。命中的普通键 down、repeat
-和 up 会被吞掉，鼠标、滚动、系统媒体键及未命中 chord 继续传给前台应用。
+HID event tap 在 head insert 位置监听 `flagsChanged`、`keyDown` 与 `keyUp`，事件 mask
+固定为 `0x1C00`。Fn 63、Globe 179、Control、Option、Shift、Command 等实体 modifier
+keyCode 分别进入按下集合，语义匹配使用规范化 flags；aggregate flags 未变化的重复事件
+仍进入所有权判断。120 ms 意图确认窗口保护常用系统 chord。候选或已激活的 Fn 前缀
+遇到已配置的 Fn+Shift/Fn+Space 时，状态机依次取消前缀 capture、转交物理所有权并启动
+更具体 action。命中的普通键 down、repeat 和 up，以及已接管 Fn/Globe 的全部事件，
+会持续吞到明确的实体 release；鼠标、滚动、系统媒体键及未命中 chord 继续传给前台应用。
 
-event tap 安装保持幂等。逻辑 reset 进入 physical drain，已经吞掉的按键持续由 Lerro
-持有至 key-up 与 modifier 全部释放。Secure Input watchdog 在事件流暂停时取消活动
+event tap 安装保持幂等。timeout 或 user-input disable 会先取消活动手势并进入 physical
+drain，再在 main queue 禁用并 invalidate 旧 tap、移除 run-loop source、创建新 active HID
+tap；排队重建受 generation 保护，显式 stop 后不会复活。逻辑 reset 已经吞掉的按键持续
+由 Lerro 持有至明确的 key-up 或 modifier release。Secure Input watchdog 在事件流暂停时取消活动
 hold，并在安全输入结束后对账物理键状态。文本交付产生的 Command-V 带固定 source
 marker，shortcut filter 识别后直接透传。Secure Input 结束后的首个非 repeat key-down
 会淘汰同键 stale claim 并重新匹配，旧 repeat 继续完成 drain。watchdog 先观察到退出时，

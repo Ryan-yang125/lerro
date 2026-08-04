@@ -114,6 +114,35 @@ struct GlobalHotkeyMonitorTests {
         )])
     }
 
+    @Test("Globe keyCode normalizes to the Fn modifier lifecycle")
+    func globeKeyCodeUsesFnModifierLifecycle() {
+        let globe = HotkeyDefinition(
+            action: .dictate,
+            keyCode: 179,
+            activation: .toggle,
+            displayName: "Globe"
+        )
+        let monitor = GlobalHotkeyMonitor(definitions: [globe])
+
+        let down = monitor.process(
+            type: .flagsChanged,
+            keyCode: 179,
+            flags: [.maskSecondaryFn]
+        )
+        #expect(down.suppressEvent)
+        let duplicate = monitor.process(
+            type: .flagsChanged,
+            keyCode: 179,
+            flags: [.maskSecondaryFn]
+        )
+        #expect(duplicate.suppressEvent)
+        let up = monitor.process(type: .flagsChanged, keyCode: 179, flags: [])
+        #expect(up.suppressEvent)
+        #expect(up.triggers.map(\.action) == [.dictate])
+        #expect(up.triggers.map(\.activation) == [.toggle])
+        #expect(up.triggers.map(\.phase) == [.began])
+    }
+
     @Test("Fn chord cancels the Fn candidate and swallows its ordinary key")
     func fnChordWinsOverFnOnly() {
         let fn = HotkeyDefinition(
@@ -635,8 +664,126 @@ struct GlobalHotkeyMonitorTests {
         #expect(try #require(monitor.activatePendingModifierForTesting()).definitionID == fnShift.id)
     }
 
-    @Test("Pointer scroll and system events disqualify modifier gestures and pass through")
-    func nonKeyboardEventsInterruptModifierGestures() throws {
+    @Test("The active event tap only observes keyboard lifecycle events")
+    func monitorUsesKeyboardOnlyEventMask() {
+        #expect(Set(GlobalHotkeyMonitor.monitoredEventTypes) == [
+            .flagsChanged,
+            .keyDown,
+            .keyUp
+        ])
+        let mask = GlobalHotkeyMonitor.monitoredEventTypes.reduce(CGEventMask(0)) {
+            $0 | (CGEventMask(1) << $1.rawValue)
+        }
+        #expect(mask == 0x1C00)
+    }
+
+    @Test("A claimed Fn sequence swallows duplicate flags and companion key events")
+    func claimedFnOwnsEveryPhysicalEventUntilRelease() {
+        let fn = HotkeyDefinition(
+            action: .dictate,
+            modifiers: CGEventFlags.maskSecondaryFn.rawValue,
+            usesFunctionKey: true,
+            activation: .toggle,
+            displayName: "Fn"
+        )
+        let monitor = GlobalHotkeyMonitor(definitions: [fn])
+
+        #expect(monitor.process(
+            type: .flagsChanged,
+            keyCode: 63,
+            flags: [.maskSecondaryFn]
+        ).suppressEvent)
+        #expect(monitor.process(
+            type: .flagsChanged,
+            keyCode: 63,
+            flags: [.maskSecondaryFn]
+        ).suppressEvent)
+        #expect(monitor.process(
+            type: .keyDown,
+            keyCode: 63,
+            flags: [.maskSecondaryFn]
+        ).suppressEvent)
+        let keyUp = monitor.process(
+            type: .keyUp,
+            keyCode: 63,
+            flags: [.maskSecondaryFn]
+        )
+        #expect(keyUp.suppressEvent)
+        #expect(keyUp.triggers.map(\.definitionID) == [fn.id])
+
+        let release = monitor.process(type: .flagsChanged, keyCode: 63, flags: [])
+        #expect(!release.suppressEvent)
+        #expect(release.triggers.isEmpty)
+    }
+
+    @Test("Fn keyDown claims the sequence before its companion flagsChanged event")
+    func fnKeyDownClaimsCompanionFlagsChanged() {
+        let fn = HotkeyDefinition(
+            action: .dictate,
+            modifiers: CGEventFlags.maskSecondaryFn.rawValue,
+            usesFunctionKey: true,
+            activation: .toggle,
+            displayName: "Fn"
+        )
+        let monitor = GlobalHotkeyMonitor(definitions: [fn])
+
+        #expect(monitor.process(
+            type: .keyDown,
+            keyCode: 63,
+            flags: [.maskSecondaryFn]
+        ).suppressEvent)
+        #expect(monitor.process(
+            type: .flagsChanged,
+            keyCode: 63,
+            flags: [.maskSecondaryFn]
+        ).suppressEvent)
+        #expect(monitor.process(
+            type: .keyUp,
+            keyCode: 63,
+            flags: [.maskSecondaryFn]
+        ).suppressEvent)
+        let trailingRelease = monitor.process(
+            type: .flagsChanged,
+            keyCode: 63,
+            flags: []
+        )
+        #expect(!trailingRelease.suppressEvent)
+        #expect(trailingRelease.triggers.isEmpty)
+    }
+
+    @Test("A stale Globe keyUp completes an owned sequence without flagsChanged")
+    func staleGlobeKeyUpDoesNotLeaveOwnershipStuck() {
+        let globe = HotkeyDefinition(
+            action: .dictate,
+            modifiers: CGEventFlags.maskSecondaryFn.rawValue,
+            usesFunctionKey: true,
+            activation: .toggle,
+            displayName: "Globe"
+        )
+        let monitor = GlobalHotkeyMonitor(definitions: [globe])
+
+        #expect(monitor.process(
+            type: .keyDown,
+            keyCode: 179,
+            flags: [.maskSecondaryFn]
+        ).suppressEvent)
+        let release = monitor.process(
+            type: .keyUp,
+            keyCode: 179,
+            flags: [.maskSecondaryFn]
+        )
+        #expect(release.suppressEvent)
+        #expect(release.triggers.map(\.definitionID) == [globe.id])
+
+        #expect(monitor.process(
+            type: .keyDown,
+            keyCode: 179,
+            flags: [.maskSecondaryFn]
+        ).suppressEvent)
+    }
+
+    @Test("A stale Fn keyUp ends a hold and accepts the next physical press")
+    func staleFnKeyUpEndsHoldAndAcceptsNextPress() throws {
         let fn = HotkeyDefinition(
             action: .dictate,
             modifiers: CGEventFlags.maskSecondaryFn.rawValue,
@@ -644,124 +791,80 @@ struct GlobalHotkeyMonitorTests {
             activation: .hold,
             displayName: "Fn"
         )
-        let eventTypes: [CGEventType] = [
-            .leftMouseDown,
-            .rightMouseDown,
-            .otherMouseDown,
-            .scrollWheel,
-            GlobalHotkeyMonitor.systemDefinedEventType
-        ]
+        let monitor = GlobalHotkeyMonitor(definitions: [fn], modifierHoldDelay: 60)
 
-        for type in eventTypes {
-            let pendingMonitor = GlobalHotkeyMonitor(
-                definitions: [fn],
-                modifierHoldDelay: 60
-            )
-            _ = pendingMonitor.process(
-                type: .flagsChanged,
-                keyCode: 63,
-                flags: [.maskSecondaryFn]
-            )
-            let pendingInterruption = pendingMonitor.process(
-                type: type,
-                keyCode: 0,
-                flags: [.maskSecondaryFn]
-            )
-            #expect(!pendingInterruption.suppressEvent)
-            #expect(pendingInterruption.triggers.isEmpty)
-            #expect(pendingMonitor.activatePendingModifierForTesting() == nil)
-            let pendingRelease = pendingMonitor.process(
-                type: .flagsChanged,
-                keyCode: 63,
-                flags: []
-            )
-            #expect(pendingRelease.triggers.isEmpty)
-
-            let activeMonitor = GlobalHotkeyMonitor(
-                definitions: [fn],
-                modifierHoldDelay: 60
-            )
-            _ = activeMonitor.process(
-                type: .flagsChanged,
-                keyCode: 63,
-                flags: [.maskSecondaryFn]
-            )
-            _ = try #require(activeMonitor.activatePendingModifierForTesting())
-            let activeInterruption = activeMonitor.process(
-                type: type,
-                keyCode: 0,
-                flags: [.maskSecondaryFn]
-            )
-            #expect(!activeInterruption.suppressEvent)
-            #expect(activeInterruption.triggers == [HotkeyTrigger(
-                action: .cancel,
-                activation: .toggle,
-                phase: .began
-            )])
-        }
+        _ = monitor.process(
+            type: .keyDown,
+            keyCode: 63,
+            flags: [.maskSecondaryFn]
+        )
+        _ = try #require(monitor.activatePendingModifierForTesting())
+        let release = monitor.process(
+            type: .keyUp,
+            keyCode: 63,
+            flags: [.maskSecondaryFn]
+        )
+        #expect(release.suppressEvent)
+        #expect(release.triggers == [HotkeyTrigger(
+            action: .dictate,
+            activation: .hold,
+            phase: .ended,
+            definitionID: fn.id
+        )])
+        #expect(monitor.process(
+            type: .keyDown,
+            keyCode: 63,
+            flags: [.maskSecondaryFn]
+        ).suppressEvent)
     }
 
-    @Test("Idle pointer events bypass system probes")
-    func idlePointerEventsUseFastPath() throws {
-        let probe = HotkeySystemCallProbe()
-        let monitor = GlobalHotkeyMonitor(
-            definitions: [],
-            secureInputCheck: { probe.checkSecureInput() },
-            physicalModifierFlags: { probe.readModifierFlags() },
-            physicalKeyState: { probe.readKeyState($0) }
-        )
+    @Test("Cleared Fn and Globe flags override a stale physical key-state read")
+    func clearedModifierFlagOverridesStalePhysicalState() throws {
+        for keyCode in [63, 179] {
+            let definition = HotkeyDefinition(
+                action: .dictate,
+                modifiers: CGEventFlags.maskSecondaryFn.rawValue,
+                usesFunctionKey: true,
+                activation: .toggle,
+                displayName: "Fn"
+            )
+            let recorder = HotkeyTriggerRecorder()
+            let monitor = GlobalHotkeyMonitor(
+                definitions: [definition],
+                secureInputCheck: { false },
+                physicalKeyState: { _ in true }
+            )
+            monitor.setHandlerForTesting { recorder.append($0) }
 
-        for type in [
-            CGEventType.leftMouseDown,
-            .rightMouseDown,
-            .otherMouseDown,
-            .scrollWheel
-        ] {
-            let event = try #require(CGEvent(
+            let down = try #require(CGEvent(
                 keyboardEventSource: nil,
-                virtualKey: 0,
+                virtualKey: CGKeyCode(keyCode),
                 keyDown: true
             ))
-            event.flags = []
-            #expect(!monitor.receive(type: type, event: event))
+            down.flags = [.maskSecondaryFn]
+            #expect(monitor.receive(type: .flagsChanged, event: down))
+
+            let release = try #require(CGEvent(
+                keyboardEventSource: nil,
+                virtualKey: CGKeyCode(keyCode),
+                keyDown: false
+            ))
+            release.flags = []
+            #expect(monitor.receive(type: .flagsChanged, event: release))
+            #expect(recorder.values().map(\.definitionID) == [definition.id])
+
+            let nextDown = try #require(CGEvent(
+                keyboardEventSource: nil,
+                virtualKey: CGKeyCode(keyCode),
+                keyDown: true
+            ))
+            nextDown.flags = [.maskSecondaryFn]
+            #expect(monitor.receive(type: .flagsChanged, event: nextDown))
         }
-
-        #expect(probe.secureInputChecks() == 0)
-        #expect(probe.modifierFlagReads() == 0)
-        #expect(probe.keyStateReads() == 0)
     }
 
-    @Test("Idle scroll defers Secure Input recovery to the watchdog")
-    func idleScrollSkipsPhysicalRecovery() throws {
-        let probe = HotkeySystemCallProbe(secureInput: true)
-        let monitor = GlobalHotkeyMonitor(
-            definitions: [],
-            secureInputCheck: { probe.checkSecureInput() },
-            physicalModifierFlags: { probe.readModifierFlags() },
-            physicalKeyState: { probe.readKeyState($0) }
-        )
-
-        #expect(monitor.pollSecureInputForTesting().map(\.action) == [.cancel])
-        probe.setSecureInput(false)
-
-        let event = try #require(CGEvent(
-            keyboardEventSource: nil,
-            virtualKey: 0,
-            keyDown: true
-        ))
-        event.flags = []
-        #expect(!monitor.receive(type: .scrollWheel, event: event))
-        #expect(probe.secureInputChecks() == 1)
-        #expect(probe.modifierFlagReads() == 0)
-        #expect(probe.keyStateReads() == 0)
-
-        #expect(monitor.pollSecureInputForTesting().isEmpty)
-        #expect(probe.secureInputChecks() == 2)
-        #expect(probe.modifierFlagReads() == 1)
-    }
-
-    @Test("Pointer events still cancel pending and active modifier gestures")
-    func pointerEventsPreserveModifierInterruption() throws {
+    @Test("A cleared Fn flag ends an active hold despite a stale physical read")
+    func clearedFnFlagEndsHoldDespiteStalePhysicalState() throws {
         let definition = HotkeyDefinition(
             action: .dictate,
             modifiers: CGEventFlags.maskSecondaryFn.rawValue,
@@ -769,51 +872,340 @@ struct GlobalHotkeyMonitorTests {
             activation: .hold,
             displayName: "Fn"
         )
-
-        let pendingMonitor = GlobalHotkeyMonitor(
-            definitions: [definition],
-            modifierHoldDelay: 60,
-            secureInputCheck: { false }
-        )
-        _ = pendingMonitor.process(
-            type: .flagsChanged,
-            keyCode: 63,
-            flags: [.maskSecondaryFn]
-        )
-        let pendingEvent = try #require(CGEvent(
-            keyboardEventSource: nil,
-            virtualKey: 0,
-            keyDown: true
-        ))
-        pendingEvent.flags = [.maskSecondaryFn]
-        #expect(!pendingMonitor.receive(type: .leftMouseDown, event: pendingEvent))
-        #expect(pendingMonitor.activatePendingModifierForTesting() == nil)
-
         let recorder = HotkeyTriggerRecorder()
-        let activeMonitor = GlobalHotkeyMonitor(
+        let monitor = GlobalHotkeyMonitor(
             definitions: [definition],
             modifierHoldDelay: 60,
-            secureInputCheck: { false }
+            secureInputCheck: { false },
+            physicalKeyState: { _ in true }
         )
-        activeMonitor.setHandlerForTesting { recorder.append($0) }
-        _ = activeMonitor.process(
+        monitor.setHandlerForTesting { recorder.append($0) }
+
+        let down = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 63,
+            keyDown: true
+        ))
+        down.flags = [.maskSecondaryFn]
+        #expect(monitor.receive(type: .flagsChanged, event: down))
+        _ = try #require(monitor.activatePendingModifierForTesting())
+
+        let release = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 63,
+            keyDown: false
+        ))
+        release.flags = []
+        #expect(monitor.receive(type: .flagsChanged, event: release))
+        #expect(recorder.values() == [HotkeyTrigger(
+            action: .dictate,
+            activation: .hold,
+            phase: .ended,
+            definitionID: definition.id
+        )])
+    }
+
+    @Test("Secure Input recovery does not mistake a cleared Fn flag for a fresh press")
+    func secureInputRecoveryRejectsClearedFnFlagWithStalePhysicalRead() throws {
+        let definition = HotkeyDefinition(
+            action: .dictate,
+            modifiers: CGEventFlags.maskSecondaryFn.rawValue,
+            usesFunctionKey: true,
+            activation: .toggle,
+            displayName: "Fn"
+        )
+        let probe = HotkeyPhysicalStateProbe(
+            secureInput: false,
+            modifierFlags: [.maskSecondaryFn],
+            downKeyCodes: [63]
+        )
+        let monitor = GlobalHotkeyMonitor(
+            definitions: [definition],
+            secureInputCheck: { probe.isSecureInputEnabled() },
+            physicalModifierFlags: { probe.modifierFlags() },
+            physicalKeyState: { probe.isKeyDown($0) }
+        )
+
+        _ = monitor.process(
             type: .flagsChanged,
             keyCode: 63,
             flags: [.maskSecondaryFn]
         )
-        _ = try #require(activeMonitor.activatePendingModifierForTesting())
-        let activeEvent = try #require(CGEvent(
+        probe.update(
+            secureInput: true,
+            modifierFlags: [.maskSecondaryFn],
+            downKeyCodes: [63]
+        )
+        _ = monitor.pollSecureInputForTesting()
+
+        // The hardware state query still says Fn is down while the resumed
+        // event stream definitively clears its semantic flag.
+        probe.update(
+            secureInput: false,
+            modifierFlags: [],
+            downKeyCodes: [63]
+        )
+        let release = try #require(CGEvent(
             keyboardEventSource: nil,
-            virtualKey: 0,
+            virtualKey: 63,
+            keyDown: false
+        ))
+        release.flags = []
+        #expect(monitor.receive(type: .flagsChanged, event: release))
+        #expect(monitor.activatePendingModifierForTesting() == nil)
+
+        probe.update(
+            secureInput: false,
+            modifierFlags: [.maskSecondaryFn],
+            downKeyCodes: [63]
+        )
+        let freshDown = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 63,
             keyDown: true
         ))
-        activeEvent.flags = [.maskSecondaryFn]
-        #expect(!activeMonitor.receive(type: .scrollWheel, event: activeEvent))
-        #expect(recorder.values() == [HotkeyTrigger(
-            action: .cancel,
+        freshDown.flags = [.maskSecondaryFn]
+        #expect(monitor.receive(type: .flagsChanged, event: freshDown))
+    }
+
+    @Test("A trailing cleared Globe flagsChanged does not restart a released gesture")
+    func staleGlobeKeyUpIgnoresTrailingFlagsChanged() {
+        let globe = HotkeyDefinition(
+            action: .dictate,
+            modifiers: CGEventFlags.maskSecondaryFn.rawValue,
+            usesFunctionKey: true,
             activation: .toggle,
-            phase: .began
-        )])
+            displayName: "Globe"
+        )
+        let monitor = GlobalHotkeyMonitor(definitions: [globe])
+
+        _ = monitor.process(
+            type: .keyDown,
+            keyCode: 179,
+            flags: [.maskSecondaryFn]
+        )
+        let keyUp = monitor.process(
+            type: .keyUp,
+            keyCode: 179,
+            flags: [.maskSecondaryFn]
+        )
+        #expect(keyUp.suppressEvent)
+        #expect(keyUp.triggers.map(\.definitionID) == [globe.id])
+
+        let companion = monitor.process(
+            type: .flagsChanged,
+            keyCode: 179,
+            flags: [],
+            modifierKeyIsDown: false
+        )
+        #expect(!companion.suppressEvent)
+        #expect(companion.triggers.isEmpty)
+
+        #expect(monitor.process(
+            type: .keyDown,
+            keyCode: 179,
+            flags: [.maskSecondaryFn]
+        ).suppressEvent)
+    }
+
+    @Test("Shared modifier key-up keeps its semantic flag while the other side is pressed")
+    func sharedModifierKeyUpKeepsOtherPhysicalSide() {
+        let shift = HotkeyDefinition(
+            action: .dictate,
+            modifiers: CGEventFlags.maskShift.rawValue,
+            activation: .toggle,
+            displayName: "Shift"
+        )
+        let monitor = GlobalHotkeyMonitor(definitions: [shift])
+
+        _ = monitor.process(type: .keyDown, keyCode: 56, flags: [.maskShift])
+        _ = monitor.process(
+            type: .flagsChanged,
+            keyCode: 60,
+            flags: [.maskShift],
+            modifierKeyIsDown: true
+        )
+        let leftUp = monitor.process(type: .keyUp, keyCode: 56, flags: [.maskShift])
+        #expect(leftUp.suppressEvent)
+        #expect(leftUp.triggers.isEmpty)
+
+        let rightUp = monitor.process(type: .keyUp, keyCode: 60, flags: [.maskShift])
+        #expect(rightUp.suppressEvent)
+        #expect(rightUp.triggers.map(\.definitionID) == [shift.id])
+    }
+
+    @Test("Mixed Fn and Globe event codes retain exact physical ownership")
+    func mixedFnAndGlobePhysicalLifecycle() {
+        let fn = HotkeyDefinition(
+            action: .dictate,
+            modifiers: CGEventFlags.maskSecondaryFn.rawValue,
+            usesFunctionKey: true,
+            activation: .toggle,
+            displayName: "Fn"
+        )
+        let monitor = GlobalHotkeyMonitor(definitions: [fn])
+
+        #expect(monitor.process(
+            type: .flagsChanged,
+            keyCode: 63,
+            flags: [.maskSecondaryFn],
+            modifierKeyIsDown: true
+        ).suppressEvent)
+        #expect(monitor.process(
+            type: .flagsChanged,
+            keyCode: 179,
+            flags: [.maskSecondaryFn],
+            modifierKeyIsDown: true
+        ).suppressEvent)
+        #expect(monitor.process(
+            type: .flagsChanged,
+            keyCode: 63,
+            flags: [.maskSecondaryFn],
+            modifierKeyIsDown: false
+        ).suppressEvent)
+        let finalRelease = monitor.process(
+            type: .flagsChanged,
+            keyCode: 179,
+            flags: [],
+            modifierKeyIsDown: false
+        )
+        #expect(finalRelease.suppressEvent)
+        #expect(finalRelease.triggers.map(\.definitionID) == [fn.id])
+        #expect(monitor.process(
+            type: .flagsChanged,
+            keyCode: 179,
+            flags: [.maskSecondaryFn],
+            modifierKeyIsDown: true
+        ).suppressEvent)
+    }
+
+    @Test("Tap timeout drains a claimed Globe release before accepting a new sequence")
+    func tapTimeoutDrainsClaimedGlobeRelease() throws {
+        let globe = HotkeyDefinition(
+            action: .dictate,
+            modifiers: CGEventFlags.maskSecondaryFn.rawValue,
+            usesFunctionKey: true,
+            activation: .hold,
+            displayName: "Globe"
+        )
+        let monitor = GlobalHotkeyMonitor(definitions: [globe], modifierHoldDelay: 60)
+
+        _ = monitor.process(
+            type: .flagsChanged,
+            keyCode: 179,
+            flags: [.maskSecondaryFn]
+        )
+        _ = try #require(monitor.activatePendingModifierForTesting())
+
+        let timeout = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 179,
+            keyDown: false
+        ))
+        #expect(!monitor.receive(type: .tapDisabledByTimeout, event: timeout))
+
+        let release = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 179,
+            keyDown: false
+        ))
+        release.flags = []
+        #expect(monitor.receive(type: .flagsChanged, event: release))
+
+        let fresh = monitor.process(
+            type: .flagsChanged,
+            keyCode: 179,
+            flags: [.maskSecondaryFn]
+        )
+        #expect(fresh.suppressEvent)
+    }
+
+    @Test("Tap-disabled restart is coalesced, keeps the physical drain, and recreates once")
+    func tapDisabledRestartIsCoalescedAndDrainsRelease() throws {
+        let definition = HotkeyDefinition(
+            action: .dictate,
+            modifiers: CGEventFlags.maskSecondaryFn.rawValue,
+            usesFunctionKey: true,
+            activation: .hold,
+            displayName: "Fn"
+        )
+        let restartProbe = HotkeyRestartProbe()
+        let recorder = HotkeyTriggerRecorder()
+        let monitor = GlobalHotkeyMonitor(
+            definitions: [definition],
+            modifierHoldDelay: 60,
+            mainQueueScheduler: { work in restartProbe.schedule(work) },
+            eventTapRestartInstaller: { restartProbe.recordInstallAttempt() }
+        )
+        monitor.setHandlerForTesting { recorder.append($0) }
+
+        _ = monitor.process(
+            type: .flagsChanged,
+            keyCode: 63,
+            flags: [.maskSecondaryFn]
+        )
+        _ = try #require(monitor.activatePendingModifierForTesting())
+        let disabledEvent = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 63,
+            keyDown: false
+        ))
+
+        #expect(!monitor.receive(type: .tapDisabledByTimeout, event: disabledEvent))
+        #expect(!monitor.receive(type: .tapDisabledByUserInput, event: disabledEvent))
+        #expect(monitor.eventTapRestartPendingForTesting())
+        #expect(recorder.values().map(\.action) == [.cancel])
+
+        let release = monitor.process(type: .flagsChanged, keyCode: 63, flags: [])
+        #expect(release.suppressEvent)
+        restartProbe.runAll()
+        #expect(restartProbe.installAttempts() == 1)
+        #expect(!monitor.eventTapRestartPendingForTesting())
+    }
+
+    @Test("Stopping cancels a queued tap-disabled restart")
+    func stopCancelsQueuedTapRestart() throws {
+        let restartProbe = HotkeyRestartProbe()
+        let monitor = GlobalHotkeyMonitor(
+            definitions: [],
+            mainQueueScheduler: { work in restartProbe.schedule(work) },
+            eventTapRestartInstaller: { restartProbe.recordInstallAttempt() }
+        )
+        let disabledEvent = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 0,
+            keyDown: false
+        ))
+
+        #expect(!monitor.receive(type: .tapDisabledByTimeout, event: disabledEvent))
+        #expect(monitor.eventTapRestartPendingForTesting())
+        monitor.stop()
+        restartProbe.runAll()
+        #expect(restartProbe.installAttempts() == 0)
+        #expect(!monitor.eventTapRestartPendingForTesting())
+    }
+
+    @Test("A nonconfigured Fn press passes through after an owned release")
+    func nonconfiguredFnPassesThrough() {
+        let fn = HotkeyDefinition(
+            action: .dictate,
+            modifiers: CGEventFlags.maskSecondaryFn.rawValue,
+            usesFunctionKey: true,
+            activation: .toggle,
+            displayName: "Fn"
+        )
+        let monitor = GlobalHotkeyMonitor(definitions: [fn])
+
+        _ = monitor.process(type: .flagsChanged, keyCode: 63, flags: [.maskSecondaryFn])
+        _ = monitor.process(type: .flagsChanged, keyCode: 63, flags: [])
+        monitor.update(definitions: [])
+
+        #expect(!monitor.process(
+            type: .flagsChanged,
+            keyCode: 63,
+            flags: [.maskSecondaryFn]
+        ).suppressEvent)
+        #expect(!monitor.process(type: .flagsChanged, keyCode: 63, flags: []).suppressEvent)
     }
 
     @Test("Lerro generated paste events bypass shortcut matching")
@@ -1183,7 +1575,7 @@ struct GlobalHotkeyMonitorTests {
             keyDown: false
         ))
         leftShiftUp.flags = [.maskShift]
-        #expect(!monitor.receive(type: .flagsChanged, event: leftShiftUp))
+        #expect(monitor.receive(type: .flagsChanged, event: leftShiftUp))
         #expect(monitor.activatePendingModifierForTesting() == nil)
 
         probe.update(secureInput: false, modifierFlags: [], downKeyCodes: [])
@@ -1262,7 +1654,7 @@ struct GlobalHotkeyMonitorTests {
             keyDown: false
         ))
         shiftUp.flags = [.maskSecondaryFn]
-        #expect(!monitor.receive(type: .flagsChanged, event: shiftUp))
+        #expect(monitor.receive(type: .flagsChanged, event: shiftUp))
         #expect(monitor.activatePendingModifierForTesting() == nil)
 
         let fnUp = try #require(CGEvent(
@@ -1443,59 +1835,35 @@ private final class HotkeyPhysicalStateProbe: @unchecked Sendable {
     }
 }
 
-private final class HotkeySystemCallProbe: @unchecked Sendable {
+private final class HotkeyRestartProbe: @unchecked Sendable {
     private let lock = NSLock()
-    private var secureInput: Bool
-    private var secureInputCheckCount = 0
-    private var modifierFlagReadCount = 0
-    private var keyStateReadCount = 0
+    private var workItems: [@Sendable () -> Void] = []
+    private var installs = 0
 
-    init(secureInput: Bool = false) {
-        self.secureInput = secureInput
-    }
-
-    func setSecureInput(_ enabled: Bool) {
+    func schedule(_ work: @escaping @Sendable () -> Void) {
         lock.lock()
-        secureInput = enabled
+        workItems.append(work)
         lock.unlock()
     }
 
-    func checkSecureInput() -> Bool {
+    func recordInstallAttempt() -> Bool {
         lock.lock()
-        defer { lock.unlock() }
-        secureInputCheckCount += 1
-        return secureInput
+        installs += 1
+        lock.unlock()
+        return true
     }
 
-    func readModifierFlags() -> CGEventFlags {
+    func runAll() {
         lock.lock()
-        defer { lock.unlock() }
-        modifierFlagReadCount += 1
-        return []
+        let scheduled = workItems
+        workItems.removeAll()
+        lock.unlock()
+        scheduled.forEach { $0() }
     }
 
-    func readKeyState(_ keyCode: CGKeyCode) -> Bool {
+    func installAttempts() -> Int {
         lock.lock()
         defer { lock.unlock() }
-        keyStateReadCount += 1
-        return false
-    }
-
-    func secureInputChecks() -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return secureInputCheckCount
-    }
-
-    func modifierFlagReads() -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return modifierFlagReadCount
-    }
-
-    func keyStateReads() -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return keyStateReadCount
+        return installs
     }
 }

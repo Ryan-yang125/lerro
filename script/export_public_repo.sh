@@ -92,6 +92,7 @@ while IFS= read -r entry; do
             --exclude='.next/' \
             --exclude='.vinext/' \
             --exclude='.wrangler/' \
+            --exclude='wrangler.toml' \
             --exclude='.env' \
             --exclude='.env.*' \
             --exclude='clean-public/' \

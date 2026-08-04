@@ -122,7 +122,7 @@ swift package show-dependencies --format json
 | 麦克风测试 session 隔离 | [`MicrophoneLevelTesterTests.swift`](../Tests/LerroMacTests/MicrophoneLevelTesterTests.swift) |
 | Ask key panel 与被动 HUD 的 key/main window 能力、HUD 主 actor 定时更新 | [`FloatingPanelControllerTests.swift`](../Tests/LerroMacTests/FloatingPanelControllerTests.swift) |
 | secure capture context、普通 current-focus paste、AX element/selection unavailable 兼容、Rewrite 焦点/选区二次确认、目标回切、Command-V commit point、提交后取消隔离、剪贴板多 item/type 恢复、外部所有权和并发交付隔离 | [`AccessibilityTextDelivererTests.swift`](../Tests/LerroMacTests/AccessibilityTextDelivererTests.swift) |
-| 单修饰键 hold/toggle、Fn 前缀升级、精确 modifier、reset 后 keyUp drain、空闲鼠标/滚轮快路径、modifier 鼠标中断、Secure Input watchdog、自产 Command-V 透传 | [`GlobalHotkeyMonitorTests.swift`](../Tests/LerroMacTests/GlobalHotkeyMonitorTests.swift) |
+| 单修饰键 hold/toggle、Fn 前缀升级、精确 modifier、Fn 63/Globe 179 实体生命周期、重复 flags、key-only 与混合重排、keyboard-only `0x1C00` mask、reset drain、tap-disabled 完整重建与 stop generation、Secure Input watchdog、自产 Command-V 透传 | [`GlobalHotkeyMonitorTests.swift`](../Tests/LerroMacTests/GlobalHotkeyMonitorTests.swift) |
 | 录制器自动开始、窗口级 modifier 事件、monitor 清理、peak chord、无效候选隔离、单修饰键、三键上限、日常输入保护与系统保留组合 | [`ShortcutRecorderPolicyTests.swift`](../Tests/LerroTests/ShortcutRecorderPolicyTests.swift) |
 | 主窗口四级字号、tracking、1 pt 按下反馈、Reduce Motion 几何稳定性 | [`LerroPressFeedbackTests.swift`](../Tests/LerroTests/LerroPressFeedbackTests.swift) |
 | Aqua、Dark Aqua 与高对比外观下的灰阶解析、正文对比度、边界强度、hover/selection 区分 | [`LerroThemeAccessibilityTests.swift`](../Tests/LerroTests/LerroThemeAccessibilityTests.swift) |
@@ -362,6 +362,7 @@ Logo、App Icon、菜单栏或公开模板变化时先执行：
 | --- | --- | --- |
 | 首次启动 | 启动 clean profile | 引导出现；两项权限状态准确；拒绝后有可恢复路径 |
 | 快捷键录制 | 在 Onboarding 与设置分别录入 Fn、Option、Command、Fn + Space；切换两种触发方式并重复按下 | keycap 在 down/up 时立即变化；候选保存；测试期间无麦克风、HUD、历史和文本交付；退出后全局触发恢复 |
+| Fn 系统动作隔离 | 系统键盘设置选择“按下 Fn/Globe 键：显示表情与符号”；Lerro 退出时按一次作控制组；启动最终 Release app 后在 TextEdit 分别点按内置 Fn、外接 Globe，并连续执行两轮 | 控制组打开系统字符面板；Lerro 运行时每轮只触发配置 action，`CharacterPaletteIM` 不出现；第二轮仍可正常开始和完成；松开后普通输入与未配置系统 chord 正常 |
 | 原始听写 hold | 选择原始听写，在 TextEdit 按住已配置键说话后松开；再选中既有文本重复一次 | 无模型下载或 API；Apple Speech 原文完整交付；文本写入当前键盘焦点；已有选区遵循 Command-V 标准替换语义；completed history；无 CAF；全程无应用音效 |
 | 原始听写 toggle | 选择原始听写，点按已配置键开始，说话后再次点按 | 首次点按 50 ms 内从原位连续展开 116×34 hands-free HUD；准备期显示静态低亮声线，麦克风 ready 时外壳保持稳定；真实语音驱动的峰值位置持续变化，停止说话后约 300 ms 回到基线；第二次点按一帧内显示 processing 且只停止一次；插入完成后 100 ms 内收起；全程无应用音效 |
 | 空转写 | 选择原始听写，保持静音后结束录音 | 进入 HUD-only empty transcription 失败状态；无主窗口 alert、Dock attention 和应用音效；无文本交付、无 completed history、`lastResult` 为空；无未索引 CAF |

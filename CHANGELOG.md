@@ -6,6 +6,22 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-08-04
+
+### Fixed
+
+- Aligned Fn and Globe interception with a physical-key state model: built-in
+  Fn and external Globe key codes are tracked independently, every owned event
+  is consumed through release, and unchanged aggregate modifier flags can no
+  longer leak to the macOS Emoji and Symbols action.
+- Limited the global event tap to keyboard down, keyboard up, and modifier
+  changes so pointer, scroll, and system-defined events stay outside shortcut
+  recognition.
+- Kept owned key sequences intact across shortcut resets, Secure Input
+  recovery, full event-tap reconstruction, and Fn-prefix upgrades.
+- Excluded the private Cloudflare Wrangler configuration from clean public
+  exports and made the public scanner reject it explicitly.
+
 ## [1.1.0] - 2026-08-04
 
 ### Added
@@ -187,7 +203,8 @@ All notable changes to Lerro will be documented here. The project follows
   plaintext BYOK credentials; logs, history, errors, fixtures, and public exports
   exclude API keys and Authorization headers.
 
-[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/Ryan-yang125/lerro/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Ryan-yang125/lerro/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/Ryan-yang125/lerro/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/Ryan-yang125/lerro/compare/v1.0.1-preview.1...v1.0.2

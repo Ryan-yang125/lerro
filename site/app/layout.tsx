@@ -56,7 +56,7 @@ const softwareApplicationJsonLd = {
   url: siteUrl,
   operatingSystem: "macOS 26 or later on Apple silicon",
   applicationCategory: "UtilitiesApplication",
-  softwareVersion: "1.1.0",
+  softwareVersion: "1.1.1",
   description: "Native Apple Speech voice typing for macOS 26 with on-device translation and optional local MLX refinement.",
   offers: {
     "@type": "Offer",

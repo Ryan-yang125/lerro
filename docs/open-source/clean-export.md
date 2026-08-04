@@ -49,6 +49,9 @@ The scanner checks:
 - Website source under `site/` is present while `.git`, `node_modules`, `dist`,
   `out`, `.wrangler`, `.next`, `.vinext`, `coverage`, `outputs`, and `work` are
   absent.
+- Private Wrangler configuration files named `wrangler.toml` are absent. Public
+  deployment structure is represented by committed `wrangler.toml.example` or
+  `wrangler.jsonc` files only.
 - Generated website type declarations such as `next-env.d.ts` are recreated by
   the website build and stay outside the clean source export.
 - The new repository has no commits, no remotes, and no inherited Git objects.

@@ -135,6 +135,11 @@ for path in root.rglob("*"):
     if not is_allowed(relative):
         errors.append(f"path is outside the public allowlist: {relative}")
 
+    if path.name == "wrangler.toml":
+        errors.append(
+            f"private Wrangler configuration is excluded from the public export: {relative}"
+        )
+
     parts = pathlib.PurePosixPath(relative).parts
     forbidden_parts = {
         ".build",

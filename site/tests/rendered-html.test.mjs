@@ -62,9 +62,12 @@ test("server-renders the changelog with permanent release downloads", async () =
   const html = await response.text();
   assert.match(html, /<title>Changelog — Lerro<\/title>/i);
   assert.match(html, /What(?:&#x27;|&apos;|’)s new in Lerro\./);
+  assert.match(html, /Version(?:\s|<[^>]+>)*1\.1\.1/);
+  assert.match(html, /Build(?:\s|<[^>]+>)*7/);
+  assert.match(html, /August 4, 2026/);
+  assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.1\.1\/7\/Lerro-macOS-arm64\.zip/);
   assert.match(html, /Version(?:\s|<[^>]+>)*1\.1\.0/);
   assert.match(html, /Build(?:\s|<[^>]+>)*6/);
-  assert.match(html, /August 4, 2026/);
   assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.1\.0\/6\/Lerro-macOS-arm64\.zip/);
   assert.match(html, /Version(?:\s|<[^>]+>)*1\.0\.3/);
   assert.match(html, /Build(?:\s|<[^>]+>)*5/);

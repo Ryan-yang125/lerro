@@ -12,6 +12,20 @@ export type Release = {
 // they shipped with, while the homepage always points to the latest release.
 export const releases: readonly Release[] = [
   {
+    version: "1.1.1",
+    build: "7",
+    publishedAt: "2026-08-04",
+    publishedLabel: "August 4, 2026",
+    summary: "Reliable Fn shortcuts that keep macOS Emoji out of the way.",
+    highlights: [
+      "Built-in Fn and external Globe keys now use one physical-key ownership model.",
+      "Every configured Fn sequence stays captured through its final release, including repeated modifier events.",
+      "Shortcut monitoring now observes keyboard events only and keeps the same two-permission setup.",
+    ],
+    downloadUrl:
+      "https://updates.lerroapp.com/releases/1.1.1/7/Lerro-macOS-arm64.zip",
+  },
+  {
     version: "1.1.0",
     build: "6",
     publishedAt: "2026-08-04",

@@ -385,7 +385,8 @@ Sparkle framework 在 `dist/Lerro.app/Contents/Frameworks` 内签名并随 app �
 检查、点击下载、安装和重启属于每次新公开版本的实机验收。
 
 `distribution/wrangler.toml` 是维护环境私有配置，包含 D1 资源标识，必须保持在 Git 与公开
-导出之外。`distribution/wrangler.toml.example` 只提供结构模板。完整架构、撤回与失败策略见
+导出之外。公开导出脚本会排除所有名为 `wrangler.toml` 的文件，扫描器遇到残留文件会失败。
+`distribution/wrangler.toml.example` 只提供结构模板。完整架构、撤回与失败策略见
 [ADR-0007](decisions/0007-cloudflare-distribution-and-sparkle-updates.md)。
 
 ## GitHub 公开镜像
