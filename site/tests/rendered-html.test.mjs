@@ -39,7 +39,7 @@ test("server-renders the complete Lerro landing page", async () => {
   assert.match(html, />Dictate</);
   assert.match(html, />Translate</);
   assert.match(html, />Command</);
-  assert.match(html, /softwareVersion(?:&quot;|\"):\s*(?:&quot;|\")1\.3\.0/);
+  assert.match(html, /softwareVersion(?:&quot;|\"):\s*(?:&quot;|\")1\.4\.0/);
   assert.match(html, /Apple Speech/);
   assert.match(html, /No telemetry/);
   assert.match(html, /does not request Input Monitoring/);
@@ -89,10 +89,10 @@ test("server-renders the changelog with permanent release downloads", async () =
   const html = await response.text();
   assert.match(html, /<title>Changelog — Lerro<\/title>/i);
   assert.match(html, /What(?:&#x27;|&apos;|’)s new in Lerro\./);
-  assert.match(html, /Version(?:\s|<[^>]+>)*1\.3\.0/);
+  assert.match(html, /Version(?:\s|<[^>]+>)*1\.4\.0/);
   assert.match(html, /Build(?:\s|<[^>]+>)*9/);
   assert.match(html, /August 10, 2026/);
-  assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.3\.0\/9\/Lerro-macOS-arm64\.zip/);
+  assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.4\.0\/10\/Lerro-macOS-arm64\.zip/);
   assert.match(html, /Version(?:\s|<[^>]+>)*1\.1\.1/);
   assert.match(html, /Build(?:\s|<[^>]+>)*7/);
   assert.match(html, /August 4, 2026/);
@@ -119,10 +119,10 @@ test("server-renders the Simplified Chinese changelog with permanent downloads",
   assert.match(html, /<title>更新日志 — Lerro<\/title>/);
   assert.match(html, /<html[^>]+lang="zh-Hans"/i);
   assert.match(html, /Lerro 的最新变化。/);
-  assert.match(html, /版本(?:\s|<[^>]+>)*1\.3\.0/);
+  assert.match(html, /版本(?:\s|<[^>]+>)*1\.4\.0/);
   assert.match(html, /构建(?:\s|<[^>]+>)*9/);
   assert.match(html, /2026 年 8 月 10 日/);
-  assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.3\.0\/9\/Lerro-macOS-arm64\.zip/);
+  assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.4\.0\/10\/Lerro-macOS-arm64\.zip/);
   assert.match(html, /版本(?:\s|<[^>]+>)*1\.1\.1/);
   assert.match(html, /构建(?:\s|<[^>]+>)*7/);
   assert.match(html, /2026 年 8 月 4 日/);
