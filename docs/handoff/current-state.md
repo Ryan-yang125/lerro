@@ -9,7 +9,7 @@
 | App version / build | `1.4.0` / `10` |
 | Bundle ID | `app.lerro.mac` |
 | 平台 | macOS 26.0+，Apple silicon arm64 |
-| GitHub Release | `v1.4.0` publication in progress |
+| GitHub Release | `v1.4.0` |
 | Release source commit | `368fbba9ce158b56da535e24dd60f5c780117bb1` |
 | 官网 | `https://lerroapp.com` |
 | 中文官网 | `https://lerroapp.com/zh` |
@@ -27,7 +27,9 @@
 - canonical ZIP 已完成 Developer ID 签名、Apple 公证、staple、Gatekeeper、Sparkle Ed25519、独立解压、SBOM、manifest 与 checksum 验证。
 - 官网 Worker version `f21de301-ebb8-45b6-9762-43a2b8b89290` 已部署；四条双语路由和 `www` 重定向已线上复验。
 - Cloudflare stable generation 8 已切换到 v1.4.0 build 10；R2、D1、appcast、latest 与 immutable 下载均通过 canonical SHA-256 回读。
-- public source、annotated tag、GitHub Release 五个资产和 CI 在本轮发布的下一道门禁完成并回填。
+- public release commit `ef29c41ad2f0d01030d723135d1d45cbe610028c` 与 annotated tag object `358f68572963e2fc06ef3f6da90d6f85bf183364` 固定 v1.4.0 源码快照。
+- GitHub Release `v1.4.0` 已成为 latest，五个资产的名称、字节数和 SHA-256 digest 与 canonical 文件一致。
+- public `main` CI run `31392364637` 与 tag CI run `31392394102` 的 Website 和 Build and test 均通过。此 handoff 同步后，public `main` 会继续前进；固定 App release tag 保持 `v1.4.0`。
 - 私有工程树中的 `docs/releases/v1.4.0.md` 保存完整版本证据，并由 public allowlist 排除。
 
 ## 当前产品与权限边界
