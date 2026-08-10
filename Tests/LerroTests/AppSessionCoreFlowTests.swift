@@ -1967,7 +1967,7 @@ struct AppSessionCoreFlowTests {
         #expect(await harness.delivery.deliveries().isEmpty)
     }
 
-    @Test("Ask editing commands replace the captured selection")
+    @Test("Any Command with a selection transforms the captured selection")
     @MainActor
     func askRewriteReplacesSelection() async {
         var preferences = basePreferences()
@@ -1976,7 +1976,7 @@ struct AppSessionCoreFlowTests {
         let harness = makeHarness(
             preferences: preferences,
             transcription: SpeechTranscription(
-                rawText: "请改写得更简洁",
+                rawText: "翻译成法语并保留产品名",
                 localeIdentifier: "zh_CN",
                 duration: 1
             ),
@@ -2004,6 +2004,120 @@ struct AppSessionCoreFlowTests {
                 DeliveryRecord(text: "简洁文本", replacingSelection: true)
             ]
         )
+    }
+
+    @Test("Capture freezes the app style selected at recording start")
+    @MainActor
+    func captureFreezesAppStyle() async {
+        var preferences = basePreferences()
+        preferences.intelligenceMode = .remote
+        preferences.remoteProvider = RemoteProviderConfiguration(
+            baseURL: "https://api.example.com/v1",
+            modelIdentifier: "test-model",
+            apiKey: "test-key"
+        )
+        preferences.appToneProfiles = [
+            AppToneProfile(
+                bundleIdentifier: "com.apple.Notes",
+                applicationName: "Notes",
+                instruction: "Use short paragraphs."
+            )
+        ]
+        let harness = makeHarness(
+            preferences: preferences,
+            transcription: SpeechTranscription(
+                rawText: "project update",
+                localeIdentifier: "en_US",
+                duration: 1
+            ),
+            intelligenceSuspended: true
+        )
+
+        await harness.session.start()
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.preferences.appToneProfiles[0].instruction = "Use a long memo."
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { await harness.intelligence.requests().count == 1 })
+
+        #expect(await harness.intelligence.requests().first?.toneInstruction == "Use short paragraphs.")
+        await harness.intelligenceGate.open()
+        #expect(await waitUntil { harness.session.phase == .idle })
+    }
+
+    @Test("An exact Dictation snippet expands locally without model work")
+    @MainActor
+    func dictationExpandsSnippet() async {
+        let snippets = InMemoryDictionaryRepository(entries: [
+            DictionaryEntry(
+                phrase: "meeting link",
+                replacement: "https://example.com/meet",
+                applicationBundleIdentifier: "com.apple.Notes"
+            )
+        ])
+        let harness = makeHarness(
+            preferences: basePreferences(),
+            transcription: SpeechTranscription(
+                rawText: "meeting link",
+                localeIdentifier: "en_US",
+                duration: 1
+            ),
+            dictionaryRepository: snippets
+        )
+
+        await harness.session.start()
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil {
+            harness.session.phase == .idle && harness.session.lastResult == "https://example.com/meet"
+        })
+
+        #expect(await harness.intelligence.requests().isEmpty)
+        #expect(await harness.delivery.deliveries() == [
+            DeliveryRecord(text: "https://example.com/meet", replacingSelection: false)
+        ])
+    }
+
+    @Test("History corrections update output and learn an app-scoped replacement")
+    @MainActor
+    func historyCorrectionLearnsReplacement() async throws {
+        let entry = HistoryEntry(
+            mode: .dictation,
+            rawText: "larrow",
+            finalText: "larrow",
+            duration: 1,
+            applicationName: "Notes",
+            bundleIdentifier: "com.apple.Notes"
+        )
+        let history = InMemoryHistoryRepository(entries: [entry])
+        let dictionary = InMemoryDictionaryRepository()
+        let harness = makeHarness(
+            preferences: basePreferences(),
+            transcription: SpeechTranscription(
+                rawText: "unused",
+                localeIdentifier: "en_US",
+                duration: 1
+            ),
+            historyRepository: history,
+            dictionaryRepository: dictionary
+        )
+
+        await harness.session.start()
+        let saved = await harness.session.saveHistoryCorrection(
+            entry,
+            correctedText: "Lerro",
+            phrase: "larrow",
+            replacement: "Lerro"
+        )
+
+        #expect(saved)
+        #expect(try #require(await history.entries().first).finalText == "Lerro")
+        let learned = try #require(await dictionary.entries().first)
+        #expect(learned.source == .learned)
+        #expect(learned.applicationBundleIdentifier == "com.apple.Notes")
+        #expect(learned.phrase == "larrow")
+        #expect(learned.replacement == "Lerro")
     }
 
     @Test("A blocked remote Rewrite leaves the captured selection untouched")

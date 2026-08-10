@@ -114,7 +114,7 @@ public final class FloatingPanelController {
         )
         panel.allowsKeyWindow = role == .interactiveCard
         panel.isOpaque = false
-        panel.title = role == .passiveHUD ? "Lerro HUD" : "Lerro Ask"
+        panel.title = role == .passiveHUD ? "Lerro HUD" : "Lerro Command"
         panel.isExcludedFromWindowsMenu = true
         panel.backgroundColor = .clear
         panel.hasShadow = false

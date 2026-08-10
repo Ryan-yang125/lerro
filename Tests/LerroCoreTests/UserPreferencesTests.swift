@@ -51,8 +51,8 @@ struct UserPreferencesTests {
     func validatesDefaultHotkeys() throws {
         let hotkeys = UserPreferences().hotkeys
 
-        #expect(hotkeys.count == 3)
-        #expect(Set(hotkeys.map(\.action)) == [.dictate, .translate, .pasteLastResult])
+        #expect(hotkeys.count == 4)
+        #expect(Set(hotkeys.map(\.action)) == [.dictate, .translate, .ask, .pasteLastResult])
 
         let dictate = try #require(hotkeys.first { $0.action == .dictate })
         #expect(dictate.usesFunctionKey)
@@ -67,6 +67,13 @@ struct UserPreferencesTests {
         #expect(translate.keyCode == nil)
         #expect(translate.modifiers == (1 << 23) | (1 << 17))
         #expect(translate.displayName == "Fn ⇧")
+
+        let command = try #require(hotkeys.first { $0.action == .ask })
+        #expect(command.usesFunctionKey)
+        #expect(command.activation == .toggle)
+        #expect(command.keyCode == 49)
+        #expect(command.modifiers == 1 << 23)
+        #expect(command.displayName == "Fn Space")
 
         let paste = try #require(hotkeys.first { $0.action == .pasteLastResult })
         #expect(paste.keyCode == 9)
@@ -145,11 +152,13 @@ struct UserPreferencesTests {
 
         let preferences = try JSONDecoder().decode(UserPreferences.self, from: legacy)
 
-        #expect(preferences.hotkeys.count == 1)
+        #expect(preferences.hotkeys.count == 2)
         #expect(preferences.hotkeys[0].signature == HotkeySignature(
             keyCode: nil,
             modifiers: 1 << 23
         ))
+        #expect(preferences.hotkeys[1].action == .ask)
+        #expect(preferences.hotkeys[1].displayName == "Fn Space")
     }
 
     @Test("Translation language choices are limited to three")

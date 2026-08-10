@@ -62,6 +62,11 @@ jobs:
       - name: Validate agent workspace
         run: ./script/validate_agent_workspace.sh
 
+      - name: Validate contextual benchmark
+        run: |
+          python3 script/benchmark_contextual_dictation.py --validate
+          python3 script/test_contextual_benchmark.py
+
       - name: Prepare Metal toolchain
         run: |
           if ! xcrun metal --version >/dev/null 2>&1; then

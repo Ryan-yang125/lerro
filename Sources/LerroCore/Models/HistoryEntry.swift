@@ -67,19 +67,16 @@ public struct UsageSummary: Equatable, Sendable {
     public var totalWords: Int
     public var savedSeconds: TimeInterval
     public var averageWordsPerMinute: Int
-    public var personalizationPercent: Int
 
     public init(
         totalDuration: TimeInterval = 0,
         totalWords: Int = 0,
         savedSeconds: TimeInterval = 0,
-        averageWordsPerMinute: Int = 0,
-        personalizationPercent: Int = 0
+        averageWordsPerMinute: Int = 0
     ) {
         self.totalDuration = totalDuration
         self.totalWords = totalWords
         self.savedSeconds = savedSeconds
         self.averageWordsPerMinute = averageWordsPerMinute
-        self.personalizationPercent = personalizationPercent
     }
 }

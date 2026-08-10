@@ -33,7 +33,7 @@ public actor RuleBasedIntelligenceService: IntelligenceProcessing {
         case .translate:
             throw LerroError.modelUnavailable("翻译需要完成本地语言模型下载")
         case .answer:
-            throw LerroError.modelUnavailable("Ask 需要完成本地语言模型下载")
+            throw LerroError.modelUnavailable("指令需要完成本地语言模型下载")
         }
     }
 

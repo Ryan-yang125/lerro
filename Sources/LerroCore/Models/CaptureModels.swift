@@ -180,6 +180,8 @@ public struct CaptureSession: Identifiable, Hashable, Sendable {
     public let targetLanguage: String?
     public let intelligenceMode: IntelligenceMode
     public let remoteProvider: RemoteProviderConfiguration?
+    public let toneInstruction: String?
+    public let toneProfileApplicationName: String?
 
     public init(
         id: UUID = UUID(),
@@ -188,7 +190,9 @@ public struct CaptureSession: Identifiable, Hashable, Sendable {
         context: CapturedContext,
         targetLanguage: String? = nil,
         intelligenceMode: IntelligenceMode = .local,
-        remoteProvider: RemoteProviderConfiguration? = nil
+        remoteProvider: RemoteProviderConfiguration? = nil,
+        toneInstruction: String? = nil,
+        toneProfileApplicationName: String? = nil
     ) {
         self.id = id
         self.mode = mode
@@ -197,6 +201,8 @@ public struct CaptureSession: Identifiable, Hashable, Sendable {
         self.targetLanguage = targetLanguage
         self.intelligenceMode = intelligenceMode
         self.remoteProvider = remoteProvider
+        self.toneInstruction = toneInstruction
+        self.toneProfileApplicationName = toneProfileApplicationName
     }
 }
 

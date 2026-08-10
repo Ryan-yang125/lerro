@@ -146,13 +146,11 @@ struct DictionaryView: View {
             updateDisplayedEntries()
         }
         .sheet(isPresented: $isEditorPresented, onDismiss: { editingEntry = nil }) {
-            DictionaryEditorView(entry: editingEntry) { phrase in
-                var entry = editingEntry ?? DictionaryEntry(phrase: phrase)
-                let oldPhrase = entry.phrase
+            DictionaryEditorView(entry: editingEntry) { phrase, replacement in
+                var entry = editingEntry ?? DictionaryEntry(phrase: phrase, replacement: replacement)
                 entry.phrase = phrase
-                if entry.replacement == oldPhrase || entry.replacement.isEmpty {
-                    entry.replacement = phrase
-                }
+                entry.replacement = replacement
+                entry.source = .manual
                 return await session.saveDictionaryEntry(entry)
             } importCSV: {
                 await importCSV()
@@ -248,7 +246,7 @@ private struct DictionaryListRow: View {
                     .foregroundStyle(LerroTheme.text)
                     .lineLimit(1)
                 HStack(spacing: 6) {
-                    Text(LocalizedStringKey(entry.source == .manual ? "手动添加" : "自动添加"))
+                    Text(LocalizedStringKey(entry.source == .learned ? "自动添加" : entry.isSnippet ? "快捷语" : "手动添加"))
                     if entry.replacement != entry.phrase {
                         Text("·")
                         Text(verbatim: entry.replacement)
@@ -303,20 +301,29 @@ private struct DictionaryListRow: View {
             Button("删除", role: .destructive, action: delete)
         }
     }
+
 }
 
 private struct DictionaryEditorView: View {
+    private enum EntryKind: String, CaseIterable, Identifiable {
+        case term = "词条"
+        case snippet = "快捷语"
+        var id: Self { self }
+    }
+
     let existingEntry: DictionaryEntry?
-    let save: (String) async -> Bool
+    let save: (String, String) async -> Bool
     let importCSV: () async -> Bool
     let cancel: () -> Void
     @State private var phrase: String
+    @State private var replacement: String
+    @State private var kind: EntryKind
     @State private var isWorking = false
     @FocusState private var focused: Bool
 
     init(
         entry: DictionaryEntry?,
-        save: @escaping (String) async -> Bool,
+        save: @escaping (String, String) async -> Bool,
         importCSV: @escaping () async -> Bool,
         cancel: @escaping () -> Void
     ) {
@@ -325,15 +332,27 @@ private struct DictionaryEditorView: View {
         self.importCSV = importCSV
         self.cancel = cancel
         _phrase = State(initialValue: entry?.phrase ?? "")
+        _replacement = State(initialValue: entry?.replacement ?? "")
+        _kind = State(initialValue: entry?.isSnippet == true
+            ? .snippet
+            : .term)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(LocalizedStringKey(existingEntry == nil ? "添加新词" : "编辑词语"))
+            Text(LocalizedStringKey(existingEntry == nil ? "新建" : "编辑"))
                 .lerroTypography(.title)
                 .frame(height: 30)
 
-            TextField("输入词语", text: $phrase)
+            Picker("类型", selection: $kind) {
+                ForEach(EntryKind.allCases) { kind in
+                    Text(LocalizedStringKey(kind.rawValue)).tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.top, 16)
+
+            TextField(kind == .snippet ? "说出触发词" : "输入词语", text: $phrase)
                 .textFieldStyle(.plain)
                 .lerroTypography(.body)
                 .padding(.horizontal, 10)
@@ -345,8 +364,23 @@ private struct DictionaryEditorView: View {
                         .stroke(LerroTheme.focusBorder, lineWidth: 1)
                 }
                 .focused($focused)
-                .padding(.top, 16)
+                .padding(.top, 12)
                 .onSubmit(savePhrase)
+
+            if kind == .snippet {
+                TextEditor(text: $replacement)
+                    .font(LerroTheme.font(14))
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .frame(minHeight: 100)
+                    .background(LerroTheme.main)
+                    .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                            .stroke(LerroTheme.focusBorder, lineWidth: 1)
+                    }
+                    .padding(.top, 12)
+            }
 
             HStack(spacing: 8) {
                 Button("导入 CSV") { perform(importCSV) }
@@ -360,16 +394,19 @@ private struct DictionaryEditorView: View {
                     Text(LocalizedStringKey(existingEntry == nil ? "添加" : "保存"))
                 }
                     .buttonStyle(LerroPillButtonStyle(prominent: true))
-                    .disabled(trimmedPhrase.isEmpty || isWorking)
+                    .disabled(trimmedPhrase.isEmpty || (kind == .snippet && trimmedReplacement.isEmpty) || isWorking)
             }
             .padding(.top, 24)
         }
         .padding(24)
-        .frame(width: 448, height: 188, alignment: .topLeading)
+        .frame(width: 448, height: kind == .snippet ? 360 : 242, alignment: .topLeading)
         .background(LerroTheme.main)
         .onAppear { focused = true }
         .onChange(of: phrase) {
             if phrase.count > 100 { phrase = String(phrase.prefix(100)) }
+        }
+        .onChange(of: replacement) {
+            if replacement.count > 4_000 { replacement = String(replacement.prefix(4_000)) }
         }
     }
 
@@ -377,9 +414,13 @@ private struct DictionaryEditorView: View {
         phrase.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var trimmedReplacement: String {
+        replacement.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func savePhrase() {
         guard !trimmedPhrase.isEmpty else { return }
-        perform { await save(trimmedPhrase) }
+        perform { await save(trimmedPhrase, kind == .snippet ? trimmedReplacement : trimmedPhrase) }
     }
 
     private func perform(_ operation: @escaping () async -> Bool) {

@@ -20,36 +20,26 @@ struct UsageSummaryTests {
             status: .failed
         )
 
-        let summary = TextMetrics.usageSummary(
-            entries: [completed, failed],
-            dictionaryCount: 10,
-            profileCount: 2
-        )
+        let summary = TextMetrics.usageSummary(entries: [completed, failed])
 
         #expect(summary.totalDuration == 30)
         #expect(summary.totalWords == 80)
         #expect(summary.savedSeconds == 90)
         #expect(summary.averageWordsPerMinute == 160)
-        #expect(summary.personalizationPercent == 36)
     }
 
-    @Test("Clamps saved time and personalization to valid lower and upper bounds")
+    @Test("Clamps saved time to zero")
     func clampsSummaryValues() {
         let slowEntry = makeEntry(text: "one two", duration: 60, status: .completed)
 
-        let summary = TextMetrics.usageSummary(
-            entries: [slowEntry],
-            dictionaryCount: 100,
-            profileCount: 100
-        )
+        let summary = TextMetrics.usageSummary(entries: [slowEntry])
 
         #expect(summary.savedSeconds == 0)
-        #expect(summary.personalizationPercent == 100)
     }
 
     @Test("Returns zero speed for an empty history")
     func summarizesEmptyHistory() {
-        let summary = TextMetrics.usageSummary(entries: [], dictionaryCount: 0, profileCount: 0)
+        let summary = TextMetrics.usageSummary(entries: [])
 
         #expect(summary == UsageSummary())
     }

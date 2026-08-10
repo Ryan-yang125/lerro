@@ -35,7 +35,12 @@ completion gesture you prefer.
 | --- | --- | --- |
 | **Dictate** | Speech → text at the cursor | Apple Speech on your Mac |
 | **Translate** | Speech → another language → cursor | Apple Translation on your Mac |
-| **Refine, Ask, Rewrite** | Polish text, answer a spoken request, or replace a selected passage | Optional local MLX model or your own API |
+| **Command** | Transform selected text or answer with current app context | Optional local MLX model or your own API |
+
+Lerro 1.3 adds app-specific writing styles, exact spoken snippets, and a
+correction loop that learns app-scoped terms. Command uses **Fn Space** by
+default. With text selected, the spoken instruction transforms that selection;
+without a selection, Lerro streams an answer card.
 
 ![Lerro shortcut setup](https://lerroapp.com/screenshots/en/lerro-onboarding-shortcuts-light.png)
 
@@ -94,6 +99,7 @@ and engineering documentation live in this repository:
 - [Models and BYOK](docs/models.md)
 - [Privacy and security](docs/privacy-security.md)
 - [Build and testing](docs/build.md)
+- [Contextual benchmark](benchmarks/README.md)
 - [Contributing](CONTRIBUTING.md)
 
 See [TRADEMARKS.md](TRADEMARKS.md), [NOTICE](NOTICE), and

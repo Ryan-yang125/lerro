@@ -79,6 +79,10 @@ final class AppSession {
     var onboardingMicrophoneTestPassed = false
     var onboardingMicrophoneTestError: String?
 
+    var activeToneProfileApplicationName: String? {
+        activeSession?.toneProfileApplicationName
+    }
+
     var preferredDictationActivation: ShortcutActivation {
         preferences.hotkeys.first(where: { $0.action == .dictate })?.activation.resolved ?? .hold
     }
@@ -1094,6 +1098,82 @@ final class AppSession {
         }
     }
 
+    func saveAppToneProfile(
+        _ profile: AppToneProfile,
+        replacingBundleIdentifier: String? = nil
+    ) {
+        let bundleIdentifier = profile.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let applicationName = profile.applicationName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let instruction = profile.instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !bundleIdentifier.isEmpty, !applicationName.isEmpty, !instruction.isEmpty else { return }
+        let normalized = AppToneProfile(
+            bundleIdentifier: bundleIdentifier,
+            applicationName: applicationName,
+            instruction: instruction,
+            enabled: profile.enabled
+        )
+        if let replacingBundleIdentifier, replacingBundleIdentifier != bundleIdentifier {
+            preferences.appToneProfiles.removeAll { $0.bundleIdentifier == replacingBundleIdentifier }
+        }
+        if let index = preferences.appToneProfiles.firstIndex(where: {
+            $0.bundleIdentifier == bundleIdentifier
+        }) {
+            preferences.appToneProfiles[index] = normalized
+        } else {
+            preferences.appToneProfiles.append(normalized)
+            preferences.appToneProfiles.sort {
+                $0.applicationName.localizedCaseInsensitiveCompare($1.applicationName) == .orderedAscending
+            }
+        }
+        savePreferences()
+    }
+
+    func deleteAppToneProfile(_ profile: AppToneProfile) {
+        preferences.appToneProfiles.removeAll { $0.bundleIdentifier == profile.bundleIdentifier }
+        savePreferences()
+    }
+
+    @discardableResult
+    func saveHistoryCorrection(
+        _ entry: HistoryEntry,
+        correctedText: String,
+        phrase: String,
+        replacement: String
+    ) async -> Bool {
+        let corrected = correctedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !corrected.isEmpty else { return false }
+        do {
+            var updated = entry
+            updated.finalText = corrected
+            updated.answerText = entry.mode == .ask ? corrected : entry.answerText
+            try await dependencies.history.save(updated)
+
+            let source = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
+            let target = replacement.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !source.isEmpty, !target.isEmpty, source != target {
+                var learned = dictionaryEntries.first {
+                    $0.source == .learned
+                        && $0.phrase.caseInsensitiveCompare(source) == .orderedSame
+                        && $0.applicationBundleIdentifier == entry.bundleIdentifier
+                } ?? DictionaryEntry(
+                    phrase: source,
+                    replacement: target,
+                    source: .learned,
+                    applicationBundleIdentifier: entry.bundleIdentifier
+                )
+                learned.replacement = target
+                learned.updatedAt = .now
+                try await dependencies.dictionary.save(learned)
+            }
+            await refreshHistoryAndUsage()
+            await refreshDictionaryAndUsage()
+            return true
+        } catch {
+            currentError = "修正保存失败：\(error.localizedDescription)"
+            return false
+        }
+    }
+
     @discardableResult
     func importDictionaryCSV(_ contents: String) async -> Bool {
         do {
@@ -1205,7 +1285,7 @@ final class AppSession {
                 transcript: entry.rawText,
                 targetLanguage: entry.targetLanguage,
                 context: context,
-                dictionary: dictionaryEntries,
+                dictionary: dictionaryEntries.filter { !$0.isSnippet },
                 toneInstruction: preferences.appToneProfiles.first {
                     $0.enabled && $0.bundleIdentifier == entry.bundleIdentifier
                 }?.instruction
@@ -1624,12 +1704,17 @@ final class AppSession {
                 await dependencies.speech.cancel()
                 return
             }
+            let toneProfile = preferences.appToneProfiles.first {
+                $0.enabled && $0.bundleIdentifier == context.bundleIdentifier
+            }
             let session = CaptureSession(
                 mode: mode,
                 context: context,
                 targetLanguage: targetLanguage,
                 intelligenceMode: intelligenceMode,
-                remoteProvider: remoteProvider
+                remoteProvider: remoteProvider,
+                toneInstruction: toneProfile?.instruction,
+                toneProfileApplicationName: toneProfile?.applicationName
             )
             activeSession = session
             isStartingCapture = false
@@ -1731,9 +1816,6 @@ final class AppSession {
         if task == .rewriteSelection, session.context.selectedTextWasTruncated {
             throw LerroError.selectionTooLong(CapturedContext.maximumSelectedTextCharacters)
         }
-        let tone = preferences.appToneProfiles.first {
-            $0.enabled && $0.bundleIdentifier == session.context.bundleIdentifier
-        }?.instruction
         let request = IntelligenceRequest(
             task: task,
             mode: session.intelligenceMode,
@@ -1742,12 +1824,24 @@ final class AppSession {
             selectedText: session.context.selectedText,
             targetLanguage: session.targetLanguage,
             context: session.context,
-            dictionary: dictionaryEntries,
-            toneInstruction: tone
+            dictionary: dictionaryEntries.filter { !$0.isSnippet },
+            toneInstruction: session.toneInstruction
         )
 
         let result: IntelligenceResult
-        if session.mode == .translation {
+        if session.mode == .dictation,
+           let snippet = SnippetResolver.resolve(
+               transcript: transcription.rawText,
+               entries: dictionaryEntries,
+               applicationBundleIdentifier: session.context.bundleIdentifier
+           ) {
+            result = IntelligenceResult(
+                text: snippet.replacement,
+                disposition: .insert,
+                modelIdentifier: "local-snippet",
+                source: .raw
+            )
+        } else if session.mode == .translation {
             guard let targetLanguage = session.targetLanguage else {
                 throw LerroError.translationUnavailable("请先选择翻译目标语言")
             }
@@ -2025,10 +2119,8 @@ final class AppSession {
         case .translation:
             return .translate
         case .ask:
-            let editingWords = ["改写", "重写", "缩短", "扩写", "润色", "rewrite", "shorten", "expand"]
             if context.selectionState == .knownSelection,
-               context.selectedText != nil,
-               editingWords.contains(where: { transcript.localizedCaseInsensitiveContains($0) }) {
+               context.selectedText?.isEmpty == false {
                 return .rewriteSelection
             }
             return .answer
@@ -2178,11 +2270,7 @@ final class AppSession {
     }
 
     private func updateUsageSummary() {
-        usage = TextMetrics.usageSummary(
-            entries: historyUsageEntries,
-            dictionaryCount: dictionaryEntries.count,
-            profileCount: preferences.appToneProfiles.filter(\.enabled).count
-        )
+        usage = TextMetrics.usageSummary(entries: historyUsageEntries)
     }
 
     private func normalizedHistorySearch(_ value: String) -> String {
@@ -2293,6 +2381,8 @@ final class AppSession {
             presentSettings(SettingsDestination.settings)
         case "settings-intelligence":
             presentSettings(SettingsDestination.intelligence)
+        case "settings-personal", "settings-personal-editor":
+            presentSettings(SettingsDestination.personal)
         case "hud-waiting":
             activeMode = .dictation
             phase = .idle
@@ -2305,6 +2395,22 @@ final class AppSession {
             activeMode = .dictation
             phase = .listening
             partialTranscript = ""
+            audioLevel = 0.72
+            captureElapsed = 3
+            if !isPanelOnlyVisualFixture { updateHUD() }
+        case "hud-profile":
+            activeMode = .dictation
+            let context = CapturedContext(
+                applicationName: "Mail",
+                bundleIdentifier: "com.apple.mail"
+            )
+            activeSession = CaptureSession(
+                mode: .dictation,
+                context: context,
+                toneInstruction: "Clear, friendly, and concise",
+                toneProfileApplicationName: "Mail"
+            )
+            phase = .listening
             audioLevel = 0.72
             captureElapsed = 3
             if !isPanelOnlyVisualFixture { updateHUD() }
@@ -2418,7 +2524,7 @@ final class AppSession {
             isCleaningCapture = false
         }
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(1.4))
+            try? await Task.sleep(for: .seconds(4))
             guard let self else { return }
             while self.isCleaningCapture {
                 guard self.phase == .failed, self.captureGeneration == nil else { return }
@@ -2468,14 +2574,20 @@ final class AppSession {
     }
 
     private var hudInteractionSize: CGSize {
-        CaptureHUDVisualState.resolve(
+        let state = CaptureHUDVisualState.resolve(
             phase: phase,
             isStartingCapture: isStartingCapture,
             isHandsFreeCapture: isHandsFreeCapture,
             isSuppressed: isHUDSuppressed
-        ).interactionSize(
+        )
+        var size = state.interactionSize(
             countdownVisible: phase == .listening && captureElapsed >= 8 * 60
         )
+        if activeToneProfileApplicationName != nil,
+           state == .waiting || state == .listening || state == .handsFree || state == .processing {
+            size.width += 78
+        }
+        return size
     }
 
     private var currentHUDVisualState: CaptureHUDVisualState {

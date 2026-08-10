@@ -14,6 +14,21 @@ export type Release = {
 // they shipped with, while the homepage always points to the latest release.
 const releases: readonly Release[] = [
   {
+    version: "1.3.0",
+    build: "9",
+    publishedAt: "2026-08-10",
+    publishedLabel: "August 10, 2026",
+    summary: "Context-aware voice writing that adapts to each Mac app.",
+    highlights: [
+      "App styles keep mail, chat, documents, and code in the right voice.",
+      "Command transforms any selected text with Fn Space or answers from the current context.",
+      "Spoken snippets expand locally, while corrections teach app-scoped terms.",
+      "A public 60-case benchmark keeps contextual accuracy and latency measurable.",
+    ],
+    downloadUrl:
+      "https://updates.lerroapp.com/releases/1.3.0/9/Lerro-macOS-arm64.zip",
+  },
+  {
     version: "1.2.0",
     build: "8",
     publishedAt: "2026-08-04",
@@ -73,6 +88,11 @@ const releases: readonly Release[] = [
 ];
 
 const chineseReleaseCopy = [
+  {
+    publishedLabel: "2026 年 8 月 10 日",
+    summary: "能根据每个 Mac 应用调整表达方式的场景化语音写作。",
+    highlights: ["应用语气让邮件、聊天、文档和代码保持合适表达。", "指令默认使用 Fn Space，可处理任意选中文字，也可结合当前上下文回答。", "语音快捷语在本机直接展开，修正会学习应用级词条。", "公开的 60 条固定基准持续衡量场景准确率与延迟。"],
+  },
   {
     publishedLabel: "2026 年 8 月 4 日",
     summary: "Lerro 现已在应用和公开官网中支持英文与简体中文。",

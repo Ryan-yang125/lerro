@@ -162,8 +162,11 @@ SpeechTranscription
 用户可分别控制应用、窗口标题、光标附近文字、选中文字、词典和语气六类上下文。
 
 Dictate 的模型调用异常或空结果会回退到 Apple Speech 原始 transcript，并把历史标记为
-未增强。任务取消继续作为取消传播。Ask 与 Rewrite 保留明确失败，避免把原文当作对应任务
+未增强。任务取消继续作为取消传播。Command 与 Rewrite 保留明确失败，避免把原文当作对应任务
 的有效结果。
+
+Dictate 在模型路由前检查本机手动词典。完整 transcript 与快捷语触发词精确匹配时，直接展开
+replacement 并交付；应用级快捷语优先于全局快捷语。该路径不调用 MLX 或远程 Provider。
 
 远程 Dictate 使用版本化的七个 few-shot 提示词和结构化 JSON payload。payload 包含原始
 transcript、规范化规则、用户允许的工作区上下文、应用语气与最多 12 个命中词典条目。
@@ -188,12 +191,12 @@ Apple Translation 资源通过 SwiftUI `translationTask` 与
 `TranslationSession(installedSource:target:)`，缺少资源时显示错误并停止交付。
 翻译全程不调用 MLX、BYOK 或网络 provider，也不使用原 transcript 充当翻译结果。
 
-## Ask
+## Command
 
-Ask 根据 transcript 和捕获选区选择任务：
+Command 根据捕获选区选择任务：
 
-- 选区存在且口述包含明确改写词：`.rewriteSelection`。
-- 其他 Ask：`.answer`。
+- 选区存在：`.rewriteSelection`，完整 transcript 作为指令。
+- 无选区：`.answer`。
 
 ### 回答
 
@@ -202,11 +205,11 @@ context + transcript
   -> selected prompt composer
   -> local MLX 或 remote API stream
   -> progressive IntelligenceResult(.showAnswer)
-  -> Ask panel 更新
+  -> Command panel 更新
   -> final answer 保存到 HistoryEntry.answerText
 ```
 
-回答阶段不自动写入原应用。Ask panel 会成为可交互的 key window，同时保持非 main window，
+回答阶段不自动写入原应用。Command panel 会成为可交互的 key window，同时保持非 main window，
 避免夺取 SwiftUI 主窗口的 Scene 所有权。用户执行插入时，`reactivateCaptured` 先恢复捕获应用，
 再向恢复后的当前键盘焦点发送 Command-V。该路径不依赖 AX 文本元素或选区。
 

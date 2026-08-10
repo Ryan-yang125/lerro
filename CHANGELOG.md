@@ -6,12 +6,31 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-10
+
 ### Added
 
+- App-specific writing styles selected from running macOS applications and
+  frozen with each capture.
+- Exact spoken snippets that expand locally from the personal dictionary.
+- A correction workflow that updates history and learns app-scoped terms.
+- A fixed 60-case contextual-dictation benchmark with repeatable accuracy,
+  formatting, protected-span, and latency scoring.
 - A zero-history Claude Code and Codex workspace entry with one canonical
   development skill, task-to-document routing, maintainer readiness probes,
   release evidence templates, and an end-to-end local validation and publication
   workflow.
+
+### Changed
+
+- Renamed the user-facing Ask action to Command and assigned `Fn Space` as its
+  first-run shortcut.
+- Commands now transform any captured selection with the spoken instruction;
+  commands without a selection continue to stream an answer card.
+- Replaced the synthetic personalization percentage with exact dictionary,
+  learned-correction, and enabled app-style counts.
+- Extended remote Provider request and resource deadlines to cover measured
+  production-generation latency while preserving cancellation.
 
 ## [1.2.0] - 2026-08-04
 

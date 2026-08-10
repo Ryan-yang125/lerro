@@ -13,8 +13,10 @@ enum CaptureHUDVisualState: Equatable {
     var size: CGSize {
         switch self {
         case .idleHidden: CGSize(width: 40, height: 6)
-        case .waiting, .listening, .processing, .error:
+        case .waiting, .listening, .processing:
             CGSize(width: 70, height: 34)
+        case .error:
+            CGSize(width: 210, height: 44)
         case .handsFree:
             CGSize(width: 116, height: 34)
         }
@@ -74,13 +76,13 @@ enum CaptureHUDAnnouncement {
             switch mode {
             case .dictation: "已锁定，免按住听写进行中"
             case .translation: "已锁定，免按住翻译进行中"
-            case .ask: "已锁定，免按住问答进行中"
+            case .ask: "已锁定，免按住指令进行中"
             }
         case .processing:
             switch mode {
             case .dictation: "正在处理听写"
             case .translation: "正在处理翻译"
-            case .ask: "正在处理问答"
+            case .ask: "正在处理指令"
             }
         case .error: errorMessage ?? "听写失败，可以重试"
         case .idleHidden where phase == .cancelled: "听写已取消"
@@ -144,24 +146,35 @@ struct CaptureHUDView: View {
                             increaseContrast: increaseContrast
                         )
                         countdownLabel
+                        toneProfileLabel
                     }
                     .transition(.opacity)
                 }
 
                 if visualState == .processing {
-                    HUDProcessingIndicator(
-                        reduceMotion: reduceMotion,
-                        increaseContrast: increaseContrast
-                    )
+                    HStack(spacing: 5) {
+                        HUDProcessingIndicator(
+                            reduceMotion: reduceMotion,
+                            increaseContrast: increaseContrast
+                        )
+                        toneProfileLabel
+                    }
                         .accessibilityHidden(true)
                         .transition(.opacity)
                 }
 
                 if visualState == .error {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 12))
                             .foregroundStyle(Color(nsColor: .systemRed))
+                        if let errorText = session.captureError {
+                            Text(verbatim: errorText)
+                                .font(LerroTheme.font(10, weight: .medium))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .foregroundStyle(.white)
+                        }
                         Button("重试") { session.toggleCapture(session.activeMode) }
                             .buttonStyle(LerroPressButtonStyle())
                             .font(LerroTheme.font(10, weight: .medium))
@@ -275,6 +288,11 @@ struct CaptureHUDView: View {
     private var targetSize: CGSize {
         var size = visualState.size
         if isCountdownVisible { size.width += 40 }
+        if session.activeToneProfileApplicationName != nil,
+           visualState == .waiting || visualState == .listening
+               || visualState == .handsFree || visualState == .processing {
+            size.width += 78
+        }
         return size
     }
 
@@ -289,6 +307,17 @@ struct CaptureHUDView: View {
                 .font(LerroTheme.font(9, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(.white.opacity(increaseContrast ? 1 : 0.84))
+        }
+    }
+
+    @ViewBuilder
+    private var toneProfileLabel: some View {
+        if let applicationName = session.activeToneProfileApplicationName {
+            Text(verbatim: applicationName)
+                .font(LerroTheme.font(9, weight: .medium))
+                .foregroundStyle(.white.opacity(increaseContrast ? 1 : 0.82))
+                .lineLimit(1)
+                .frame(maxWidth: 70)
         }
     }
 
@@ -317,7 +346,7 @@ struct CaptureHUDView: View {
             switch session.activeMode {
             case .dictation: "正在处理听写"
             case .translation: "正在处理翻译"
-            case .ask: "正在处理问答"
+            case .ask: "正在处理指令"
             }
         case .error: session.captureError ?? "听写失败，可以重试"
         }
@@ -327,7 +356,7 @@ struct CaptureHUDView: View {
         switch session.activeMode {
         case .dictation: "已锁定，免按住听写进行中"
         case .translation: "已锁定，免按住翻译进行中"
-        case .ask: "已锁定，免按住问答进行中"
+        case .ask: "已锁定，免按住指令进行中"
         }
     }
 

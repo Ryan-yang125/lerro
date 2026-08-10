@@ -64,7 +64,7 @@ struct AskAnswerCardView: View {
                 }
                 .buttonStyle(LerroPressButtonStyle())
                 .help("关闭 · Esc")
-                .accessibilityLabel(localized("关闭问答面板"))
+                .accessibilityLabel(localized("关闭指令面板"))
                 .keyboardShortcut(.cancelAction)
             }
         }

@@ -76,30 +76,30 @@ struct HomeView: View {
         LerroCard(padding: 18) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("个性化")
-                            .lerroTypography(.heading)
-                            .foregroundStyle(LerroTheme.text)
-                        Text("Lerro 会学习您的词汇与表达习惯")
-                            .lerroTypography(.caption)
-                            .foregroundStyle(LerroTheme.secondaryText)
-                    }
-                    Spacer()
-                    Text("\(session.usage.personalizationPercent)%")
-                        .lerroTypography(.title)
+                    Text("个性化")
+                        .lerroTypography(.heading)
                         .foregroundStyle(LerroTheme.text)
-                        .monospacedDigit()
+                    Spacer()
                 }
 
-                ProgressView(value: Double(session.usage.personalizationPercent), total: 100)
-                    .tint(LerroTheme.accent)
+                HStack(spacing: 20) {
+                    personalizationMetric(value: session.dictionaryEntries.count, label: "词典")
+                    personalizationMetric(
+                        value: session.dictionaryEntries.filter { $0.source == .learned }.count,
+                        label: "学习修正"
+                    )
+                    personalizationMetric(
+                        value: session.preferences.appToneProfiles.filter(\.enabled).count,
+                        label: "应用语气"
+                    )
+                }
 
                 Label("词典、历史与设置保存在这台 Mac。", systemImage: "lock.shield")
                     .lerroTypography(.caption)
                     .foregroundStyle(LerroTheme.secondaryText)
 
                 HStack {
-                    Button("查看个性化报告") {
+                    Button("管理个性化") {
                         showSettings(.personalization)
                     }
                     .buttonStyle(LerroPillButtonStyle())
@@ -109,13 +109,24 @@ struct HomeView: View {
         }
     }
 
+    private func personalizationMetric(value: Int, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(verbatim: "\(value)")
+                .lerroTypography(.heading)
+                .monospacedDigit()
+            Text(verbatim: localized(label))
+                .lerroTypography(.caption)
+                .foregroundStyle(LerroTheme.secondaryText)
+        }
+    }
+
     private var rightRail: some View {
         VStack(alignment: .leading, spacing: 14) {
             LerroCard(padding: 8) {
                 VStack(spacing: 2) {
                     shortcutRow(.dictation, title: "听写", detail: "Fn")
                     shortcutRow(.translation, title: "翻译", detail: "Fn Left Shift")
-                    shortcutRow(.ask, title: "问答", detail: "未设置")
+                    shortcutRow(.ask, title: "指令", detail: "Fn Space")
                 }
             }
 

@@ -269,6 +269,14 @@ public struct UserPreferences: Codable, Equatable, Sendable {
             displayName: "Fn ⇧"
         ),
         HotkeyDefinition(
+            action: .ask,
+            keyCode: 49,
+            modifiers: 1 << 23,
+            usesFunctionKey: true,
+            activation: .toggle,
+            displayName: "Fn Space"
+        ),
+        HotkeyDefinition(
             action: .pasteLastResult,
             keyCode: 9,
             modifiers: (1 << 18) | (1 << 20),
@@ -309,7 +317,13 @@ public struct UserPreferences: Codable, Equatable, Sendable {
             return definition
         }
         var signatures = Set<HotkeySignature>()
-        return migrated.filter { signatures.insert($0.signature).inserted }
+        var resolved = migrated.filter { signatures.insert($0.signature).inserted }
+        if !resolved.contains(where: { $0.action == .ask }),
+           let command = defaultHotkeys.first(where: { $0.action == .ask }),
+           signatures.insert(command.signature).inserted {
+            resolved.append(command)
+        }
+        return resolved
     }
 
     private static func modifierFlag(forLegacyKeyCode keyCode: Int64?) -> UInt64? {

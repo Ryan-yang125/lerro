@@ -117,6 +117,7 @@ struct OnboardingView: View {
     @State private var shortcutSaveError = ""
     @State private var isShortcutSaving = false
     @State private var shortcutConfigurationPrepared = false
+    @State private var hasCompletedPracticeCapture = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -156,10 +157,19 @@ struct OnboardingView: View {
                                 .transition(reduceMotion ? .identity : .opacity)
 
                             HStack(spacing: 12) {
-                                if step == .permissions && !session.requiredPermissionsGranted {
-                                    Text("未完成的权限可稍后继续设置")
+                                if step == .permissions && !canAdvanceFromPermissions {
+                                    Text("完成以上项目后可继续")
                                         .font(LerroTheme.font(12))
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(LerroTheme.orange)
+                                }
+                                if step == .practice && !hasCompletedPracticeCapture {
+                                    Label {
+                                        Text("请先完成一次成功的听写")
+                                    } icon: {
+                                        Image(systemName: "exclamationmark.circle.fill")
+                                    }
+                                        .font(LerroTheme.font(12))
+                                        .foregroundStyle(LerroTheme.orange)
                                 }
                                 Spacer()
                                 Button(action: next) {
@@ -168,7 +178,11 @@ struct OnboardingView: View {
                                     .buttonStyle(LerroPillButtonStyle(prominent: true))
                                     .controlSize(.large)
                                     .keyboardShortcut(.defaultAction)
-                                    .disabled(isShortcutSaving)
+                                    .disabled(
+                                        isShortcutSaving
+                                        || (step == .permissions && !canAdvanceFromPermissions)
+                                        || (step == .practice && !hasCompletedPracticeCapture)
+                                    )
                             }
                         }
                         .frame(maxWidth: 620, minHeight: 520, alignment: .topLeading)
@@ -224,6 +238,17 @@ struct OnboardingView: View {
         }
         .onChange(of: locale.identifier) { _, _ in
             localizeDefaultSampleTextIfNeeded()
+        }
+        .onChange(of: session.phase) { oldPhase, newPhase in
+            guard step == .practice else { return }
+            // Success path: inserting → idle means text was delivered
+            if oldPhase == .inserting, newPhase == .idle {
+                hasCompletedPracticeCapture = true
+            }
+            // Reset when user starts a new capture attempt
+            if newPhase == .listening {
+                hasCompletedPracticeCapture = false
+            }
         }
         .alert("快捷键没有反应", isPresented: $showShortcutHelp) {
             Button("打开辅助功能设置") {
@@ -413,7 +438,7 @@ struct OnboardingView: View {
                             .accessibilityLabel("本地模型准备进度")
                     }
 
-                    Text("首次准备会在您确认后下载约 3.03 GB。本地模型或 API 可用于增强听写、问答和改写。")
+                    Text("首次准备会在您确认后下载约 3.03 GB。本地模型或 API 可用于增强听写、指令和改写。")
                         .font(LerroTheme.font(12))
                         .foregroundStyle(.secondary)
                 } else if session.preferences.intelligenceMode == .remote {
@@ -484,6 +509,41 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
+            }
+
+            if !canAdvanceFromPermissions {
+                VStack(spacing: 8) {
+                    if !session.microphonePermission {
+                        blockingHintCard(
+                            icon: "mic.slash.fill",
+                            message: "需要麦克风权限才能录音。点击上方「请求系统权限」，在系统弹窗中选择「允许」。"
+                        )
+                    }
+                    if !session.accessibilityPermission {
+                        blockingHintCard(
+                            icon: "hand.raised.slash.fill",
+                            message: "需要辅助功能权限才能使用全局快捷键。点击上方「请求系统权限」并开启 Lerro 开关。"
+                        )
+                    }
+                    if session.speechResourceStatus.state != .ready {
+                        let speechHint: String = {
+                            switch session.speechResourceStatus.state {
+                            case .available:
+                                return "需要下载语音资源才能进行设备端听写。点击上方语音资源卡片的「准备」按钮。"
+                            case .downloading:
+                                return "语音资源正在下载中，请等待完成。"
+                            case .failed:
+                                return "语音资源准备失败，请点击上方语音资源卡片的「准备」按钮重试。"
+                            default:
+                                return "语音资源尚未就绪，请先准备语音资源。"
+                            }
+                        }()
+                        blockingHintCard(
+                            icon: "waveform.slash",
+                            message: speechHint
+                        )
+                    }
+                }
             }
         }
     }
@@ -638,6 +698,44 @@ struct OnboardingView: View {
                         locale: locale,
                         arguments: localized(practicePhaseText)
                     )))
+            }
+
+            if session.phase == .failed, let error = session.captureError {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(LerroTheme.orange)
+                        Text("听写未成功")
+                            .font(LerroTheme.font(13, weight: .medium))
+                            .foregroundStyle(.primary)
+                    }
+                    Text(verbatim: localized(error))
+                        .font(LerroTheme.font(12))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        Button("重试") {
+                            togglePracticeCapture()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        Button("返回上一步") {
+                            if let permissionsStep = OnboardingStep.allCases.first(where: { $0 == .permissions }) {
+                                navigate(to: permissionsStep)
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+                .padding(14)
+                .background(LerroTheme.fillContainerThin)
+                .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                        .stroke(LerroTheme.orange.opacity(0.3))
+                }
             }
         }
     }
@@ -803,7 +901,7 @@ struct OnboardingView: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
-                .foregroundStyle(status.state == .ready ? LerroTheme.green : LerroTheme.accent)
+                .foregroundStyle(status.state == .ready ? LerroTheme.green : (status.state == .failed ? LerroTheme.orange : LerroTheme.accent))
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 3) {
                 Text(verbatim: localized(title)).font(LerroTheme.font(14, weight: .medium))
@@ -812,10 +910,15 @@ struct OnboardingView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            if status.state == .available || status.state == .failed {
+            if status.state == .available {
                 Button("准备", action: prepare)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+            } else if status.state == .failed {
+                Button("重试", action: prepare)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(LerroTheme.orange)
             } else if status.state == .downloading {
                 ProgressView().controlSize(.small)
             }
@@ -827,6 +930,27 @@ struct OnboardingView: View {
         .overlay {
             RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
                 .stroke(LerroTheme.thinBorder)
+        }
+    }
+
+    private func blockingHintCard(icon: String, message: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(LerroTheme.orange)
+                .frame(width: 20)
+            Text(verbatim: localized(message))
+                .font(LerroTheme.font(12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+        .padding(12)
+        .background(LerroTheme.fillContainerThin)
+        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                .stroke(LerroTheme.orange.opacity(0.3))
         }
     }
 
@@ -891,11 +1015,15 @@ struct OnboardingView: View {
 
     private func next() {
         if step == .permissions {
+            guard canAdvanceFromPermissions else { return }
             guard session.beginShortcutConfiguration() else {
                 session.currentError = session.currentError ?? "暂时无法进入快捷键设置。"
                 return
             }
             shortcutConfigurationPrepared = true
+        }
+        if step == .practice {
+            guard hasCompletedPracticeCapture else { return }
         }
         if step == .shortcuts {
             guard !isShortcutSaving else { return }
@@ -1045,6 +1173,10 @@ struct OnboardingView: View {
         }
     }
 
+    private var canAdvanceFromPermissions: Bool {
+        session.requiredPermissionsGranted && session.speechResourceStatus.state == .ready
+    }
+
     private var primaryActionTitle: String {
         switch step {
         case .shortcuts where isShortcutSaving:
@@ -1096,7 +1228,7 @@ struct OnboardingView: View {
         case .raw:
             "完成语音识别后直接插入原始文字，无需准备语言模型。"
         case .local:
-            "听写完成后在本机整理语句；问答与改写也可使用本地模型。"
+            "听写完成后在本机整理语句；指令与改写也可使用本地模型。"
         case .remote:
             "使用您在设置中保存的 API 模型整理文字；发送内容由六项上下文开关控制。"
         }
@@ -1203,7 +1335,8 @@ struct OnboardingView: View {
     }
 
     private var practicePhaseText: String {
-        switch session.phase {
+        if hasCompletedPracticeCapture { return "已完成" }
+        return switch session.phase {
         case .idle: "准备就绪"
         case .listening: "正在聆听"
         case .transcribing: "正在转写"
@@ -1216,7 +1349,8 @@ struct OnboardingView: View {
     }
 
     private var practicePhaseColor: Color {
-        switch session.phase {
+        if hasCompletedPracticeCapture { return LerroTheme.green }
+        return switch session.phase {
         case .success: LerroTheme.green
         case .failed: LerroTheme.red
         case .listening, .transcribing, .enhancing, .inserting: LerroTheme.accent

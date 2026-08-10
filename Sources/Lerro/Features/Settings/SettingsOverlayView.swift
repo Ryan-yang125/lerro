@@ -230,7 +230,7 @@ private struct MainSettingsPage: View {
                             primary: "将语音整理后插入当前光标"
                         ))
                         shortcutBlock(.translate, title: "翻译", detail: "说话并输出目标语言")
-                        shortcutBlock(.ask, title: "问答", detail: "结合选中文字和当前应用回答")
+                        shortcutBlock(.ask, title: "指令", detail: "处理选中文字或结合当前应用回答")
                     }
                 }
 
@@ -635,10 +635,19 @@ private struct MainSettingsPage: View {
                     .foregroundStyle(LerroTheme.green)
             case .downloading:
                 ProgressView().controlSize(.small)
-            case .available, .failed:
+            case .available:
                 Button("准备", action: prepare)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+            case .failed:
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(LerroTheme.orange)
+                    Button("重试", action: prepare)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
             case .unsupported:
                 Text("当前不可用")
                     .font(LerroTheme.font(12))
@@ -733,7 +742,7 @@ private struct AccountSettingsPage: View {
                 }
 
                 VStack(spacing: 0) {
-                    settingsRow("运行方式", detail: "增强听写、问答、改写与个性化") { Text("本地优先").foregroundStyle(LerroTheme.secondaryText) }
+                    settingsRow("运行方式", detail: "增强听写、指令、改写与个性化") { Text("本地优先").foregroundStyle(LerroTheme.secondaryText) }
                     Divider().overlay(LerroTheme.thinBorder)
                     settingsRow("账户", detail: "功能可直接使用") { Text("无需登录").foregroundStyle(LerroTheme.secondaryText) }
                     Divider().overlay(LerroTheme.thinBorder)
@@ -757,104 +766,218 @@ private struct AccountSettingsPage: View {
 private struct PersonalSettingsPage: View {
     @Bindable var session: AppSession
     @Environment(\.locale) private var locale
+    @State private var editingProfile: AppToneProfile?
+    @State private var isCreatingProfile = false
 
     var body: some View {
         SettingsPageContainer("个性化") {
             VStack(alignment: .leading, spacing: 24) {
-                HStack(spacing: 12) {
-                    Image(systemName: "lock.shield")
-                    Text("个人词典与应用语气保存在本机。使用 API 模型时，共享内容遵循“智能处理”中的上下文设置。")
-                        .font(LerroTheme.font(14))
-                        .foregroundStyle(LerroTheme.secondaryText)
+                VStack(spacing: 0) {
+                    reportLine("个人词典", value: "\(session.dictionaryEntries.count)")
+                    Divider().overlay(LerroTheme.thinBorder)
+                    reportLine(
+                        "学习修正",
+                        value: "\(session.dictionaryEntries.filter { $0.source == .learned }.count)"
+                    )
+                    Divider().overlay(LerroTheme.thinBorder)
+                    reportLine(
+                        "应用语气",
+                        value: "\(session.preferences.appToneProfiles.filter(\.enabled).count)"
+                    )
                 }
-                .padding(16)
-                .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
-                .background(LerroTheme.fillContainerThin)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .settingsBlock()
 
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("总体个性化")
-                                .font(LerroTheme.font(14, weight: .medium))
-                            Text("根据词典、应用语气与编辑习惯生成")
-                                .font(LerroTheme.font(14))
-                                .foregroundStyle(LerroTheme.secondaryText)
-                        }
+                        Text("应用语气")
+                            .font(LerroTheme.font(14, weight: .medium))
                         Spacer()
-                        Text("\(session.usage.personalizationPercent)%")
-                            .font(LerroTheme.font(24, weight: .medium))
+                        Button("添加应用") { isCreatingProfile = true }
+                            .buttonStyle(LerroPillButtonStyle(prominent: true))
+                            .controlSize(.small)
                     }
-                    ProgressView(value: Double(session.usage.personalizationPercent), total: 100)
 
-                    Divider().overlay(LerroTheme.thinBorder)
-                    reportLine("个人词典", value: LerroInterfaceLocalization.format(
-                        "%lld 个词条", locale: locale, arguments: Int64(session.dictionaryEntries.count)
-                    ))
-                    reportLine("应用语气", value: LerroInterfaceLocalization.format(
-                        "%lld 个配置", locale: locale, arguments: Int64(session.preferences.appToneProfiles.count)
-                    ))
-                    reportLine("智能处理", value: localized(session.preferences.intelligenceMode.lerroDisplayName))
-
-                    Divider().overlay(LerroTheme.thinBorder)
-                    HStack(alignment: .center, spacing: 12) {
-                        Image(systemName: intelligenceModeIcon)
-                            .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
-                            .foregroundStyle(LerroTheme.accent)
-                            .frame(width: 36, height: 36)
-                            .background(LerroTheme.fillSelected)
-                            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.navigationRadius, style: .continuous))
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(verbatim: LerroInterfaceLocalization.format(
-                                "当前使用：%@",
-                                locale: locale,
-                                arguments: localized(session.preferences.intelligenceMode.lerroDisplayName)
-                            ))
-                                .font(LerroTheme.font(14, weight: .medium))
-                            Text(verbatim: localized(intelligenceModeDetail))
-                                .font(LerroTheme.font(12))
-                                .foregroundStyle(LerroTheme.secondaryText)
-                                .lineLimit(2)
+                    if session.preferences.appToneProfiles.isEmpty {
+                        Text("为邮件、聊天、文档或代码应用设置专属表达方式。")
+                            .font(LerroTheme.font(14))
+                            .foregroundStyle(LerroTheme.secondaryText)
+                            .frame(maxWidth: .infinity, minHeight: 88, alignment: .center)
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(session.preferences.appToneProfiles) { profile in
+                                Button {
+                                    editingProfile = profile
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "app.dashed")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundStyle(profile.enabled ? LerroTheme.accent : LerroTheme.tertiaryText)
+                                            .frame(width: 28, height: 28)
+                                            .background(LerroTheme.fillSelected)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                        Text(verbatim: profile.applicationName)
+                                            .font(LerroTheme.font(14, weight: .medium))
+                                            .foregroundStyle(LerroTheme.text)
+                                        Spacer()
+                                        Text(LocalizedStringKey(profile.enabled ? "已启用" : "已停用"))
+                                            .font(LerroTheme.font(12))
+                                            .foregroundStyle(LerroTheme.secondaryText)
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundStyle(LerroTheme.tertiaryText)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .frame(minHeight: 50)
+                                }
+                                .buttonStyle(.plain)
+                                if profile.id != session.preferences.appToneProfiles.last?.id {
+                                    Divider().overlay(LerroTheme.thinBorder)
+                                }
+                            }
                         }
-                        Spacer(minLength: 12)
-                        Button("打开智能处理") {
-                            session.settingsDestination = .intelligence
-                        }
-                        .buttonStyle(LerroPillButtonStyle(prominent: true))
-                        .controlSize(.small)
+                        .background(LerroTheme.topLayer)
+                        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.navigationRadius, style: .continuous))
                     }
                 }
                 .padding(16)
-                .frame(maxWidth: .infinity, minHeight: 310, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
                 .background(LerroTheme.fillContainerThin)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
-    }
-
-    private var intelligenceModeIcon: String {
-        switch session.preferences.intelligenceMode {
-        case .raw: "waveform"
-        case .local: "cpu"
-        case .remote: "network"
+        .sheet(isPresented: $isCreatingProfile) {
+            AppToneProfileEditor(profile: nil, session: session) {
+                isCreatingProfile = false
+            }
+            .environment(\.locale, locale)
+        }
+        .sheet(item: $editingProfile) { profile in
+            AppToneProfileEditor(profile: profile, session: session) {
+                editingProfile = nil
+            }
+            .environment(\.locale, locale)
+        }
+        .onAppear {
+            if session.visualFixturePresentation == "settings-personal-editor" {
+                isCreatingProfile = true
+            }
         }
     }
 
-    private var intelligenceModeDetail: String {
-        switch session.preferences.intelligenceMode {
-        case .raw:
-            "转写完成后直接输出原始文本。"
-        case .local:
-            session.modelStatus.message.isEmpty
-                ? "Qwen3.5 4B 在当前 Mac 运行。"
-                : session.modelStatus.message
-        case .remote:
-            "\(session.preferences.remoteProvider.provider.lerroDisplayName) · \(session.preferences.remoteProvider.modelIdentifier)"
-        }
+}
+
+private struct AppToneProfileEditor: View {
+    private struct RunningApp: Identifiable, Hashable {
+        let id: String
+        let name: String
     }
 
-    private func localized(_ key: String) -> String {
-        LerroInterfaceLocalization.string(key, locale: locale)
+    let originalProfile: AppToneProfile?
+    let session: AppSession
+    let close: () -> Void
+    @State private var applicationName: String
+    @State private var bundleIdentifier: String
+    @State private var instruction: String
+    @State private var enabled: Bool
+    @State private var selectedRunningApp = ""
+    @State private var showDeleteConfirmation = false
+
+    init(profile: AppToneProfile?, session: AppSession, close: @escaping () -> Void) {
+        originalProfile = profile
+        self.session = session
+        self.close = close
+        _applicationName = State(initialValue: profile?.applicationName ?? "")
+        _bundleIdentifier = State(initialValue: profile?.bundleIdentifier ?? "")
+        _instruction = State(initialValue: profile?.instruction ?? "")
+        _enabled = State(initialValue: profile?.enabled ?? true)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(LocalizedStringKey(originalProfile == nil ? "添加应用语气" : "编辑应用语气"))
+                .lerroTypography(.title)
+
+            Picker("运行中的应用", selection: $selectedRunningApp) {
+                Text("选择应用").tag("")
+                ForEach(runningApps) { app in
+                    Text(verbatim: app.name).tag(app.id)
+                }
+            }
+            .onChange(of: selectedRunningApp) { _, bundle in
+                guard let app = runningApps.first(where: { $0.id == bundle }) else { return }
+                bundleIdentifier = app.id
+                applicationName = app.name
+            }
+
+            TextField("应用名称", text: $applicationName)
+                .textFieldStyle(.roundedBorder)
+            TextField("Bundle ID", text: $bundleIdentifier)
+                .textFieldStyle(.roundedBorder)
+            Text("写作方式")
+                .font(LerroTheme.font(14, weight: .medium))
+            TextEditor(text: $instruction)
+                .font(LerroTheme.font(14))
+                .scrollContentBackground(.hidden)
+                .padding(8)
+                .frame(minHeight: 120)
+                .background(LerroTheme.main)
+                .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                        .stroke(LerroTheme.focusBorder, lineWidth: 1)
+                }
+            Toggle("启用", isOn: $enabled)
+
+            HStack {
+                if let originalProfile {
+                    Button("删除", role: .destructive) { showDeleteConfirmation = true }
+                        .buttonStyle(LerroPillButtonStyle())
+                        .alert("删除这个应用语气？", isPresented: $showDeleteConfirmation) {
+                            Button("取消", role: .cancel) {}
+                            Button("删除", role: .destructive) {
+                                session.deleteAppToneProfile(originalProfile)
+                                close()
+                            }
+                        }
+                }
+                Spacer()
+                Button("取消", action: close)
+                    .buttonStyle(LerroPillButtonStyle())
+                Button("保存") {
+                    session.saveAppToneProfile(
+                        AppToneProfile(
+                            bundleIdentifier: bundleIdentifier,
+                            applicationName: applicationName,
+                            instruction: instruction,
+                            enabled: enabled
+                        ),
+                        replacingBundleIdentifier: originalProfile?.bundleIdentifier
+                    )
+                    close()
+                }
+                .buttonStyle(LerroPillButtonStyle(prominent: true))
+                .disabled(
+                    applicationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+            }
+        }
+        .padding(24)
+        .frame(width: 520, height: 440)
+        .background(LerroTheme.main)
+    }
+
+    private var runningApps: [RunningApp] {
+        var seen = Set<String>()
+        return NSWorkspace.shared.runningApplications.compactMap { app in
+            guard let bundle = app.bundleIdentifier,
+                  let name = app.localizedName,
+                  app.activationPolicy == .regular else { return nil }
+            return RunningApp(id: bundle, name: name)
+        }
+        .filter { seen.insert($0.id).inserted }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 }
 
@@ -893,7 +1016,7 @@ private struct HelpSettingsPage: View {
                 Divider().overlay(LerroTheme.thinBorder)
                 helpRow("翻译", detail: "使用翻译快捷键说出内容，并输出首选目标语言。", icon: "character.bubble")
                 Divider().overlay(LerroTheme.thinBorder)
-                helpRow("问答", detail: "使用问答快捷键，结合当前上下文提问。", icon: "sparkles")
+                helpRow("指令", detail: "使用指令快捷键处理选中文字或当前上下文。", icon: "sparkles")
             }
             .settingsBlock()
         }
@@ -912,7 +1035,7 @@ private struct ReleaseNotesPage: View {
                     arguments: AppMetadata.version, AppMetadata.build
                 ))
                     .font(LerroTheme.font(14, weight: .medium))
-                Text("新增中英文界面，并让 App、网站与 GitHub README 使用对应语言；状态、错误、快捷键和独立面板保持一致。")
+                Text("新增应用语气、快捷语与修正学习；指令可直接处理任意选中文字，并默认使用 Fn Space。")
                     .font(LerroTheme.font(14))
                     .foregroundStyle(LerroTheme.secondaryText)
                     .lineSpacing(5)
@@ -1013,6 +1136,8 @@ private func reportLine(_ title: String, value: String) -> some View {
         Spacer()
         Text(verbatim: value).font(LerroTheme.font(14)).foregroundStyle(LerroTheme.secondaryText)
     }
+    .padding(.horizontal, 12)
+    .frame(height: 52)
 }
 
 @MainActor
@@ -1314,7 +1439,7 @@ private struct ShortcutCaptureSheet: View {
         case .translate, .translateHandsFree:
             "翻译"
         case .ask, .askHandsFree:
-            "问答"
+            "指令"
         case .pasteLastResult:
             "粘贴上次结果"
         case .cancel:

@@ -450,6 +450,17 @@ struct OpenAICompatibleHTTPClientTests {
         ))
     }
 
+    @Test("Provider defaults tolerate production generation latency")
+    func productionTimeoutDefaults() {
+        let endpoint = OpenAICompatibleEndpoint(
+            providerIdentifier: "deepseek",
+            baseURL: URL(string: "https://api.deepseek.com")!,
+            modelIdentifier: "deepseek-v4-flash"
+        )
+        #expect(endpoint.requestTimeout == 60)
+        #expect(endpoint.resourceTimeout == 120)
+    }
+
     @Test("Ephemeral session disables persistent cookies and caches")
     func ephemeralConfiguration() {
         let configuration = OpenAICompatibleHTTPClient.ephemeralSessionConfiguration(

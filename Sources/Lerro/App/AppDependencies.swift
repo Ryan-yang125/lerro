@@ -111,7 +111,11 @@ struct AppDependencies: Sendable {
             )
         ]
         let dictionary = [
-            DictionaryEntry(phrase: "type less", replacement: "Lerro", useCount: 8),
+            DictionaryEntry(
+                phrase: "meeting link",
+                replacement: "https://meet.example.com/lerro",
+                useCount: 8
+            ),
             DictionaryEntry(phrase: "code x", replacement: "Codex", source: .learned, useCount: 5),
             DictionaryEntry(phrase: "swift ui", replacement: "SwiftUI", useCount: 3)
         ]

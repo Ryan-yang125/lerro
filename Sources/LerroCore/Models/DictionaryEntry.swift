@@ -15,6 +15,10 @@ public struct DictionaryEntry: Codable, Identifiable, Hashable, Sendable {
     public var updatedAt: Date
     public var useCount: Int
 
+    public var isSnippet: Bool {
+        source == .manual && replacement != phrase
+    }
+
     public init(
         id: UUID = UUID(),
         phrase: String,

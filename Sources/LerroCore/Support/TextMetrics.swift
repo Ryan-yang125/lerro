@@ -28,24 +28,18 @@ public enum TextMetrics {
         return cjkCount + latinOnlyCount
     }
 
-    public static func usageSummary(
-        entries: [HistoryEntry],
-        dictionaryCount: Int,
-        profileCount: Int
-    ) -> UsageSummary {
+    public static func usageSummary(entries: [HistoryEntry]) -> UsageSummary {
         let completed = entries.filter { $0.status == .completed }
         let duration = completed.reduce(0) { $0 + $1.duration }
         let words = completed.reduce(0) { $0 + countWords(in: $1.finalText) }
         let typingSeconds = Double(words) / 40.0 * 60.0
         let saved = max(0, typingSeconds - duration)
         let wpm = duration > 0 ? Int((Double(words) / duration) * 60.0) : 0
-        let personalization = min(100, dictionaryCount * 2 + profileCount * 8 + min(40, completed.count / 5))
         return UsageSummary(
             totalDuration: duration,
             totalWords: words,
             savedSeconds: saved,
-            averageWordsPerMinute: wpm,
-            personalizationPercent: personalization
+            averageWordsPerMinute: wpm
         )
     }
 }

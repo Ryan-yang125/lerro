@@ -13,8 +13,8 @@ struct OpenAICompatibleEndpoint: Sendable, Equatable {
         providerIdentifier: String,
         baseURL: URL,
         modelIdentifier: String,
-        requestTimeout: TimeInterval = 15,
-        resourceTimeout: TimeInterval = 45,
+        requestTimeout: TimeInterval = 60,
+        resourceTimeout: TimeInterval = 120,
         maximumResponseBytes: Int = 2 * 1_024 * 1_024
     ) {
         self.providerIdentifier = providerIdentifier

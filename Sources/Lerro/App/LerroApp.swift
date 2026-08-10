@@ -74,7 +74,7 @@ private struct LerroCommands: Commands {
                 .keyboardShortcut("d", modifiers: [.command, .shift])
             Button { session.toggleCapture(.translation) } label: { Text(verbatim: copy("开始翻译")) }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
-            Button { session.toggleCapture(.ask) } label: { Text(verbatim: copy("开始问答")) }
+            Button { session.toggleCapture(.ask) } label: { Text(verbatim: copy("开始指令")) }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
             Divider()
             Button { session.pasteLastResult() } label: { Text(verbatim: copy("粘贴上次结果")) }

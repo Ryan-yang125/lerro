@@ -130,6 +130,24 @@ swift package show-dependencies --format json
 | 原始听写、remote 配置快照、FIFO trigger、Fn 前缀 action 转交、hold binding 身份、HUD 锁定、toggle 启动竞态、持久化失败、模型回退、翻译、Ask、交付提交前取消、提交后完成与其他失败取消 | [`AppSessionCoreFlowTests.swift`](../Tests/LerroTests/AppSessionCoreFlowTests.swift) |
 | Provider 表单校验、预设切换、view-local Key draft 与六项开关 | [`IntelligenceSettingsDraftTests.swift`](../Tests/LerroTests/IntelligenceSettingsDraftTests.swift) |
 
+## 场景化听写基准
+
+v1.3 固定基准位于
+[`benchmarks/contextual-dictation-v1.3.json`](../benchmarks/contextual-dictation-v1.3.json)，
+包含 Mail、Messages、Notes、Xcode 与 Terminal 的 60 条中文、英文和中英混合样例。
+同一 v1.3 release line 保持语料不变，local、remote 与外部产品使用相同输入。
+
+```zsh
+python3 script/benchmark_contextual_dictation.py --validate
+python3 script/test_contextual_benchmark.py
+python3 script/benchmark_contextual_dictation.py \
+  --results path/to/results.json \
+  --output path/to/report.json
+```
+
+报告记录 exact match、文本相似度、受保护名称/数字/代码片段准确率、格式准确率，以及
+端到端延迟 p50/p95。缺失或多余 case ID 会使评分失败。
+
 ## 真实缓存模型 smoke
 
 [`MLXLanguageModelRuntimeTests.swift`](../Tests/LerroIntelligenceTests/MLXLanguageModelRuntimeTests.swift) 中的 `liveCachedModelSmoke` 默认处于 disabled。常规 `swift test`、CI 和 `verify_release.sh` 不会加载模型、执行生成或触发约 3.03 GB 下载。标准显式入口是 [`test_live_model.sh`](../script/test_live_model.sh)。

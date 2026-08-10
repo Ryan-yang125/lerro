@@ -26,7 +26,7 @@ struct MenuBarContentView: View {
             fallbackShortcut: "Fn ⇧",
             icon: "character.bubble"
         )
-        captureItem(.ask, title: "问答", fallbackShortcut: "未设置", icon: "sparkles")
+        captureItem(.ask, title: "指令", fallbackShortcut: "Fn Space", icon: "sparkles")
 
         if session.isCaptureCancellationAvailable {
             Button {
@@ -97,7 +97,7 @@ struct MenuBarContentView: View {
         let activeTitle = switch mode {
         case .dictation: localized("完成听写")
         case .translation: localized("完成翻译")
-        case .ask: localized("完成问答")
+        case .ask: localized("完成指令")
         }
         return Button {
             session.toggleCapture(mode)

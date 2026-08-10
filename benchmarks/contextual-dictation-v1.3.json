@@ -1,0 +1,871 @@
+{
+  "schemaVersion": 1,
+  "productVersion": "1.3.0",
+  "caseCount": 60,
+  "cases": [
+    {
+      "id": "mail-01",
+      "locale": "zh-CN",
+      "applicationName": "Mail",
+      "bundleIdentifier": "com.apple.mail",
+      "category": "email",
+      "transcript": "嗯请给 Alex 发第 1 版 Lerro 更新，截止 8 月 11 日，谢谢",
+      "expected": "请给 Alex 发第 1 版 Lerro 更新，截止 8 月 11 日。谢谢。",
+      "protectedSpans": [
+        "Lerro",
+        "Alex",
+        "8 月 11 日"
+      ],
+      "formatting": "paragraph"
+    },
+    {
+      "id": "mail-02",
+      "locale": "en-US",
+      "applicationName": "Mail",
+      "bundleIdentifier": "com.apple.mail",
+      "category": "email",
+      "transcript": "um please send Cloudflare update number 2 to Alex by August 12 thanks",
+      "expected": "Please send Cloudflare update 2 to Alex by August 12. Thanks.",
+      "protectedSpans": [
+        "Cloudflare",
+        "Alex",
+        "August 12"
+      ],
+      "formatting": "paragraph"
+    },
+    {
+      "id": "mail-03",
+      "locale": "zh-en",
+      "applicationName": "Mail",
+      "bundleIdentifier": "com.apple.mail",
+      "category": "email",
+      "transcript": "嗯请给 Alex 发第 3 版 Qwen3.5 更新，截止 8 月 13 日，谢谢",
+      "expected": "请给 Alex 发第 3 版 Qwen3.5 更新，截止 8 月 13 日。谢谢。",
+      "protectedSpans": [
+        "Qwen3.5",
+        "Alex",
+        "8 月 13 日"
+      ],
+      "formatting": "paragraph"
+    },
+    {
+      "id": "mail-04",
+      "locale": "zh-CN",
+      "applicationName": "Mail",
+      "bundleIdentifier": "com.apple.mail",
+      "category": "email",
+      "transcript": "嗯请给 Alex 发第 4 版 SwiftUI 更新，截止 8 月 14 日，谢谢",
+      "expected": "请给 Alex 发第 4 版 SwiftUI 更新，截止 8 月 14 日。谢谢。",
+      "protectedSpans": [
+        "SwiftUI",
+        "Alex",
+        "8 月 14 日"
+      ],
+      "formatting": "paragraph"
+    },
+    {
+      "id": "mail-05",
+      "locale": "en-US",
+      "applicationName": "Mail",
+      "bundleIdentifier": "com.apple.mail",
+      "category": "email",
+      "transcript": "um please send MLX update number 5 to Alex by August 15 thanks",
+      "expected": "Please send MLX update 5 to Alex by August 15. Thanks.",
+      "protectedSpans": [
+        "MLX",
+        "Alex",
+        "August 15"
+      ],
+      "formatting": "paragraph"
+    },
+    {
+      "id": "mail-06",
+      "locale": "zh-en",
+      "applicationName": "Mail",
+      "bundleIdentifier": "com.apple.mail",
+      "category": "email",
+      "transcript": "嗯请给 Alex 发第 6 版 AppKit 更新，截止 8 月 16 日，谢谢",
+      "expected": "请给 Alex 发第 6 版 AppKit 更新，截止 8 月 16 日。谢谢。",
+      "protectedSpans": [
+        "AppKit",
+        "Alex",
+        "8 月 16 日"
+      ],
+      "formatting": "paragraph"
+    },
+    {
+      "id": "mail-07",
+      "locale": "zh-CN",
+      "applicationName": "Mail",
+      "bundleIdentifier": "com.apple.mail",
+      "category": "email",
+      "transcript": "嗯请给 Alex 发第 7 版 GitHub 更新，截止 8 月 17 日，谢谢",
+      "expected": "请给 Alex 发第 7 版 GitHub 更新，截止 8 月 17 日。谢谢。",
+      "protectedSpans": [
+        "GitHub",
+        "Alex",
+        "8 月 17 日"
+      ],
+      "formatting": "paragraph"
+    },
+    {
+      "id": "mail-08",
+      "locale": "en-US",
+      "applicationName": "Mail",
+      "bundleIdentifier": "com.apple.mail",
+      "category": "email",
+      "transcript": "um please send Sparkle update number 8 to Alex by August 18 thanks",
+      "expected": "Please send Sparkle update 8 to Alex by August 18. Thanks.",
+      "protectedSpans": [
+        "Sparkle",
+        "Alex",
+        "August 18"
+      ],
+      "formatting": "paragraph"
+    },
+    {
+      "id": "mail-09",
+      "locale": "zh-en",
+      "applicationName": "Mail",
+      "bundleIdentifier": "com.apple.mail",
+      "category": "email",
+      "transcript": "嗯请给 Alex 发第 9 版 DeepSeek 更新，截止 8 月 19 日，谢谢",
+      "expected": "请给 Alex 发第 9 版 DeepSeek 更新，截止 8 月 19 日。谢谢。",
+      "protectedSpans": [
+        "DeepSeek",
+        "Alex",
+        "8 月 19 日"
+      ],
+      "formatting": "paragraph"
+    },
+    {
+      "id": "mail-10",
+      "locale": "zh-CN",
+      "applicationName": "Mail",
+      "bundleIdentifier": "com.apple.mail",
+      "category": "email",
+      "transcript": "嗯请给 Alex 发第 10 版 TextEdit 更新，截止 8 月 20 日，谢谢",
+      "expected": "请给 Alex 发第 10 版 TextEdit 更新，截止 8 月 20 日。谢谢。",
+      "protectedSpans": [
+        "TextEdit",
+        "Alex",
+        "8 月 20 日"
+      ],
+      "formatting": "paragraph"
+    },
+    {
+      "id": "mail-11",
+      "locale": "en-US",
+      "applicationName": "Mail",
+      "bundleIdentifier": "com.apple.mail",
+      "category": "email",
+      "transcript": "um please send WebKit update number 11 to Alex by August 21 thanks",
+      "expected": "Please send WebKit update 11 to Alex by August 21. Thanks.",
+      "protectedSpans": [
+        "WebKit",
+        "Alex",
+        "August 21"
+      ],
+      "formatting": "paragraph"
+    },
+    {
+      "id": "mail-12",
+      "locale": "zh-en",
+      "applicationName": "Mail",
+      "bundleIdentifier": "com.apple.mail",
+      "category": "email",
+      "transcript": "嗯请给 Alex 发第 12 版 macOS 更新，截止 8 月 22 日，谢谢",
+      "expected": "请给 Alex 发第 12 版 macOS 更新，截止 8 月 22 日。谢谢。",
+      "protectedSpans": [
+        "macOS",
+        "Alex",
+        "8 月 22 日"
+      ],
+      "formatting": "paragraph"
+    },
+    {
+      "id": "chat-01",
+      "locale": "zh-CN",
+      "applicationName": "Messages",
+      "bundleIdentifier": "com.apple.MobileSMS",
+      "category": "chat",
+      "transcript": "Lerro 构建 1 已经好了，今天能帮我看一下吗",
+      "expected": "Lerro 构建 1 已经好了，今天能帮我看一下吗？",
+      "protectedSpans": [
+        "Lerro",
+        "1"
+      ],
+      "formatting": "short"
+    },
+    {
+      "id": "chat-02",
+      "locale": "en-US",
+      "applicationName": "Messages",
+      "bundleIdentifier": "com.apple.MobileSMS",
+      "category": "chat",
+      "transcript": "hey Cloudflare build 2 is ready can you review it today",
+      "expected": "Cloudflare build 2 is ready. Can you review it today?",
+      "protectedSpans": [
+        "Cloudflare",
+        "2"
+      ],
+      "formatting": "short"
+    },
+    {
+      "id": "chat-03",
+      "locale": "zh-en",
+      "applicationName": "Messages",
+      "bundleIdentifier": "com.apple.MobileSMS",
+      "category": "chat",
+      "transcript": "Qwen3.5 构建 3 已经好了，今天能帮我看一下吗",
+      "expected": "Qwen3.5 构建 3 已经好了，今天能帮我看一下吗？",
+      "protectedSpans": [
+        "Qwen3.5",
+        "3"
+      ],
+      "formatting": "short"
+    },
+    {
+      "id": "chat-04",
+      "locale": "zh-CN",
+      "applicationName": "Messages",
+      "bundleIdentifier": "com.apple.MobileSMS",
+      "category": "chat",
+      "transcript": "SwiftUI 构建 4 已经好了，今天能帮我看一下吗",
+      "expected": "SwiftUI 构建 4 已经好了，今天能帮我看一下吗？",
+      "protectedSpans": [
+        "SwiftUI",
+        "4"
+      ],
+      "formatting": "short"
+    },
+    {
+      "id": "chat-05",
+      "locale": "en-US",
+      "applicationName": "Messages",
+      "bundleIdentifier": "com.apple.MobileSMS",
+      "category": "chat",
+      "transcript": "hey MLX build 5 is ready can you review it today",
+      "expected": "MLX build 5 is ready. Can you review it today?",
+      "protectedSpans": [
+        "MLX",
+        "5"
+      ],
+      "formatting": "short"
+    },
+    {
+      "id": "chat-06",
+      "locale": "zh-en",
+      "applicationName": "Messages",
+      "bundleIdentifier": "com.apple.MobileSMS",
+      "category": "chat",
+      "transcript": "AppKit 构建 6 已经好了，今天能帮我看一下吗",
+      "expected": "AppKit 构建 6 已经好了，今天能帮我看一下吗？",
+      "protectedSpans": [
+        "AppKit",
+        "6"
+      ],
+      "formatting": "short"
+    },
+    {
+      "id": "chat-07",
+      "locale": "zh-CN",
+      "applicationName": "Messages",
+      "bundleIdentifier": "com.apple.MobileSMS",
+      "category": "chat",
+      "transcript": "GitHub 构建 7 已经好了，今天能帮我看一下吗",
+      "expected": "GitHub 构建 7 已经好了，今天能帮我看一下吗？",
+      "protectedSpans": [
+        "GitHub",
+        "7"
+      ],
+      "formatting": "short"
+    },
+    {
+      "id": "chat-08",
+      "locale": "en-US",
+      "applicationName": "Messages",
+      "bundleIdentifier": "com.apple.MobileSMS",
+      "category": "chat",
+      "transcript": "hey Sparkle build 8 is ready can you review it today",
+      "expected": "Sparkle build 8 is ready. Can you review it today?",
+      "protectedSpans": [
+        "Sparkle",
+        "8"
+      ],
+      "formatting": "short"
+    },
+    {
+      "id": "chat-09",
+      "locale": "zh-en",
+      "applicationName": "Messages",
+      "bundleIdentifier": "com.apple.MobileSMS",
+      "category": "chat",
+      "transcript": "DeepSeek 构建 9 已经好了，今天能帮我看一下吗",
+      "expected": "DeepSeek 构建 9 已经好了，今天能帮我看一下吗？",
+      "protectedSpans": [
+        "DeepSeek",
+        "9"
+      ],
+      "formatting": "short"
+    },
+    {
+      "id": "chat-10",
+      "locale": "zh-CN",
+      "applicationName": "Messages",
+      "bundleIdentifier": "com.apple.MobileSMS",
+      "category": "chat",
+      "transcript": "TextEdit 构建 10 已经好了，今天能帮我看一下吗",
+      "expected": "TextEdit 构建 10 已经好了，今天能帮我看一下吗？",
+      "protectedSpans": [
+        "TextEdit",
+        "10"
+      ],
+      "formatting": "short"
+    },
+    {
+      "id": "chat-11",
+      "locale": "en-US",
+      "applicationName": "Messages",
+      "bundleIdentifier": "com.apple.MobileSMS",
+      "category": "chat",
+      "transcript": "hey WebKit build 11 is ready can you review it today",
+      "expected": "WebKit build 11 is ready. Can you review it today?",
+      "protectedSpans": [
+        "WebKit",
+        "11"
+      ],
+      "formatting": "short"
+    },
+    {
+      "id": "chat-12",
+      "locale": "zh-en",
+      "applicationName": "Messages",
+      "bundleIdentifier": "com.apple.MobileSMS",
+      "category": "chat",
+      "transcript": "macOS 构建 12 已经好了，今天能帮我看一下吗",
+      "expected": "macOS 构建 12 已经好了，今天能帮我看一下吗？",
+      "protectedSpans": [
+        "macOS",
+        "12"
+      ],
+      "formatting": "short"
+    },
+    {
+      "id": "docs-01",
+      "locale": "zh-CN",
+      "applicationName": "Notes",
+      "bundleIdentifier": "com.apple.Notes",
+      "category": "document",
+      "transcript": "Lerro 第 1 版目标，冒号，准确、快速、隐私",
+      "expected": "Lerro 第 1 版目标：\n- 准确\n- 快速\n- 隐私",
+      "protectedSpans": [
+        "Lerro",
+        "1"
+      ],
+      "formatting": "bullets"
+    },
+    {
+      "id": "docs-02",
+      "locale": "en-US",
+      "applicationName": "Notes",
+      "bundleIdentifier": "com.apple.Notes",
+      "category": "document",
+      "transcript": "Cloudflare version 2 goals colon accuracy speed and privacy",
+      "expected": "Cloudflare version 2 goals:\n- Accuracy\n- Speed\n- Privacy",
+      "protectedSpans": [
+        "Cloudflare",
+        "2"
+      ],
+      "formatting": "bullets"
+    },
+    {
+      "id": "docs-03",
+      "locale": "zh-en",
+      "applicationName": "Notes",
+      "bundleIdentifier": "com.apple.Notes",
+      "category": "document",
+      "transcript": "Qwen3.5 第 3 版目标，冒号，准确、快速、隐私",
+      "expected": "Qwen3.5 第 3 版目标：\n- 准确\n- 快速\n- 隐私",
+      "protectedSpans": [
+        "Qwen3.5",
+        "3"
+      ],
+      "formatting": "bullets"
+    },
+    {
+      "id": "docs-04",
+      "locale": "zh-CN",
+      "applicationName": "Notes",
+      "bundleIdentifier": "com.apple.Notes",
+      "category": "document",
+      "transcript": "SwiftUI 第 4 版目标，冒号，准确、快速、隐私",
+      "expected": "SwiftUI 第 4 版目标：\n- 准确\n- 快速\n- 隐私",
+      "protectedSpans": [
+        "SwiftUI",
+        "4"
+      ],
+      "formatting": "bullets"
+    },
+    {
+      "id": "docs-05",
+      "locale": "en-US",
+      "applicationName": "Notes",
+      "bundleIdentifier": "com.apple.Notes",
+      "category": "document",
+      "transcript": "MLX version 5 goals colon accuracy speed and privacy",
+      "expected": "MLX version 5 goals:\n- Accuracy\n- Speed\n- Privacy",
+      "protectedSpans": [
+        "MLX",
+        "5"
+      ],
+      "formatting": "bullets"
+    },
+    {
+      "id": "docs-06",
+      "locale": "zh-en",
+      "applicationName": "Notes",
+      "bundleIdentifier": "com.apple.Notes",
+      "category": "document",
+      "transcript": "AppKit 第 6 版目标，冒号，准确、快速、隐私",
+      "expected": "AppKit 第 6 版目标：\n- 准确\n- 快速\n- 隐私",
+      "protectedSpans": [
+        "AppKit",
+        "6"
+      ],
+      "formatting": "bullets"
+    },
+    {
+      "id": "docs-07",
+      "locale": "zh-CN",
+      "applicationName": "Notes",
+      "bundleIdentifier": "com.apple.Notes",
+      "category": "document",
+      "transcript": "GitHub 第 7 版目标，冒号，准确、快速、隐私",
+      "expected": "GitHub 第 7 版目标：\n- 准确\n- 快速\n- 隐私",
+      "protectedSpans": [
+        "GitHub",
+        "7"
+      ],
+      "formatting": "bullets"
+    },
+    {
+      "id": "docs-08",
+      "locale": "en-US",
+      "applicationName": "Notes",
+      "bundleIdentifier": "com.apple.Notes",
+      "category": "document",
+      "transcript": "Sparkle version 8 goals colon accuracy speed and privacy",
+      "expected": "Sparkle version 8 goals:\n- Accuracy\n- Speed\n- Privacy",
+      "protectedSpans": [
+        "Sparkle",
+        "8"
+      ],
+      "formatting": "bullets"
+    },
+    {
+      "id": "docs-09",
+      "locale": "zh-en",
+      "applicationName": "Notes",
+      "bundleIdentifier": "com.apple.Notes",
+      "category": "document",
+      "transcript": "DeepSeek 第 9 版目标，冒号，准确、快速、隐私",
+      "expected": "DeepSeek 第 9 版目标：\n- 准确\n- 快速\n- 隐私",
+      "protectedSpans": [
+        "DeepSeek",
+        "9"
+      ],
+      "formatting": "bullets"
+    },
+    {
+      "id": "docs-10",
+      "locale": "zh-CN",
+      "applicationName": "Notes",
+      "bundleIdentifier": "com.apple.Notes",
+      "category": "document",
+      "transcript": "TextEdit 第 10 版目标，冒号，准确、快速、隐私",
+      "expected": "TextEdit 第 10 版目标：\n- 准确\n- 快速\n- 隐私",
+      "protectedSpans": [
+        "TextEdit",
+        "10"
+      ],
+      "formatting": "bullets"
+    },
+    {
+      "id": "docs-11",
+      "locale": "en-US",
+      "applicationName": "Notes",
+      "bundleIdentifier": "com.apple.Notes",
+      "category": "document",
+      "transcript": "WebKit version 11 goals colon accuracy speed and privacy",
+      "expected": "WebKit version 11 goals:\n- Accuracy\n- Speed\n- Privacy",
+      "protectedSpans": [
+        "WebKit",
+        "11"
+      ],
+      "formatting": "bullets"
+    },
+    {
+      "id": "docs-12",
+      "locale": "zh-en",
+      "applicationName": "Notes",
+      "bundleIdentifier": "com.apple.Notes",
+      "category": "document",
+      "transcript": "macOS 第 12 版目标，冒号，准确、快速、隐私",
+      "expected": "macOS 第 12 版目标：\n- 准确\n- 快速\n- 隐私",
+      "protectedSpans": [
+        "macOS",
+        "12"
+      ],
+      "formatting": "bullets"
+    },
+    {
+      "id": "code-01",
+      "locale": "zh-CN",
+      "applicationName": "Xcode",
+      "bundleIdentifier": "com.apple.dt.Xcode",
+      "category": "code",
+      "transcript": "添加 Swift 函数 validate1，返回 Result 小于 String 逗号 Error 大于",
+      "expected": "Add a Swift function named `validate1` that returns `Result<String, Error>`.",
+      "protectedSpans": [
+        "Swift",
+        "validate1",
+        "Result<String, Error>"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "code-02",
+      "locale": "en-US",
+      "applicationName": "Xcode",
+      "bundleIdentifier": "com.apple.dt.Xcode",
+      "category": "code",
+      "transcript": "add a Swift function named validate2 that returns Result less than String comma Error greater than",
+      "expected": "Add a Swift function named `validate2` that returns `Result<String, Error>`.",
+      "protectedSpans": [
+        "Swift",
+        "validate2",
+        "Result<String, Error>"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "code-03",
+      "locale": "zh-en",
+      "applicationName": "Xcode",
+      "bundleIdentifier": "com.apple.dt.Xcode",
+      "category": "code",
+      "transcript": "添加 Swift 函数 validate3，返回 Result 小于 String 逗号 Error 大于",
+      "expected": "Add a Swift function named `validate3` that returns `Result<String, Error>`.",
+      "protectedSpans": [
+        "Swift",
+        "validate3",
+        "Result<String, Error>"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "code-04",
+      "locale": "zh-CN",
+      "applicationName": "Xcode",
+      "bundleIdentifier": "com.apple.dt.Xcode",
+      "category": "code",
+      "transcript": "添加 Swift 函数 validate4，返回 Result 小于 String 逗号 Error 大于",
+      "expected": "Add a Swift function named `validate4` that returns `Result<String, Error>`.",
+      "protectedSpans": [
+        "Swift",
+        "validate4",
+        "Result<String, Error>"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "code-05",
+      "locale": "en-US",
+      "applicationName": "Xcode",
+      "bundleIdentifier": "com.apple.dt.Xcode",
+      "category": "code",
+      "transcript": "add a Swift function named validate5 that returns Result less than String comma Error greater than",
+      "expected": "Add a Swift function named `validate5` that returns `Result<String, Error>`.",
+      "protectedSpans": [
+        "Swift",
+        "validate5",
+        "Result<String, Error>"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "code-06",
+      "locale": "zh-en",
+      "applicationName": "Xcode",
+      "bundleIdentifier": "com.apple.dt.Xcode",
+      "category": "code",
+      "transcript": "添加 Swift 函数 validate6，返回 Result 小于 String 逗号 Error 大于",
+      "expected": "Add a Swift function named `validate6` that returns `Result<String, Error>`.",
+      "protectedSpans": [
+        "Swift",
+        "validate6",
+        "Result<String, Error>"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "code-07",
+      "locale": "zh-CN",
+      "applicationName": "Xcode",
+      "bundleIdentifier": "com.apple.dt.Xcode",
+      "category": "code",
+      "transcript": "添加 Swift 函数 validate7，返回 Result 小于 String 逗号 Error 大于",
+      "expected": "Add a Swift function named `validate7` that returns `Result<String, Error>`.",
+      "protectedSpans": [
+        "Swift",
+        "validate7",
+        "Result<String, Error>"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "code-08",
+      "locale": "en-US",
+      "applicationName": "Xcode",
+      "bundleIdentifier": "com.apple.dt.Xcode",
+      "category": "code",
+      "transcript": "add a Swift function named validate8 that returns Result less than String comma Error greater than",
+      "expected": "Add a Swift function named `validate8` that returns `Result<String, Error>`.",
+      "protectedSpans": [
+        "Swift",
+        "validate8",
+        "Result<String, Error>"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "code-09",
+      "locale": "zh-en",
+      "applicationName": "Xcode",
+      "bundleIdentifier": "com.apple.dt.Xcode",
+      "category": "code",
+      "transcript": "添加 Swift 函数 validate9，返回 Result 小于 String 逗号 Error 大于",
+      "expected": "Add a Swift function named `validate9` that returns `Result<String, Error>`.",
+      "protectedSpans": [
+        "Swift",
+        "validate9",
+        "Result<String, Error>"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "code-10",
+      "locale": "zh-CN",
+      "applicationName": "Xcode",
+      "bundleIdentifier": "com.apple.dt.Xcode",
+      "category": "code",
+      "transcript": "添加 Swift 函数 validate10，返回 Result 小于 String 逗号 Error 大于",
+      "expected": "Add a Swift function named `validate10` that returns `Result<String, Error>`.",
+      "protectedSpans": [
+        "Swift",
+        "validate10",
+        "Result<String, Error>"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "code-11",
+      "locale": "en-US",
+      "applicationName": "Xcode",
+      "bundleIdentifier": "com.apple.dt.Xcode",
+      "category": "code",
+      "transcript": "add a Swift function named validate11 that returns Result less than String comma Error greater than",
+      "expected": "Add a Swift function named `validate11` that returns `Result<String, Error>`.",
+      "protectedSpans": [
+        "Swift",
+        "validate11",
+        "Result<String, Error>"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "code-12",
+      "locale": "zh-en",
+      "applicationName": "Xcode",
+      "bundleIdentifier": "com.apple.dt.Xcode",
+      "category": "code",
+      "transcript": "添加 Swift 函数 validate12，返回 Result 小于 String 逗号 Error 大于",
+      "expected": "Add a Swift function named `validate12` that returns `Result<String, Error>`.",
+      "protectedSpans": [
+        "Swift",
+        "validate12",
+        "Result<String, Error>"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "terminal-01",
+      "locale": "zh-CN",
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal",
+      "category": "terminal",
+      "transcript": "run git tag v1.3.0 and then swift test filter LerroTests",
+      "expected": "Run `git tag v1.3.0`, then `swift test --filter LerroTests`.",
+      "protectedSpans": [
+        "git tag v1.3.0",
+        "swift test --filter LerroTests"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "terminal-02",
+      "locale": "en-US",
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal",
+      "category": "terminal",
+      "transcript": "run git tag v1.3.1 and then swift test filter CloudflareTests",
+      "expected": "Run `git tag v1.3.1`, then `swift test --filter CloudflareTests`.",
+      "protectedSpans": [
+        "git tag v1.3.1",
+        "swift test --filter CloudflareTests"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "terminal-03",
+      "locale": "zh-en",
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal",
+      "category": "terminal",
+      "transcript": "run git tag v1.3.2 and then swift test filter Qwen35Tests",
+      "expected": "Run `git tag v1.3.2`, then `swift test --filter Qwen35Tests`.",
+      "protectedSpans": [
+        "git tag v1.3.2",
+        "swift test --filter Qwen35Tests"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "terminal-04",
+      "locale": "zh-CN",
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal",
+      "category": "terminal",
+      "transcript": "run git tag v1.3.3 and then swift test filter SwiftUITests",
+      "expected": "Run `git tag v1.3.3`, then `swift test --filter SwiftUITests`.",
+      "protectedSpans": [
+        "git tag v1.3.3",
+        "swift test --filter SwiftUITests"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "terminal-05",
+      "locale": "en-US",
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal",
+      "category": "terminal",
+      "transcript": "run git tag v1.3.4 and then swift test filter MLXTests",
+      "expected": "Run `git tag v1.3.4`, then `swift test --filter MLXTests`.",
+      "protectedSpans": [
+        "git tag v1.3.4",
+        "swift test --filter MLXTests"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "terminal-06",
+      "locale": "zh-en",
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal",
+      "category": "terminal",
+      "transcript": "run git tag v1.3.5 and then swift test filter AppKitTests",
+      "expected": "Run `git tag v1.3.5`, then `swift test --filter AppKitTests`.",
+      "protectedSpans": [
+        "git tag v1.3.5",
+        "swift test --filter AppKitTests"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "terminal-07",
+      "locale": "zh-CN",
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal",
+      "category": "terminal",
+      "transcript": "run git tag v1.3.6 and then swift test filter GitHubTests",
+      "expected": "Run `git tag v1.3.6`, then `swift test --filter GitHubTests`.",
+      "protectedSpans": [
+        "git tag v1.3.6",
+        "swift test --filter GitHubTests"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "terminal-08",
+      "locale": "en-US",
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal",
+      "category": "terminal",
+      "transcript": "run git tag v1.3.7 and then swift test filter SparkleTests",
+      "expected": "Run `git tag v1.3.7`, then `swift test --filter SparkleTests`.",
+      "protectedSpans": [
+        "git tag v1.3.7",
+        "swift test --filter SparkleTests"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "terminal-09",
+      "locale": "zh-en",
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal",
+      "category": "terminal",
+      "transcript": "run git tag v1.3.8 and then swift test filter DeepSeekTests",
+      "expected": "Run `git tag v1.3.8`, then `swift test --filter DeepSeekTests`.",
+      "protectedSpans": [
+        "git tag v1.3.8",
+        "swift test --filter DeepSeekTests"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "terminal-10",
+      "locale": "zh-CN",
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal",
+      "category": "terminal",
+      "transcript": "run git tag v1.3.9 and then swift test filter TextEditTests",
+      "expected": "Run `git tag v1.3.9`, then `swift test --filter TextEditTests`.",
+      "protectedSpans": [
+        "git tag v1.3.9",
+        "swift test --filter TextEditTests"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "terminal-11",
+      "locale": "en-US",
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal",
+      "category": "terminal",
+      "transcript": "run git tag v1.3.10 and then swift test filter WebKitTests",
+      "expected": "Run `git tag v1.3.10`, then `swift test --filter WebKitTests`.",
+      "protectedSpans": [
+        "git tag v1.3.10",
+        "swift test --filter WebKitTests"
+      ],
+      "formatting": "code"
+    },
+    {
+      "id": "terminal-12",
+      "locale": "zh-en",
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal",
+      "category": "terminal",
+      "transcript": "run git tag v1.3.11 and then swift test filter macOSTests",
+      "expected": "Run `git tag v1.3.11`, then `swift test --filter macOSTests`.",
+      "protectedSpans": [
+        "git tag v1.3.11",
+        "swift test --filter macOSTests"
+      ],
+      "formatting": "code"
+    }
+  ]
+}

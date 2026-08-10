@@ -33,7 +33,9 @@
 | --- | --- | --- |
 | **听写** | 语音 → 当前光标 | Mac 上的 Apple Speech |
 | **翻译** | 语音 → 目标语言 → 当前光标 | Mac 上的 Apple Translation |
-| **润色、Ask、改写** | 润色文字、回答口述问题、替换选中段落 | 可选本地 MLX 模型或自带 API |
+| **指令** | 处理选中文字，或结合当前应用上下文回答 | 可选本地 MLX 模型或自带 API |
+
+Lerro 1.3 新增应用语气、精确触发的语音快捷语，以及按应用学习词条的修正闭环。指令默认使用 **Fn Space**；存在选区时按口述要求处理选中文字，无选区时显示流式回答卡片。
 
 ![Lerro 快捷键设置](https://lerroapp.com/screenshots/zh/lerro-onboarding-shortcuts-light.png)
 
@@ -72,6 +74,7 @@ Lerro 以 [Apache-2.0](LICENSE) 开源。产品、发布、隐私和工程文档
 - [模型与 BYOK](docs/models.md)
 - [隐私与安全](docs/privacy-security.md)
 - [构建与测试](docs/build.md)
+- [场景化听写基准](benchmarks/README.md)
 - [参与贡献](CONTRIBUTING.md)
 
 品牌与第三方声明见 [TRADEMARKS.md](TRADEMARKS.md)、[NOTICE](NOTICE) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。第一方文档和截图采用 [CC BY 4.0](LICENSES/CC-BY-4.0.txt)。
