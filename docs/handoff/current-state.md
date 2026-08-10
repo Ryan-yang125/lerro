@@ -25,7 +25,7 @@
 - v1.3.0 已交付应用语气、指令、语音快捷语、历史修正学习、精确个性化计数和 60 条公开场景化听写基准。
 - 337 个 Swift 测试、真实 DeepSeek Provider smoke、本地化、网站、UI fixture、发布脚本与公开边界门禁已通过。
 - canonical ZIP 已完成 Developer ID 签名、Apple 公证、staple、Gatekeeper、Sparkle Ed25519、独立解压、SBOM、manifest 与 checksum 验证。
-- 官网 Worker version `bb443ea7-3aeb-4de4-946a-8d3d1b6cce32` 已部署；四条双语路由和 `www` 重定向已线上复验。
+- 官网 Worker version `c910541b-995f-4105-b408-069d254333d0` 已部署；四条双语路由和 `www` 重定向已线上复验。
 - Cloudflare stable 已切换到 v1.3.0 build 9；R2、D1、appcast、latest 与 immutable 下载均通过 canonical SHA-256 回读。
 - 私有工程树中的 `docs/releases/v1.3.0.md` 保存完整版本证据，并由 public allowlist 排除。
 
