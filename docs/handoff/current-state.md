@@ -27,6 +27,9 @@
 - canonical ZIP 已完成 Developer ID 签名、Apple 公证、staple、Gatekeeper、Sparkle Ed25519、独立解压、SBOM、manifest 与 checksum 验证。
 - 官网 Worker version `c910541b-995f-4105-b408-069d254333d0` 已部署；四条双语路由和 `www` 重定向已线上复验。
 - Cloudflare stable 已切换到 v1.3.0 build 9；R2、D1、appcast、latest 与 immutable 下载均通过 canonical SHA-256 回读。
+- public release commit `b3010831f95b395aff2f7bfc59ae9ed324369c1f` 与 annotated tag object `2c7077e9bf15600d0077168f390300eac180c45a` 固定 v1.3.0 源码快照。
+- GitHub Release `v1.3.0` 已成为 latest，五个资产的名称、字节数和 SHA-256 digest 与 canonical 文件一致。
+- public `main` CI run `31378034070` 与 tag CI run `31378069422` 的 Website 和 Build and test 均通过。此 handoff 与 Actions v7 更新同步后，public `main` 会继续前进；固定 App release tag 保持 `v1.3.0`。
 - 私有工程树中的 `docs/releases/v1.3.0.md` 保存完整版本证据，并由 public allowlist 排除。
 
 ## 当前产品与权限边界
