@@ -79,6 +79,7 @@ public struct CapturedContext: Codable, Hashable, Sendable {
     public var cursorBefore: String?
     public var cursorAfter: String?
     public var role: String?
+    public var subrole: String?
     public var isSecureField: Bool
 
     public init(
@@ -94,6 +95,7 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         cursorBefore: String? = nil,
         cursorAfter: String? = nil,
         role: String? = nil,
+        subrole: String? = nil,
         isSecureField: Bool = false
     ) {
         self.applicationName = applicationName
@@ -109,6 +111,7 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         self.cursorBefore = cursorBefore
         self.cursorAfter = cursorAfter
         self.role = role
+        self.subrole = subrole
         self.isSecureField = isSecureField
     }
 
@@ -125,6 +128,7 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         case cursorBefore
         case cursorAfter
         case role
+        case subrole
         case isSecureField
     }
 
@@ -151,6 +155,7 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         cursorBefore = try container.decodeIfPresent(String.self, forKey: .cursorBefore)
         cursorAfter = try container.decodeIfPresent(String.self, forKey: .cursorAfter)
         role = try container.decodeIfPresent(String.self, forKey: .role)
+        subrole = try container.decodeIfPresent(String.self, forKey: .subrole)
         isSecureField = try container.decode(Bool.self, forKey: .isSecureField)
     }
 
@@ -168,6 +173,7 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         try container.encodeIfPresent(cursorBefore, forKey: .cursorBefore)
         try container.encodeIfPresent(cursorAfter, forKey: .cursorAfter)
         try container.encodeIfPresent(role, forKey: .role)
+        try container.encodeIfPresent(subrole, forKey: .subrole)
         try container.encode(isSecureField, forKey: .isSecureField)
     }
 }
@@ -182,6 +188,7 @@ public struct CaptureSession: Identifiable, Hashable, Sendable {
     public let remoteProvider: RemoteProviderConfiguration?
     public let toneInstruction: String?
     public let toneProfileApplicationName: String?
+    public let allowsVoiceFinishAction: Bool
 
     public init(
         id: UUID = UUID(),
@@ -192,7 +199,8 @@ public struct CaptureSession: Identifiable, Hashable, Sendable {
         intelligenceMode: IntelligenceMode = .local,
         remoteProvider: RemoteProviderConfiguration? = nil,
         toneInstruction: String? = nil,
-        toneProfileApplicationName: String? = nil
+        toneProfileApplicationName: String? = nil,
+        allowsVoiceFinishAction: Bool = false
     ) {
         self.id = id
         self.mode = mode
@@ -203,6 +211,7 @@ public struct CaptureSession: Identifiable, Hashable, Sendable {
         self.remoteProvider = remoteProvider
         self.toneInstruction = toneInstruction
         self.toneProfileApplicationName = toneProfileApplicationName
+        self.allowsVoiceFinishAction = allowsVoiceFinishAction
     }
 }
 

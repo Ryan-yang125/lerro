@@ -248,9 +248,27 @@ private struct FixtureTextDeliverer: TextDelivering {
         replacingSelection: Bool,
         targetPolicy: TextDeliveryTargetPolicy,
         onCommit: @escaping TextDeliveryCommitHandler
-    ) async throws {
+    ) async throws -> TextDeliveryReceipt {
         await onCommit()
+        return TextDeliveryReceipt(
+            context: context,
+            focusedValueFingerprint: text.hashValue,
+            focusedElementFingerprint: context.hashValue
+        )
     }
+
+    func undo(_ receipt: TextDeliveryReceipt) async throws {}
+    func correct(
+        _ text: String,
+        using receipt: TextDeliveryReceipt
+    ) async throws -> TextDeliveryReceipt {
+        TextDeliveryReceipt(
+            context: receipt.context,
+            focusedValueFingerprint: text.hashValue,
+            focusedElementFingerprint: receipt.focusedElementFingerprint
+        )
+    }
+    func submit(_ receipt: TextDeliveryReceipt) async throws {}
 }
 
 private final class FixtureHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {

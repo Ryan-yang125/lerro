@@ -204,6 +204,156 @@ struct AppSessionCoreFlowTests {
         #expect(intelligenceRequests.isEmpty)
     }
 
+    @Test("Live transcript distinguishes progressive and stable speech events")
+    @MainActor
+    func liveTranscriptTracksStability() async {
+        let harness = makeHarness(
+            preferences: basePreferences(),
+            transcription: SpeechTranscription(
+                rawText: "visible while speaking",
+                localeIdentifier: "en_US",
+                duration: 1
+            )
+        )
+
+        await harness.session.start()
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        #expect(harness.session.partialTranscript == "visible while speaking")
+        #expect(!harness.session.partialTranscriptIsStable)
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.deliveryReceipt != nil })
+        let history = await harness.history.entries()
+        #expect(history.first?.phaseTimings != nil)
+        #expect(history.first?.processingRoute == .raw)
+        #expect(history.first?.contextReceipt?.capturedCategories.contains(.application) == true)
+    }
+
+    @Test("Hands-free finish phrase waits for first-use confirmation and remembers the app")
+    @MainActor
+    func voiceFinishConfirmationAndSubmission() async {
+        let context = CapturedContext(
+            applicationName: "Messages",
+            processIdentifier: 42,
+            bundleIdentifier: "com.apple.MobileSMS",
+            selectionState: .knownEmpty,
+            role: "AXTextArea"
+        )
+        let harness = makeHarness(
+            preferences: basePreferences(),
+            transcription: SpeechTranscription(
+                rawText: "See you at seven, send it",
+                localeIdentifier: "en_US",
+                duration: 1
+            ),
+            context: context
+        )
+
+        await harness.session.start()
+        harness.session.enterHandsFreeCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil {
+            harness.session.deliveryReceipt?.status == .confirmSubmit
+        })
+        #expect(await harness.delivery.deliveries().first?.text == "See you at seven")
+
+        harness.session.submitRecentDelivery()
+        #expect(await waitUntil {
+            harness.session.deliveryReceipt?.status == .submitted
+        })
+        #expect(await harness.delivery.submitCount() == 1)
+        #expect(harness.session.preferences.voiceFinishApplications == [
+            VoiceFinishApplication(
+                bundleIdentifier: "com.apple.MobileSMS",
+                applicationName: "Messages"
+            )
+        ])
+        let history = await harness.history.entries()
+        #expect(history.first?.rawText == "See you at seven, send it")
+        #expect(history.first?.finalText == "See you at seven")
+        #expect(history.first?.finishAction == .submitted)
+    }
+
+    @Test("Recent delivery undo records the history state")
+    @MainActor
+    func recentDeliveryUndo() async {
+        let context = CapturedContext(
+            applicationName: "Notes",
+            processIdentifier: 7,
+            bundleIdentifier: "com.apple.Notes",
+            selectionState: .knownEmpty,
+            role: "AXTextArea"
+        )
+        let harness = makeHarness(
+            preferences: basePreferences(),
+            transcription: SpeechTranscription(
+                rawText: "undo me",
+                localeIdentifier: "en_US",
+                duration: 1
+            ),
+            context: context
+        )
+
+        await harness.session.start()
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.deliveryReceipt != nil })
+        harness.session.undoRecentDelivery()
+        #expect(await waitUntil { harness.session.deliveryReceipt?.status == .undone })
+        #expect(await harness.delivery.undoCount() == 1)
+        #expect(await harness.history.entries().first?.status == .undone)
+    }
+
+    @Test("Recent delivery correction replaces atomically and preserves lineage")
+    @MainActor
+    func recentDeliveryCorrection() async throws {
+        let context = CapturedContext(
+            applicationName: "Notes",
+            processIdentifier: 7,
+            bundleIdentifier: "com.apple.Notes",
+            selectionState: .knownEmpty,
+            role: "AXTextArea"
+        )
+        let dictionary = InMemoryDictionaryRepository()
+        let harness = makeHarness(
+            preferences: basePreferences(),
+            transcription: SpeechTranscription(
+                rawText: "larrow",
+                localeIdentifier: "en_US",
+                duration: 1
+            ),
+            context: context,
+            dictionaryRepository: dictionary
+        )
+
+        await harness.session.start()
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.deliveryReceipt != nil })
+        let receiptID = try #require(harness.session.deliveryReceipt?.id)
+
+        let saved = await harness.session.applyRecentDeliveryCorrection(
+            receiptID: receiptID,
+            correctedText: "Lerro",
+            phrase: "larrow",
+            replacement: "Lerro"
+        )
+
+        #expect(saved)
+        #expect(await harness.delivery.correctionCount() == 1)
+        #expect(await harness.delivery.undoCount() == 0)
+        let entry = try #require(await harness.history.entries().first)
+        #expect(entry.rawText == "larrow")
+        #expect(entry.processedText == "larrow")
+        #expect(entry.finalText == "Lerro")
+        let learned = try #require(await dictionary.entries().first)
+        #expect(learned.phrase == "larrow")
+        #expect(learned.replacement == "Lerro")
+    }
+
     @Test("Hold shortcut begins on key down and completes only for its matching release")
     @MainActor
     func holdShortcutLifecycleIsBoundToDefinition() async throws {
@@ -2112,7 +2262,9 @@ struct AppSessionCoreFlowTests {
         )
 
         #expect(saved)
-        #expect(try #require(await history.entries().first).finalText == "Lerro")
+        let corrected = try #require(await history.entries().first)
+        #expect(corrected.finalText == "Lerro")
+        #expect(corrected.processedText == "larrow")
         let learned = try #require(await dictionary.entries().first)
         #expect(learned.source == .learned)
         #expect(learned.applicationBundleIdentifier == "com.apple.Notes")
@@ -2646,6 +2798,9 @@ private actor RecordingTextDeliverer: TextDelivering {
     private let completionGate: AsyncGate
     private var records: [DeliveryRecord] = []
     private var commits = 0
+    private var undos = 0
+    private var corrections = 0
+    private var submissions = 0
 
     init(
         shouldFail: Bool,
@@ -2663,7 +2818,7 @@ private actor RecordingTextDeliverer: TextDelivering {
         replacingSelection: Bool,
         targetPolicy: TextDeliveryTargetPolicy,
         onCommit: @escaping TextDeliveryCommitHandler
-    ) async throws {
+    ) async throws -> TextDeliveryReceipt {
         records.append(DeliveryRecord(
             text: text,
             replacingSelection: replacingSelection,
@@ -2675,10 +2830,37 @@ private actor RecordingTextDeliverer: TextDelivering {
         await onCommit()
         commits += 1
         await completionGate.wait()
+        return TextDeliveryReceipt(
+            context: context,
+            focusedValueFingerprint: text.hashValue,
+            focusedElementFingerprint: context.hashValue
+        )
     }
+
+    func undo(_ receipt: TextDeliveryReceipt) async throws { undos += 1 }
+    func correct(
+        _ text: String,
+        using receipt: TextDeliveryReceipt
+    ) async throws -> TextDeliveryReceipt {
+        corrections += 1
+        records.append(DeliveryRecord(
+            text: text,
+            replacingSelection: false,
+            targetPolicy: .reactivateCaptured
+        ))
+        return TextDeliveryReceipt(
+            context: receipt.context,
+            focusedValueFingerprint: text.hashValue,
+            focusedElementFingerprint: receipt.focusedElementFingerprint
+        )
+    }
+    func submit(_ receipt: TextDeliveryReceipt) async throws { submissions += 1 }
 
     func deliveries() -> [DeliveryRecord] { records }
     func commitCount() -> Int { commits }
+    func undoCount() -> Int { undos }
+    func correctionCount() -> Int { corrections }
+    func submitCount() -> Int { submissions }
 }
 
 private actor StubIntelligence: IntelligenceProcessing {

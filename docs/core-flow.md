@@ -87,6 +87,9 @@ preferences 后页面才继续，并允许无关设置在同一保存队列中�
 外壳尺寸全程保持稳定。此时再次 toggle 会执行取消，防止延迟启动形成幽灵录音。
 `CaptureSession.startedAt` 在 Speech 和麦克风就绪后创建，录音计时不包含资源准备耗时。
 波形以 50 ms cadence 消费真实音量，使用独立柱状态、脉冲游走、邻柱扩散和非同步衰减；
+Apple Speech 的 progressive 与 final 事件同时更新两行实时转写，HUD 显示当前目标应用，
+progressive 文本使用较低强调，final 文本进入稳定强调；目标输入框在 Command-V commit 前
+保持不变。
 开始、完成和失败均保持静音，状态反馈由 HUD 与 VoiceOver 公告提供。
 结束收音后，`transcribing`、`enhancing` 和提交前的 `inserting` 共用同一个三点 processing
 指示。指示首帧已有完整静态轮廓，并以 30 Hz 上限驱动 opacity/scale，快速模型结果不会
@@ -241,9 +244,16 @@ captured selectedText + spoken instruction
 1. Command-V down/up 到达 commit point 后立即收起 HUD 并恢复面板点击透传；剪贴板等待与恢复继续完成。
 2. 按 history retention 保存历史或删除录音。
 3. 本地模型结果学习符合边界的词典替换；remote/raw 结果跳过自动学习。
-4. 应用 retention 并删除过期音频。
-5. 更新 `lastResult`、历史第一页、词典和统计；历史页按当前查询继续分页加载。
-6. 清除 active session/generation 并回到 idle。
+4. 普通文本交付返回仅存在于进程内的 `TextDeliveryReceipt`，绑定实际提交目标的 PID、
+   bundle、AX focused element fingerprint 和完整 AX value fingerprint。
+5. AppSession 显示六秒写入回执。Undo、即时修正和语音发送会重新确认相同目标、输入框、
+   内容、安全输入状态与 Accessibility；任一变化都会停用动作。
+6. 即时修正在同一次 adapter 事务内重新校验 receipt，并连续提交带 source marker 的
+   Command-Z 与 Command-V；History 保留 raw、processed 与 corrected 沿袭，用户填写的
+   误识别映射继续进入应用级学习词典。
+7. 应用 retention 并删除过期音频。
+8. 更新 `lastResult`、历史第一页、词典和统计；历史页按当前查询继续分页加载。
+9. 清除 active session/generation 并回到 idle。
 
 ## 交付事务
 
@@ -257,6 +267,23 @@ captured selectedText + spoken instruction
 6. `inserting` 从剪贴板准备开始；Command-V down/up 构成交付 commit point，并同步触发 `TextDeliveryCommitHandler`。提交前允许取消，提交后完成 500ms 消费等待。
 7. 普通插入在等待结束后恢复归档剪贴板；严格 Rewrite 仅在 change count、唯一临时 item、marker、transient type 与文本仍属于当前 session 时恢复，期间产生的新剪贴板内容会保留。
 8. 同一 deliverer 同时只允许一个事务，避免两个异步交付互相覆盖临时剪贴板。
+
+## 免手完成动作
+
+免按住 Dictate 在最终转写末尾识别“发送”或“send it”。resolver 只接受完整末尾命令，
+先移除命令和相邻标点，再把正文交给冻结的 raw/local/remote 路由。空正文保持普通听写。
+
+提交要求：
+
+- post-delivery receipt 仍可用，且 role 为 `AXTextArea` 或 `AXTextField`。
+- secure、search、address、unknown target 直接拒绝。
+- Terminal、iTerm、Warp、Alacritty 与 WezTerm bundle 直接拒绝。
+- 每个 app 首次使用由非激活 HUD 明确确认；成功提交后才把 app name 与 bundle 写入
+  `voiceFinishApplications`。
+- 已批准 app 在同一回执上自动提交 Return；失败保留已写入正文并显示可重试回执。
+
+用户可在个性化设置删除 app 批准。真实验收只使用用户明确指定的无害测试目标，禁止向
+真实联系人或外部系统发送未获授权的内容。
 
 捕获时已标记为安全输入的上下文不会进入交付。剪贴板准备、事件创建或严格选区改写检查失败时，最终文本保留在失败历史中。
 

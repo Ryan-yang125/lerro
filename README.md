@@ -37,10 +37,12 @@ completion gesture you prefer.
 | **Translate** | Speech → another language → cursor | Apple Translation on your Mac |
 | **Command** | Transform selected text or answer with current app context | Optional local MLX model or your own API |
 
-Lerro 1.3 adds app-specific writing styles, exact spoken snippets, and a
-correction loop that learns app-scoped terms. Command uses **Fn Space** by
-default. With text selected, the spoken instruction transforms that selection;
-without a selection, Lerro streams an answer card.
+Lerro 1.4 shows the target app and transcript while you speak. After delivery,
+a six-second receipt can safely undo or immediately correct text while the same
+app, field, and value remain intact. Hands-free Dictate can end with **“send
+it”** or **“发送”**; Lerro confirms each app before enabling future voice sends.
+App styles, exact spoken snippets, app-scoped correction learning, and **Fn
+Space** Command remain available.
 
 ![Lerro shortcut setup](https://lerroapp.com/screenshots/en/lerro-onboarding-shortcuts-light.png)
 
@@ -49,6 +51,10 @@ Lerro asks for **Microphone** permission to capture speech and
 secure input before capture. Standard Dictate and Translate paste into the
 keyboard focus present when delivery is committed; Rewrite verifies the original
 selection again before replacing it.
+
+Delivery receipts bind Undo and voice send to the exact process, bundle,
+focused element, focused value, and secure-input state observed after Command-V.
+Any mismatch disables the receipt action.
 
 ## Private by default
 

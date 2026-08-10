@@ -9,6 +9,7 @@ enum CaptureHUDVisualState: Equatable {
     case handsFree
     case processing
     case error
+    case receipt
 
     var size: CGSize {
         switch self {
@@ -19,6 +20,8 @@ enum CaptureHUDVisualState: Equatable {
             CGSize(width: 210, height: 44)
         case .handsFree:
             CGSize(width: 116, height: 34)
+        case .receipt:
+            CGSize(width: 430, height: 68)
         }
     }
 
@@ -36,8 +39,10 @@ enum CaptureHUDVisualState: Equatable {
         phase: CapturePhase,
         isStartingCapture: Bool,
         isHandsFreeCapture: Bool,
+        hasDeliveryReceipt: Bool = false,
         isSuppressed: Bool = false
     ) -> Self {
+        if hasDeliveryReceipt { return .receipt }
         if isSuppressed { return .idleHidden }
         if isStartingCapture {
             return isHandsFreeCapture ? .handsFree : .waiting
@@ -85,6 +90,7 @@ enum CaptureHUDAnnouncement {
             case .ask: "正在处理指令"
             }
         case .error: errorMessage ?? "听写失败，可以重试"
+        case .receipt: "文本已写入，可以撤回或修正"
         case .idleHidden where phase == .cancelled: "听写已取消"
         case .idleHidden where previous == .processing: "听写完成"
         case .idleHidden: nil
@@ -103,7 +109,10 @@ struct CaptureHUDView: View {
         hudControl
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .padding(.bottom, LerroTheme.hudContentBottomInset)
-            .onTapGesture(count: 2) { session.enterHandsFreeCapture(session.activeMode) }
+            .onTapGesture(count: 2) {
+                guard visualState != .receipt else { return }
+                session.enterHandsFreeCapture(session.activeMode)
+            }
             .accessibilityElement(children: .contain)
             .accessibilityHidden(visualState == .idleHidden)
             .accessibilityLabel(localized(accessibilityLabel))
@@ -127,7 +136,46 @@ struct CaptureHUDView: View {
     }
 
     private var hudControl: some View {
-        HStack(spacing: 4) {
+        Group {
+            if visualState == .receipt {
+                receiptContent
+            } else {
+                captureContent
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, visualState == .receipt ? 10 : 6)
+        .padding(.vertical, visualState == .idleHidden ? 0 : 4)
+        .frame(width: targetSize.width, height: targetSize.height)
+        .background(background)
+        .clipShape(RoundedRectangle(
+            cornerRadius: showsLiveTranscript || visualState == .receipt ? 16 : targetSize.height / 2,
+            style: .continuous
+        ))
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: showsLiveTranscript || visualState == .receipt ? 16 : targetSize.height / 2,
+                style: .continuous
+            )
+            .stroke(
+                Color.white.opacity(increaseContrast ? 0.68 : 0.32),
+                lineWidth: increaseContrast ? 1.5 : 1
+            )
+            .opacity(visualState == .idleHidden ? 0 : 1)
+        }
+        .shadow(color: .black.opacity(0.24), radius: 12, y: 6)
+        .opacity(visualState == .idleHidden ? 0 : 1)
+        .animation(surfaceAnimation, value: visualState)
+        .animation(surfaceAnimation, value: targetSize)
+    }
+
+    private var captureContent: some View {
+        VStack(alignment: .leading, spacing: showsLiveTranscript ? 5 : 0) {
+            if showsLiveTranscript {
+                liveTranscript
+                    .transition(.opacity)
+            }
+            HStack(spacing: 4) {
             hudButtonSlot(
                 "xmark",
                 label: visualState == .processing ? "取消处理" : "取消当前听写",
@@ -192,23 +240,51 @@ struct CaptureHUDView: View {
                 session.toggleCapture(session.activeMode)
             }
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, visualState == .handsFree ? 4 : 6)
-        .padding(.vertical, visualState == .idleHidden ? 0 : 4)
-        .frame(width: targetSize.width, height: targetSize.height)
-        .background(background)
-        .clipShape(Capsule())
-        .overlay {
-            Capsule().stroke(
-                Color.white.opacity(increaseContrast ? 0.68 : 0.32),
-                lineWidth: increaseContrast ? 1.5 : 1
-            )
-            .opacity(visualState == .idleHidden ? 0 : 1)
         }
-        .shadow(color: .black.opacity(0.24), radius: 12, y: 6)
-        .opacity(visualState == .idleHidden ? 0 : 1)
-        .animation(surfaceAnimation, value: visualState)
-        .animation(surfaceAnimation, value: targetSize)
+    }
+
+    private var liveTranscript: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let applicationName = session.activeCaptureApplicationName {
+                Text(verbatim: applicationName)
+                    .font(LerroTheme.font(10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(increaseContrast ? 1 : 0.72))
+                    .lineLimit(1)
+            }
+            Text(verbatim: session.partialTranscript)
+                .font(LerroTheme.font(12, weight: session.partialTranscriptIsStable ? .medium : .regular))
+                .foregroundStyle(.white.opacity(session.partialTranscriptIsStable ? 1 : 0.78))
+                .lineLimit(2)
+                .truncationMode(.head)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(localized("实时转写"))
+        .accessibilityValue(Text(verbatim: session.partialTranscript))
+    }
+
+    @ViewBuilder
+    private var receiptContent: some View {
+        if let receipt = session.deliveryReceipt {
+            HStack(spacing: 9) {
+                Image(systemName: receiptIcon(receipt.status))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(receiptColor(receipt.status))
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: receiptTitle(receipt))
+                        .font(LerroTheme.font(11, weight: .semibold))
+                        .lineLimit(1)
+                    Text(verbatim: receiptDetail(receipt))
+                        .font(LerroTheme.font(10))
+                        .foregroundStyle(.white.opacity(increaseContrast ? 1 : 0.72))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: 4)
+                receiptActions(receipt)
+            }
+        }
     }
 
     private var waveformMode: HUDWaveformMode? {
@@ -216,7 +292,7 @@ struct CaptureHUDView: View {
         case .waiting: .waiting
         case .handsFree where session.isStartingCapture: .arming
         case .listening, .handsFree: .listening
-        case .idleHidden, .processing, .error: nil
+        case .idleHidden, .processing, .error, .receipt: nil
         }
     }
 
@@ -281,11 +357,15 @@ struct CaptureHUDView: View {
             phase: session.phase,
             isStartingCapture: session.isStartingCapture,
             isHandsFreeCapture: session.isHandsFreeCapture,
+            hasDeliveryReceipt: session.deliveryReceipt != nil,
             isSuppressed: session.isHUDSuppressed
         )
     }
 
     private var targetSize: CGSize {
+        if showsLiveTranscript {
+            return CGSize(width: 420, height: 84)
+        }
         var size = visualState.size
         if isCountdownVisible { size.width += 40 }
         if session.activeToneProfileApplicationName != nil,
@@ -294,6 +374,13 @@ struct CaptureHUDView: View {
             size.width += 78
         }
         return size
+    }
+
+    private var showsLiveTranscript: Bool {
+        !session.partialTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (visualState == .listening
+                || visualState == .handsFree
+                || visualState == .processing)
     }
 
     private var isCountdownVisible: Bool {
@@ -349,6 +436,113 @@ struct CaptureHUDView: View {
             case .ask: "正在处理指令"
             }
         case .error: session.captureError ?? "听写失败，可以重试"
+        case .receipt: session.deliveryReceipt.map(receiptTitle) ?? "文本已写入"
+        }
+    }
+
+    @ViewBuilder
+    private func receiptActions(_ receipt: AppSession.DeliveryReceiptPresentation) -> some View {
+        switch receipt.status {
+        case .delivered:
+            HStack(spacing: 4) {
+                if receipt.systemReceipt.canUndo {
+                    receiptButton("撤回") { session.undoRecentDelivery() }
+                }
+                if receipt.canCorrect {
+                    receiptButton("修正") { session.beginRecentDeliveryCorrection() }
+                }
+                receiptDismissButton
+            }
+        case .confirmSubmit:
+            HStack(spacing: 4) {
+                receiptButton("保留") { session.dismissDeliveryReceipt() }
+                receiptButton("允许并发送", prominent: true) {
+                    session.submitRecentDelivery()
+                }
+            }
+        case .failed:
+            HStack(spacing: 4) {
+                if receipt.requestedSubmit {
+                    receiptButton("重试") { session.submitRecentDelivery() }
+                }
+                receiptDismissButton
+            }
+        case .working:
+            ProgressView()
+                .controlSize(.small)
+                .tint(.white)
+                .frame(width: 28, height: 28)
+                .accessibilityLabel(localized("正在执行"))
+        case .undone, .submitted:
+            receiptDismissButton
+        }
+    }
+
+    private func receiptButton(
+        _ title: String,
+        prominent: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(LocalizedStringKey(title), action: action)
+            .buttonStyle(LerroPressButtonStyle())
+            .font(LerroTheme.font(10, weight: .semibold))
+            .padding(.horizontal, 8)
+            .frame(height: 26)
+            .background(Color.white.opacity(prominent ? 0.24 : 0.12))
+            .clipShape(Capsule())
+    }
+
+    private var receiptDismissButton: some View {
+        Button { session.dismissDeliveryReceipt() } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .frame(width: 24, height: 24)
+        }
+        .buttonStyle(LerroPressButtonStyle())
+        .accessibilityLabel(localized("关闭回执"))
+    }
+
+    private func receiptTitle(_ receipt: AppSession.DeliveryReceiptPresentation) -> String {
+        switch receipt.status {
+        case .delivered:
+            LerroInterfaceLocalization.format(
+                "已写入 %@",
+                locale: locale,
+                arguments: receipt.applicationName
+            )
+        case .confirmSubmit:
+            LerroInterfaceLocalization.format(
+                "在 %@ 发送？",
+                locale: locale,
+                arguments: receipt.applicationName
+            )
+        case .working: localized("正在执行")
+        case .undone: localized("已撤回")
+        case .submitted: localized("已发送")
+        case .failed: localized("操作未完成")
+        }
+    }
+
+    private func receiptDetail(_ receipt: AppSession.DeliveryReceiptPresentation) -> String {
+        if case .failed(let message) = receipt.status { return message }
+        return receipt.text
+    }
+
+    private func receiptIcon(_ status: AppSession.DeliveryReceiptStatus) -> String {
+        switch status {
+        case .delivered, .confirmSubmit: "checkmark.circle.fill"
+        case .working: "ellipsis.circle"
+        case .undone: "arrow.uturn.backward.circle.fill"
+        case .submitted: "paperplane.circle.fill"
+        case .failed: "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func receiptColor(_ status: AppSession.DeliveryReceiptStatus) -> Color {
+        switch status {
+        case .failed: Color(nsColor: .systemRed)
+        case .submitted: Color(nsColor: .systemGreen)
+        case .delivered, .confirmSubmit, .working, .undone: .white
         }
     }
 

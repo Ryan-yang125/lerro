@@ -784,6 +784,11 @@ private struct PersonalSettingsPage: View {
                         "应用语气",
                         value: "\(session.preferences.appToneProfiles.filter(\.enabled).count)"
                     )
+                    Divider().overlay(LerroTheme.thinBorder)
+                    reportLine(
+                        "语音发送",
+                        value: "\(session.preferences.voiceFinishApplications.count)"
+                    )
                 }
                 .settingsBlock()
 
@@ -843,6 +848,48 @@ private struct PersonalSettingsPage: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .background(LerroTheme.fillContainerThin)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                if !session.preferences.voiceFinishApplications.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("语音发送")
+                            .font(LerroTheme.font(14, weight: .medium))
+                        VStack(spacing: 0) {
+                            ForEach(session.preferences.voiceFinishApplications) { application in
+                                HStack(spacing: 12) {
+                                    Image(systemName: "paperplane")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .frame(width: 28, height: 28)
+                                    Text(verbatim: application.applicationName)
+                                        .font(LerroTheme.font(14, weight: .medium))
+                                    Spacer()
+                                    Button {
+                                        session.forgetVoiceFinishApplication(application)
+                                    } label: {
+                                        Image(systemName: "xmark.circle")
+                                            .frame(width: 28, height: 28)
+                                    }
+                                    .buttonStyle(LerroPressButtonStyle())
+                                    .accessibilityLabel("停用语音发送")
+                                }
+                                .padding(.horizontal, 12)
+                                .frame(minHeight: 50)
+                                if application.id
+                                    != session.preferences.voiceFinishApplications.last?.id {
+                                    Divider().overlay(LerroTheme.thinBorder)
+                                }
+                            }
+                        }
+                        .background(LerroTheme.topLayer)
+                        .clipShape(RoundedRectangle(
+                            cornerRadius: LerroTheme.navigationRadius,
+                            style: .continuous
+                        ))
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .background(LerroTheme.fillContainerThin)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
             }
         }
         .sheet(isPresented: $isCreatingProfile) {
@@ -1017,6 +1064,8 @@ private struct HelpSettingsPage: View {
                 helpRow("翻译", detail: "使用翻译快捷键说出内容，并输出首选目标语言。", icon: "character.bubble")
                 Divider().overlay(LerroTheme.thinBorder)
                 helpRow("指令", detail: "使用指令快捷键处理选中文字或当前上下文。", icon: "sparkles")
+                Divider().overlay(LerroTheme.thinBorder)
+                helpRow("免手发送", detail: "免按住听写末尾说“发送”或“send it”；首次使用会确认当前应用。", icon: "paperplane")
             }
             .settingsBlock()
         }
@@ -1035,7 +1084,7 @@ private struct ReleaseNotesPage: View {
                     arguments: AppMetadata.version, AppMetadata.build
                 ))
                     .font(LerroTheme.font(14, weight: .medium))
-                Text("新增应用语气、快捷语与修正学习；指令可直接处理任意选中文字，并默认使用 Fn Space。")
+                Text("实时显示转写与目标应用；写入后可安全撤回或立即修正；明确确认后可通过语音发送。")
                     .font(LerroTheme.font(14))
                     .foregroundStyle(LerroTheme.secondaryText)
                     .lineSpacing(5)

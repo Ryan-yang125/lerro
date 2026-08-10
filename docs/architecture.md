@@ -167,6 +167,14 @@ PipelineIntelligenceService
 └── OpenAICompatibleRemoteLanguageModelRuntime
 ```
 
+`AccessibilityTextDeliverer` returns an in-memory `TextDeliveryReceipt` after the
+paste consumption window. The receipt binds follow-up Undo, correction, and submit
+actions to the actual post-delivery PID, bundle, role/subrole, focused element, and
+complete AX value. Core owns the receipt value and finish-action policy; LerroMac
+owns AX validation and synthetic key events; AppSession owns the six-second UI state.
+The long-lived boundary is recorded in
+[ADR 0009](decisions/0009-bound-delivery-receipts.md).
+
 `LERRO_FIXTURE_MODE=1` 选择 fixture 组合。fixture 必须由内存仓库、规则引擎和 inert system adapters 构成；它不能访问磁盘、麦克风、TCC、AX、CGEventTap、剪贴板、登录项或网络。维护时通过
 [`AppDependencies.swift`](../Sources/Lerro/App/AppDependencies.swift) 的 fixture adapter 列表核验这一约束。
 
@@ -216,7 +224,7 @@ PipelineIntelligenceService
 [`Sources/LerroCore/Stores`](../Sources/LerroCore/Stores)。
 
 `preferences.json` 统一保存三种智能处理模式、Provider、Base URL、Model ID、六项上下文
-开关和用户 API Key。API Key 依产品决策以明文 JSON 字段保存；Application Support 根目录
+开关、免手发送 app 授权和用户 API Key。API Key 依产品决策以明文 JSON 字段保存；Application Support 根目录
 每次准备或迁移时收紧到 `0700`，preferences 文件每次读取或原子替换后收紧到 `0600`。
 设置页使用 view-local draft，只有“保存并启用”会提交 Provider 配置。
 
@@ -224,7 +232,9 @@ PipelineIntelligenceService
 [`FileHistoryRepository.swift`](../Sources/LerroCore/Stores/FileHistoryRepository.swift) 在 actor 内复用稳定排序的
 snapshot，分页、统计与连续 mutation 共享同一份解码结果。mutation 以 revision-CAS 提交一次紧凑、确定性的
 原子 JSON 写入；磁盘 fingerprint 与 `NSFileCoordinator` 让同一路径的多实例 mutation 保持有序，并让外部更新立即失效缓存。
-旧版 pretty-printed JSON 保持可读。历史视图只渲染已经展示的页面，完整 snapshot 仅用于本地统计、
+旧版 pretty-printed JSON 保持可读。v1.4 历史条目可选保存 raw→processed→corrected 沿袭、
+处理路由、模型标识、上下文类别、remote 共享类别、阶段耗时与发送状态；不保存
+post-delivery focused value 或 element fingerprint。历史视图只渲染已经展示的页面，完整 snapshot 仅用于本地统计、
 retention 与录音索引对账。历史和词典搜索先进入视图本地状态，120 ms 可取消延迟后更新缓存结果，避免每次击键重算完整列表。
 
 [`identity.md`](identity.md#legacy-compatibility-boundary) 记录的兼容数据根到

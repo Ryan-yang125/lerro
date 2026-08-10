@@ -44,7 +44,7 @@ export function HomePage({ locale }: { locale: Locale }) {
               <p className="demo-copy">{home.demoCopy}<span className="text-caret" /></p>
               <div className="demo-tags">{home.demoTags.map((tag) => <span key={tag}>{tag}</span>)}</div>
             </div>
-            <HeroHud />
+            <HeroHud locale={locale} />
           </div>
           <p className="sr-only">{home.demoDescription}</p>
         </div>

@@ -18,22 +18,32 @@ public enum TextDeliveryTargetPolicy: Sendable, Equatable {
 public typealias TextDeliveryCommitHandler = @MainActor @Sendable () -> Void
 
 public protocol TextDelivering: Sendable {
+    @discardableResult
     func deliver(
         _ text: String,
         to context: CapturedContext,
         replacingSelection: Bool,
         targetPolicy: TextDeliveryTargetPolicy,
         onCommit: @escaping TextDeliveryCommitHandler
-    ) async throws
+    ) async throws -> TextDeliveryReceipt
+
+    func undo(_ receipt: TextDeliveryReceipt) async throws
+    @discardableResult
+    func correct(
+        _ text: String,
+        using receipt: TextDeliveryReceipt
+    ) async throws -> TextDeliveryReceipt
+    func submit(_ receipt: TextDeliveryReceipt) async throws
 }
 
 public extension TextDelivering {
+    @discardableResult
     func deliver(
         _ text: String,
         to context: CapturedContext,
         replacingSelection: Bool,
         targetPolicy: TextDeliveryTargetPolicy
-    ) async throws {
+    ) async throws -> TextDeliveryReceipt {
         try await deliver(
             text,
             to: context,

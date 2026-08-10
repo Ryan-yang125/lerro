@@ -24,9 +24,24 @@ struct UserPreferencesTests {
         #expect(preferences.localModelIdentifier == "mlx-community/Qwen3.5-4B-MLX-4bit")
         #expect(preferences.remoteProvider == RemoteProviderConfiguration())
         #expect(preferences.appToneProfiles.isEmpty)
+        #expect(preferences.voiceFinishApplications.isEmpty)
         #expect(!preferences.hasApprovedModelDownload)
         #expect(!preferences.hasCompletedOnboarding)
         #expect(preferences.onboardingStepIndex == nil)
+    }
+
+    @Test("Voice finish application approvals persist locally")
+    func persistsVoiceFinishApplications() throws {
+        let preferences = UserPreferences(voiceFinishApplications: [
+            VoiceFinishApplication(
+                bundleIdentifier: "com.apple.MobileSMS",
+                applicationName: "Messages"
+            )
+        ])
+
+        let data = try JSONEncoder().encode(preferences)
+        let decoded = try JSONDecoder().decode(UserPreferences.self, from: data)
+        #expect(decoded.voiceFinishApplications == preferences.voiceFinishApplications)
     }
 
     @Test("Audio capture requires explicit opt in and enabled history")

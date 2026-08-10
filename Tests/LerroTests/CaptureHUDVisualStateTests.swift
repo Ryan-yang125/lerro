@@ -69,6 +69,23 @@ struct CaptureHUDVisualStateTests {
         ) == .idleHidden)
     }
 
+    @Test("Delivery receipt replaces the idle shell with an interactive card")
+    func deliveryReceiptIsVisible() {
+        #expect(CaptureHUDVisualState.resolve(
+            phase: .idle,
+            isStartingCapture: false,
+            isHandsFreeCapture: false,
+            hasDeliveryReceipt: true
+        ) == .receipt)
+        #expect(CaptureHUDVisualState.receipt.size == CGSize(width: 430, height: 68))
+        #expect(CaptureHUDAnnouncement.message(
+            from: .processing,
+            to: .receipt,
+            phase: .idle,
+            mode: .dictation
+        ) == "文本已写入，可以撤回或修正")
+    }
+
     @Test("Interaction bounds preserve the minimum discoverability target")
     func interactionBoundsMatchPresentation() {
         #expect(CaptureHUDVisualState.idleHidden.interactionSize(countdownVisible: false)

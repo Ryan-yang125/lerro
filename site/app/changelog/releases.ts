@@ -14,6 +14,22 @@ export type Release = {
 // they shipped with, while the homepage always points to the latest release.
 const releases: readonly Release[] = [
   {
+    version: "1.4.0",
+    build: "10",
+    publishedAt: "2026-08-10",
+    publishedLabel: "August 10, 2026",
+    summary: "Live, reversible voice writing with a controlled hands-free finish.",
+    highlights: [
+      "The HUD shows the target app and transcript while Apple Speech is still listening.",
+      "A focus-safe receipt offers Undo and immediate correction after delivery.",
+      "Corrections preserve raw, processed, and corrected lineage and continue app-scoped learning.",
+      "Saying “send it” or “发送” can submit in explicitly approved apps after a first-use confirmation.",
+      "History records processing route, context sharing, and phase timings without storing new sensitive context text.",
+    ],
+    downloadUrl:
+      "https://updates.lerroapp.com/releases/1.4.0/10/Lerro-macOS-arm64.zip",
+  },
+  {
     version: "1.3.0",
     build: "9",
     publishedAt: "2026-08-10",
@@ -88,6 +104,11 @@ const releases: readonly Release[] = [
 ];
 
 const chineseReleaseCopy = [
+  {
+    publishedLabel: "2026 年 8 月 10 日",
+    summary: "实时可见、写入可撤回，并提供受控免手完成动作的语音写作。",
+    highlights: ["Apple Speech 仍在聆听时，HUD 会显示目标应用与实时转写。", "写入后的焦点安全回执提供撤回和即时修正。", "修正保留原始、处理后与修正后的完整文本沿袭，并继续学习应用级词条。", "首次确认后，在明确授权的应用里说“发送”或“send it”即可提交。", "历史记录处理路径、上下文共享和各阶段耗时，不新增敏感上下文正文存储。"],
+  },
   {
     publishedLabel: "2026 年 8 月 10 日",
     summary: "能根据每个 Mac 应用调整表达方式的场景化语音写作。",

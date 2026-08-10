@@ -141,7 +141,7 @@ struct AccessibilityTextDelivererTests {
         delivery.cancel()
 
         do {
-            try await delivery.value
+        _ = try await delivery.value
             Issue.record("Cancelled delivery unexpectedly completed")
         } catch is CancellationError {
             // Expected cancellation boundary.
@@ -502,7 +502,7 @@ struct AccessibilityTextDelivererTests {
         }
 
         await blocker.resume()
-        try await first.value
+        _ = try await first.value
         #expect(await blocker.texts() == ["first"])
     }
 
@@ -865,6 +865,50 @@ struct AccessibilityTextDelivererTests {
         #expect(await probe.waitCount() == 1)
         #expect(await probe.restoreCount() == 1)
         #expect(original.matches(pasteboard))
+    }
+
+    @Test("Receipt validation requires the same target and exact focused value")
+    func validatesReceiptTargetAndValue() throws {
+        let context = CapturedContext(
+            applicationName: "Notes",
+            processIdentifier: 42,
+            bundleIdentifier: "com.apple.Notes",
+            role: "AXTextArea"
+        )
+        let receipt = TextDeliveryReceipt(
+            context: context,
+            focusedValueFingerprint: 99,
+            focusedElementFingerprint: 7
+        )
+        let valid = DeliveryFocusSnapshot(
+            safety: .safe,
+            processIdentifier: 42,
+            bundleIdentifier: "com.apple.Notes",
+            focusedValueFingerprint: 99,
+            focusedElementFingerprint: 7,
+            role: "AXTextArea"
+        )
+
+        #expect(receiptFocusMatches(valid, receipt: receipt))
+        try validateReceiptFocus(valid, receipt: receipt)
+
+        var edited = valid
+        edited.focusedValueFingerprint = 100
+        do {
+            try validateReceiptFocus(edited, receipt: receipt)
+            Issue.record("Edited text unexpectedly kept the receipt valid")
+        } catch let error as LerroError {
+            #expect(error.localizedDescription.contains("输入内容已经变化"))
+        }
+
+        var switched = valid
+        switched.bundleIdentifier = "com.apple.TextEdit"
+        do {
+            try validateReceiptFocus(switched, receipt: receipt)
+            Issue.record("Switched application unexpectedly kept the receipt valid")
+        } catch let error as LerroError {
+            #expect(error.localizedDescription.contains("焦点已切换"))
+        }
     }
 }
 

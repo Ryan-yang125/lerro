@@ -140,7 +140,7 @@ enum LerroTheme {
     static let settingsModalCornerRadius: CGFloat = 22
     static let settingsModalHorizontalInset: CGFloat = 16
     static let settingsModalVerticalInset: CGFloat = 12
-    static let hudPanelSize = CGSize(width: 184, height: 72)
+    static let hudPanelSize = CGSize(width: 460, height: 118)
     static let hudMinimumInteractionSize = CGSize(width: 70, height: 34)
     static let hudContentBottomInset: CGFloat = 18
     static let outerInset: CGFloat = 0

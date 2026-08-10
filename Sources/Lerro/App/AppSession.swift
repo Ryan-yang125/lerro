@@ -8,6 +8,26 @@ import LerroMac
 @MainActor
 @Observable
 final class AppSession {
+    enum DeliveryReceiptStatus: Equatable {
+        case delivered
+        case confirmSubmit
+        case working
+        case undone
+        case submitted
+        case failed(String)
+    }
+
+    struct DeliveryReceiptPresentation: Equatable, Identifiable {
+        var id: UUID { historyID }
+        var historyID: UUID
+        var text: String
+        var applicationName: String
+        var systemReceipt: TextDeliveryReceipt
+        var status: DeliveryReceiptStatus
+        var canCorrect: Bool
+        var requestedSubmit: Bool
+    }
+
     static let syntheticDeliveryProbeText = "Lerro delivery probe 7F3C2A"
     static let deliveryProbeArgument = "--lerro-delivery-probe-token"
     static let deliveryProbeNotificationPrefix = "app.lerro.mac.delivery-probe."
@@ -21,6 +41,7 @@ final class AppSession {
     var phase: CapturePhase = .idle
     var activeMode: CaptureMode = .dictation
     var partialTranscript = ""
+    private(set) var partialTranscriptIsStable = false
     var audioLevel: Float = 0
     var captureElapsed: TimeInterval = 0
     var isHandsFreeCapture = false
@@ -28,6 +49,7 @@ final class AppSession {
     private(set) var captureError: String?
     var currentError: String?
     var lastResult = ""
+    private(set) var deliveryReceipt: DeliveryReceiptPresentation?
     var answerText: String?
     var answerQuestion = ""
     private(set) var historyEntries: [HistoryEntry] = []
@@ -83,6 +105,10 @@ final class AppSession {
         activeSession?.toneProfileApplicationName
     }
 
+    var activeCaptureApplicationName: String? {
+        activeSession?.context.applicationName
+    }
+
     var preferredDictationActivation: ShortcutActivation {
         preferences.hotkeys.first(where: { $0.action == .dictate })?.activation.resolved ?? .hold
     }
@@ -109,6 +135,7 @@ final class AppSession {
     private var answerContext: CapturedContext?
     private var eventTask: Task<Void, Never>?
     private var completionTask: Task<Void, Never>?
+    private var deliveryReceiptTask: Task<Void, Never>?
     private var captureGeneration: UUID?
     private var committedTextDeliverySessionID: UUID?
     private(set) var isStartingCapture = false
@@ -919,7 +946,7 @@ final class AppSession {
                 guard CapturePrivacyPolicy.permitsCapture(in: context) else {
                     throw LerroError.secureField
                 }
-                try await dependencies.textDelivery.deliver(
+                _ = try await dependencies.textDelivery.deliver(
                     result,
                     to: context,
                     replacingSelection: false,
@@ -929,6 +956,200 @@ final class AppSession {
                 currentError = userFacingError(error, context: "文本写入失败")
             }
         }
+    }
+
+    func dismissDeliveryReceipt() {
+        deliveryReceiptTask?.cancel()
+        deliveryReceiptTask = nil
+        deliveryReceipt = nil
+        updateHUD()
+    }
+
+    func undoRecentDelivery() {
+        guard var receipt = deliveryReceipt,
+              receipt.systemReceipt.canUndo,
+              receipt.status != .working,
+              receipt.status != .undone,
+              receipt.status != .submitted else { return }
+        deliveryReceiptTask?.cancel()
+        receipt.status = .working
+        deliveryReceipt = receipt
+        updateHUD()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await dependencies.textDelivery.undo(receipt.systemReceipt)
+                try await updateHistoryEntry(id: receipt.historyID) { entry in
+                    entry.status = .undone
+                }
+                guard var current = deliveryReceipt, current.id == receipt.id else { return }
+                current.status = .undone
+                deliveryReceipt = current
+                scheduleDeliveryReceiptDismissal(after: .seconds(2))
+                updateHUD()
+            } catch {
+                guard var current = deliveryReceipt, current.id == receipt.id else { return }
+                current.status = .failed(userFacingError(error, context: "撤回失败"))
+                deliveryReceipt = current
+                scheduleDeliveryReceiptDismissal()
+                updateHUD()
+            }
+        }
+    }
+
+    func submitRecentDelivery(rememberApplication: Bool = true) {
+        guard var receipt = deliveryReceipt,
+              receipt.requestedSubmit,
+              receipt.status != .working,
+              receipt.status != .submitted,
+              receipt.status != .undone else { return }
+        deliveryReceiptTask?.cancel()
+        receipt.status = .working
+        deliveryReceipt = receipt
+        updateHUD()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await dependencies.textDelivery.submit(receipt.systemReceipt)
+                if rememberApplication,
+                   let bundleIdentifier = receipt.systemReceipt.context.bundleIdentifier,
+                   !preferences.voiceFinishApplications.contains(where: {
+                       $0.bundleIdentifier == bundleIdentifier
+                   }) {
+                    preferences.voiceFinishApplications.append(VoiceFinishApplication(
+                        bundleIdentifier: bundleIdentifier,
+                        applicationName: receipt.applicationName
+                    ))
+                    preferences.voiceFinishApplications.sort {
+                        $0.applicationName.localizedCaseInsensitiveCompare($1.applicationName)
+                            == .orderedAscending
+                    }
+                    savePreferences()
+                }
+                try await updateHistoryEntry(id: receipt.historyID) { entry in
+                    entry.finishAction = .submitted
+                }
+                guard var current = deliveryReceipt, current.id == receipt.id else { return }
+                current.status = .submitted
+                deliveryReceipt = current
+                scheduleDeliveryReceiptDismissal(after: .seconds(2))
+                updateHUD()
+            } catch {
+                guard var current = deliveryReceipt, current.id == receipt.id else { return }
+                current.status = .failed(userFacingError(error, context: "发送失败"))
+                deliveryReceipt = current
+                scheduleDeliveryReceiptDismissal()
+                updateHUD()
+            }
+        }
+    }
+
+    func beginRecentDeliveryCorrection() {
+        guard let receipt = deliveryReceipt,
+              receipt.canCorrect,
+              receipt.status == .delivered || receipt.status == .confirmSubmit else { return }
+        deliveryReceiptTask?.cancel()
+        answerController.show(
+            content: AnyView(
+                RecentDeliveryCorrectionView(session: self, receipt: receipt)
+                    .environment(
+                        \.locale,
+                        LerroInterfaceLocalization.locale(for: preferences.appLanguage)
+                    )
+            ),
+            size: CGSize(width: 800, height: 410)
+        )
+    }
+
+    func cancelRecentDeliveryCorrection() {
+        answerController.hide()
+        scheduleDeliveryReceiptDismissal()
+    }
+
+    @discardableResult
+    func applyRecentDeliveryCorrection(
+        receiptID: UUID,
+        correctedText: String,
+        phrase: String,
+        replacement: String
+    ) async -> Bool {
+        let corrected = correctedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !corrected.isEmpty,
+              let receipt = deliveryReceipt,
+              receipt.id == receiptID,
+              receipt.systemReceipt.canUndo else { return false }
+        do {
+            let entries = try await dependencies.history.entries()
+            guard let entry = entries.first(where: { $0.id == receipt.historyID }) else {
+                throw LerroError.localData("找不到对应的历史记录")
+            }
+            let correctedReceipt = try await dependencies.textDelivery.correct(
+                corrected,
+                using: receipt.systemReceipt
+            )
+            guard await saveHistoryCorrection(
+                entry,
+                correctedText: corrected,
+                phrase: phrase,
+                replacement: replacement
+            ) else { return false }
+            answerController.hide()
+            deliveryReceipt = DeliveryReceiptPresentation(
+                historyID: receipt.historyID,
+                text: corrected,
+                applicationName: correctedReceipt.context.applicationName,
+                systemReceipt: correctedReceipt,
+                status: .delivered,
+                canCorrect: true,
+                requestedSubmit: false
+            )
+            lastResult = corrected
+            scheduleDeliveryReceiptDismissal()
+            updateHUD()
+            return true
+        } catch {
+            currentError = userFacingError(error, context: "修正写入失败")
+            return false
+        }
+    }
+
+    func forgetVoiceFinishApplication(_ application: VoiceFinishApplication) {
+        preferences.voiceFinishApplications.removeAll {
+            $0.bundleIdentifier == application.bundleIdentifier
+        }
+        savePreferences()
+    }
+
+    private func presentDeliveryReceipt(_ receipt: DeliveryReceiptPresentation) {
+        deliveryReceiptTask?.cancel()
+        deliveryReceipt = receipt
+        scheduleDeliveryReceiptDismissal()
+    }
+
+    private func scheduleDeliveryReceiptDismissal(after duration: Duration = .seconds(6)) {
+        deliveryReceiptTask?.cancel()
+        guard let receiptID = deliveryReceipt?.id else { return }
+        deliveryReceiptTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: duration)
+            } catch {
+                return
+            }
+            guard let self, self.deliveryReceipt?.id == receiptID else { return }
+            self.deliveryReceipt = nil
+            self.updateHUD()
+        }
+    }
+
+    private func updateHistoryEntry(
+        id: UUID,
+        update: (inout HistoryEntry) -> Void
+    ) async throws {
+        let entries = try await dependencies.history.entries()
+        guard var entry = entries.first(where: { $0.id == id }) else { return }
+        update(&entry)
+        try await dependencies.history.save(entry)
+        await refreshHistoryAndUsage()
     }
 
     func savePreferences() {
@@ -1144,6 +1365,9 @@ final class AppSession {
         guard !corrected.isEmpty else { return false }
         do {
             var updated = entry
+            if updated.processedText == nil, updated.finalText != corrected {
+                updated.processedText = updated.finalText
+            }
             updated.finalText = corrected
             updated.answerText = entry.mode == .ask ? corrected : entry.answerText
             try await dependencies.history.save(updated)
@@ -1353,7 +1577,7 @@ final class AppSession {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await dependencies.textDelivery.deliver(
+                _ = try await dependencies.textDelivery.deliver(
                     answerText,
                     to: answerContext,
                     replacingSelection: false,
@@ -1634,6 +1858,7 @@ final class AppSession {
         guard !isCleaningCapture else { return }
         guard !hasActiveCapture else { return }
         guard mode == .translation || authorizeIntelligenceIfNeeded(for: mode) else { return }
+        dismissDeliveryReceipt()
         let intelligenceMode = preferences.intelligenceMode
         let remoteProvider = intelligenceMode == .remote
             ? normalizedRemoteProvider(preferences.remoteProvider)
@@ -1646,6 +1871,7 @@ final class AppSession {
         isHUDSuppressed = false
         captureError = nil
         partialTranscript = ""
+        partialTranscriptIsStable = false
         audioLevel = 0
         captureElapsed = 0
         isStartingCapture = true
@@ -1714,7 +1940,8 @@ final class AppSession {
                 intelligenceMode: intelligenceMode,
                 remoteProvider: remoteProvider,
                 toneInstruction: toneProfile?.instruction,
-                toneProfileApplicationName: toneProfile?.applicationName
+                toneProfileApplicationName: toneProfile?.applicationName,
+                allowsVoiceFinishAction: isHandsFreeCapture && mode == .dictation
             )
             activeSession = session
             isStartingCapture = false
@@ -1771,7 +1998,9 @@ final class AppSession {
         var recordedAudioRelativePath: String?
 
         do {
+            let transcriptionStartedAt = Date.now
             let transcription = try await dependencies.speech.stop()
+            let transcriptionLatency = Date.now.timeIntervalSince(transcriptionStartedAt)
             recordedAudioRelativePath = transcription.audioRelativePath
             guard activeSession?.id == session.id else {
                 do {
@@ -1782,9 +2011,14 @@ final class AppSession {
                 return
             }
             partialTranscript = transcription.rawText
+            partialTranscriptIsStable = true
             phase = .enhancing
             updateHUD()
-            try await complete(session: session, transcription: transcription)
+            try await complete(
+                session: session,
+                transcription: transcription,
+                transcriptionLatency: transcriptionLatency
+            )
         } catch {
             var reportedError: any Error = error
             if let recordedAudioRelativePath {
@@ -1811,8 +2045,21 @@ final class AppSession {
         }
     }
 
-    private func complete(session: CaptureSession, transcription: SpeechTranscription) async throws {
-        let task = intelligenceTask(mode: session.mode, transcript: transcription.rawText, context: session.context)
+    private func complete(
+        session: CaptureSession,
+        transcription: SpeechTranscription,
+        transcriptionLatency: TimeInterval
+    ) async throws {
+        let processingStartedAt = Date.now
+        let finishResolution = session.allowsVoiceFinishAction
+            ? VoiceFinishActionResolver.resolve(transcription.rawText)
+            : VoiceFinishResolution(text: transcription.rawText, requestsSubmit: false)
+        let processingTranscript = finishResolution.text
+        let task = intelligenceTask(
+            mode: session.mode,
+            transcript: processingTranscript,
+            context: session.context
+        )
         if task == .rewriteSelection, session.context.selectedTextWasTruncated {
             throw LerroError.selectionTooLong(CapturedContext.maximumSelectedTextCharacters)
         }
@@ -1820,7 +2067,7 @@ final class AppSession {
             task: task,
             mode: session.intelligenceMode,
             remoteProvider: session.remoteProvider,
-            transcript: transcription.rawText,
+            transcript: processingTranscript,
             selectedText: session.context.selectedText,
             targetLanguage: session.targetLanguage,
             context: session.context,
@@ -1831,7 +2078,7 @@ final class AppSession {
         let result: IntelligenceResult
         if session.mode == .dictation,
            let snippet = SnippetResolver.resolve(
-               transcript: transcription.rawText,
+               transcript: processingTranscript,
                entries: dictionaryEntries,
                applicationBundleIdentifier: session.context.bundleIdentifier
            ) {
@@ -1846,7 +2093,7 @@ final class AppSession {
                 throw LerroError.translationUnavailable("请先选择翻译目标语言")
             }
             let text = try await dependencies.translation.translate(
-                transcription.rawText,
+                processingTranscript,
                 sourceLanguageIdentifier: transcription.localeIdentifier,
                 targetLanguageIdentifier: targetLanguage
             )
@@ -1882,6 +2129,7 @@ final class AppSession {
                 modelStatus = await dependencies.intelligence.modelStatus()
             }
         }
+        let processingDuration = Date.now.timeIntervalSince(processingStartedAt)
 
         guard activeSession?.id == session.id else { throw CancellationError() }
         var history = HistoryEntry(
@@ -1898,8 +2146,15 @@ final class AppSession {
             bundleIdentifier: session.context.bundleIdentifier,
             windowTitle: session.context.windowTitle,
             wasEnhanced: result.source != .raw,
-            audioRelativePath: transcription.audioRelativePath
+            audioRelativePath: transcription.audioRelativePath,
+            processingRoute: historyProcessingRoute(result: result),
+            modelIdentifier: result.modelIdentifier,
+            contextReceipt: historyContextReceipt(session: session, result: result),
+            finishAction: finishResolution.requestsSubmit ? .requested : nil
         )
+        var systemReceipt: TextDeliveryReceipt?
+        var receiptStatus: DeliveryReceiptStatus = .delivered
+        var deliveryDuration: TimeInterval = 0
 
         do {
             switch result.disposition {
@@ -1912,7 +2167,8 @@ final class AppSession {
                 phase = .inserting
                 committedTextDeliverySessionID = nil
                 updateHUD()
-                try await dependencies.textDelivery.deliver(
+                let deliveryStartedAt = Date.now
+                systemReceipt = try await dependencies.textDelivery.deliver(
                     result.text,
                     to: session.context,
                     replacingSelection: result.disposition == .replaceSelection,
@@ -1924,6 +2180,26 @@ final class AppSession {
                         self.suppressHUD(for: session.id)
                     }
                 )
+                deliveryDuration = Date.now.timeIntervalSince(deliveryStartedAt)
+                if finishResolution.requestsSubmit,
+                   let systemReceipt,
+                   VoiceFinishActionResolver.permitsSubmit(in: systemReceipt.context) {
+                    if preferences.voiceFinishApplications.contains(where: {
+                        $0.bundleIdentifier == systemReceipt.context.bundleIdentifier
+                    }) {
+                        do {
+                            try await dependencies.textDelivery.submit(systemReceipt)
+                            history.finishAction = .submitted
+                            receiptStatus = .submitted
+                        } catch {
+                            receiptStatus = .failed(userFacingError(error, context: "发送失败"))
+                        }
+                    } else {
+                        receiptStatus = .confirmSubmit
+                    }
+                } else if finishResolution.requestsSubmit {
+                    receiptStatus = .failed("当前输入框不支持语音发送，文本已保留")
+                }
             case .openURL:
                 if let url = result.url { NSWorkspace.shared.open(url) }
             }
@@ -1944,6 +2220,12 @@ final class AppSession {
         guard activeSession?.id == session.id else { throw CancellationError() }
         suppressHUD(for: session.id)
         lastResult = result.text
+        history.phaseTimings = HistoryPhaseTimings(
+            recording: transcription.duration,
+            transcription: transcriptionLatency,
+            processing: processingDuration,
+            delivery: deliveryDuration
+        )
         if preferences.historyRetention == .never {
             try await deleteAudioFile(relativePath: history.audioRelativePath)
         } else {
@@ -1951,7 +2233,7 @@ final class AppSession {
         }
         let learnedDictionaryEntry = if result.source == .local {
             await learnDictionary(
-                raw: transcription.rawText,
+                raw: processingTranscript,
                 final: result.text,
                 context: session.context
             )
@@ -1975,19 +2257,80 @@ final class AppSession {
         phase = .idle
         isHUDSuppressed = false
         partialTranscript = ""
+        partialTranscriptIsStable = false
         audioLevel = 0
         captureElapsed = 0
+        if let systemReceipt {
+            let canSubmit = finishResolution.requestsSubmit
+                && VoiceFinishActionResolver.permitsSubmit(in: systemReceipt.context)
+            presentDeliveryReceipt(DeliveryReceiptPresentation(
+                historyID: history.id,
+                text: result.text,
+                applicationName: systemReceipt.context.applicationName,
+                systemReceipt: systemReceipt,
+                status: receiptStatus,
+                canCorrect: systemReceipt.canUndo
+                    && preferences.historyRetention != .never
+                    && session.mode == .dictation,
+                requestedSubmit: canSubmit
+            ))
+        }
         updateHUD()
+    }
+
+    private func historyProcessingRoute(result: IntelligenceResult) -> HistoryProcessingRoute {
+        if result.modelIdentifier == "apple-translation" { return .appleTranslation }
+        if result.modelIdentifier == "local-snippet" { return .localSnippet }
+        return switch result.source {
+        case .raw: .raw
+        case .local: .local
+        case .remote: .remote
+        }
+    }
+
+    private func historyContextReceipt(
+        session: CaptureSession,
+        result: IntelligenceResult
+    ) -> HistoryContextReceipt {
+        var captured: Set<HistoryContextCategory> = [.application]
+        if session.context.windowTitle?.isEmpty == false { captured.insert(.windowTitle) }
+        if session.context.cursorBefore?.isEmpty == false || session.context.cursorAfter?.isEmpty == false {
+            captured.insert(.nearbyText)
+        }
+        if session.context.selectedText?.isEmpty == false { captured.insert(.selectedText) }
+        if !dictionaryEntries.filter({ !$0.isSnippet }).isEmpty { captured.insert(.dictionary) }
+        if session.toneInstruction?.isEmpty == false { captured.insert(.tone) }
+
+        guard result.source == .remote,
+              let sharing = session.remoteProvider?.contextSharing else {
+            return HistoryContextReceipt(capturedCategories: captured)
+        }
+        var remote: Set<HistoryContextCategory> = []
+        if sharing.application, captured.contains(.application) { remote.insert(.application) }
+        if sharing.windowTitle, captured.contains(.windowTitle) { remote.insert(.windowTitle) }
+        if sharing.nearbyText, captured.contains(.nearbyText) { remote.insert(.nearbyText) }
+        if sharing.selectedText, captured.contains(.selectedText) { remote.insert(.selectedText) }
+        if sharing.dictionary, captured.contains(.dictionary) { remote.insert(.dictionary) }
+        if sharing.tone, captured.contains(.tone) { remote.insert(.tone) }
+        return HistoryContextReceipt(
+            capturedCategories: captured,
+            remoteSharedCategories: remote
+        )
     }
 
     private func consumeSpeechEvent(_ event: SpeechEvent) {
         switch event {
         case .audioLevel(let level):
             audioLevel = level
-        case .partial(let text), .final(let text):
+        case .partial(let text):
             partialTranscript = text
+            partialTranscriptIsStable = false
+        case .final(let text):
+            partialTranscript = text
+            partialTranscriptIsStable = true
         case .availability(let message):
             partialTranscript = message
+            partialTranscriptIsStable = false
         }
     }
 
@@ -2416,8 +2759,16 @@ final class AppSession {
             if !isPanelOnlyVisualFixture { updateHUD() }
         case "hud-dictating":
             activeMode = .dictation
+            activeSession = CaptureSession(
+                mode: .dictation,
+                context: CapturedContext(
+                    applicationName: "Messages",
+                    bundleIdentifier: "com.apple.MobileSMS"
+                )
+            )
             phase = .listening
-            partialTranscript = "合成转写"
+            partialTranscript = "明天下午三点把新版发布清单发给设计和工程团队"
+            partialTranscriptIsStable = false
             audioLevel = 0.72
             captureElapsed = 3
             if !isPanelOnlyVisualFixture { updateHUD() }
@@ -2434,6 +2785,7 @@ final class AppSession {
             phase = .enhancing
             isHandsFreeCapture = true
             partialTranscript = "合成转写"
+            partialTranscriptIsStable = true
             captureElapsed = 3
             if !isPanelOnlyVisualFixture { updateHUD() }
         case "hud-error":
@@ -2441,6 +2793,28 @@ final class AppSession {
             phase = .failed
             captureError = "没有识别到语音"
             partialTranscript = "合成错误"
+            if !isPanelOnlyVisualFixture { updateHUD() }
+        case "hud-receipt", "hud-send-confirmation":
+            let context = CapturedContext(
+                applicationName: "Messages",
+                processIdentifier: 42,
+                bundleIdentifier: "com.apple.MobileSMS",
+                selectionState: .knownEmpty,
+                role: "AXTextArea"
+            )
+            deliveryReceipt = DeliveryReceiptPresentation(
+                historyID: UUID(),
+                text: "明天下午三点把新版发布清单发给设计和工程团队。",
+                applicationName: "Messages",
+                systemReceipt: TextDeliveryReceipt(
+                    context: context,
+                    focusedValueFingerprint: 1,
+                    focusedElementFingerprint: 1
+                ),
+                status: presentation == "hud-send-confirmation" ? .confirmSubmit : .delivered,
+                canCorrect: true,
+                requestedSubmit: presentation == "hud-send-confirmation"
+            )
             if !isPanelOnlyVisualFixture { updateHUD() }
         default:
             break
@@ -2578,8 +2952,13 @@ final class AppSession {
             phase: phase,
             isStartingCapture: isStartingCapture,
             isHandsFreeCapture: isHandsFreeCapture,
+            hasDeliveryReceipt: deliveryReceipt != nil,
             isSuppressed: isHUDSuppressed
         )
+        if !partialTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           state == .listening || state == .handsFree || state == .processing {
+            return CGSize(width: 420, height: 84)
+        }
         var size = state.interactionSize(
             countdownVisible: phase == .listening && captureElapsed >= 8 * 60
         )
@@ -2595,6 +2974,7 @@ final class AppSession {
             phase: phase,
             isStartingCapture: isStartingCapture,
             isHandsFreeCapture: isHandsFreeCapture,
+            hasDeliveryReceipt: deliveryReceipt != nil,
             isSuppressed: isHUDSuppressed
         )
     }

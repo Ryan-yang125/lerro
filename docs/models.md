@@ -10,7 +10,22 @@ then route the raw transcript through one of three user-selected modes:
 Translate uses Apple Translation directly and does not depend on the selected
 intelligence mode. Command and Rewrite require `local` or `remote`. A capture freezes
 the selected mode, Provider configuration, API key, context options, and target
-language when recording starts. It also freezes the matching app-style instruction.
+language when recording starts. It also freezes the matching app-style instruction
+and whether the target app already has permission to perform a voice finish action.
+
+## Live transcription and finish actions
+
+Apple Speech partial and final events remain the source of the live HUD transcript.
+Partial text is presentation-only: Lerro never runs it through a language model,
+persists it, or writes it into the target application. Only the final event enters
+the selected intelligence route.
+
+Hands-free Dictate recognizes an exact trailing `send it` or `发送` command after
+the final transcript arrives. The suffix is removed before local or remote processing.
+The target app is submitted only after the text has been inserted, the post-delivery
+receipt still matches the focused element and its complete value, and the app has
+been approved. First use in each app requires an explicit confirmation; successful
+confirmation stores the app name and bundle identifier in `preferences.json`.
 
 ## Default model
 

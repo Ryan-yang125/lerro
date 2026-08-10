@@ -407,11 +407,13 @@ private struct HistoryListRow: View {
     @State private var hovering = false
     @State private var showDeleteConfirmation = false
     @State private var showCorrection = false
+    @State private var showContextReceipt = false
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.locale) private var locale
 
     var body: some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: LerroTheme.navigationIconSize, weight: .medium))
                 .foregroundStyle(LerroTheme.secondaryText)
@@ -443,6 +445,15 @@ private struct HistoryListRow: View {
             }
 
             HStack(spacing: 4) {
+                if entry.contextReceipt != nil || entry.phaseTimings != nil {
+                    Button { showContextReceipt.toggle() } label: {
+                        Image(systemName: "info.circle")
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(LerroPressButtonStyle())
+                    .help("上下文回执")
+                    .accessibilityLabel(localized("上下文回执"))
+                }
                 Button { session.copyText(entry.finalText) } label: {
                     Image(systemName: "doc.on.doc")
                         .frame(width: 28, height: 28)
@@ -473,6 +484,13 @@ private struct HistoryListRow: View {
             }
             .foregroundStyle(LerroTheme.secondaryText)
             .opacity(hovering || colorSchemeContrast == .increased ? 1 : 0.62)
+            }
+            if showContextReceipt {
+                contextReceiptDetails
+                    .padding(.leading, 36)
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 10)
+            }
         }
         .padding(.horizontal, 12)
         .frame(minHeight: entry.mode == .ask ? 65 : 49)
@@ -512,6 +530,13 @@ private struct HistoryListRow: View {
     private var primaryText: String {
         if entry.status == .failed { return "转写失败，可从更多菜单重试" }
         if entry.status == .cancelled { return "已取消的录音" }
+        if entry.status == .undone {
+            return LerroInterfaceLocalization.format(
+                "已撤回 · %@",
+                locale: locale,
+                arguments: entry.finalText
+            )
+        }
         if entry.finalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "没有检测到语音" }
         return entry.finalText
     }
@@ -527,6 +552,95 @@ private struct HistoryListRow: View {
         case .dictation: "waveform"
         case .translation: "character.bubble"
         case .ask: "sparkles"
+        }
+    }
+
+    private var contextReceiptDetails: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                if let route = entry.processingRoute {
+                    receiptChip(routeTitle(route), icon: "cpu")
+                }
+                if entry.finishAction == .submitted {
+                    receiptChip("已发送", icon: "paperplane.fill")
+                }
+                if let receipt = entry.contextReceipt {
+                    ForEach(
+                        receipt.capturedCategories.sorted { $0.rawValue < $1.rawValue },
+                        id: \.self
+                    ) { category in
+                        receiptChip(contextCategoryTitle(category), icon: contextCategoryIcon(category))
+                    }
+                }
+            }
+            if let receipt = entry.contextReceipt, !receipt.remoteSharedCategories.isEmpty {
+                Text(verbatim: LerroInterfaceLocalization.format(
+                    "API 已共享：%@",
+                    locale: locale,
+                    arguments: receipt.remoteSharedCategories
+                        .sorted { $0.rawValue < $1.rawValue }
+                        .map(contextCategoryTitle)
+                        .joined(separator: "、")
+                ))
+                .font(LerroTheme.font(12))
+                .foregroundStyle(LerroTheme.metadataText)
+            }
+            if let timings = entry.phaseTimings {
+                Text(verbatim: LerroInterfaceLocalization.format(
+                    "录音 %.1fs · 转写 %.2fs · 处理 %.2fs · 写入 %.2fs",
+                    locale: locale,
+                    arguments: timings.recording,
+                        timings.transcription,
+                        timings.processing,
+                        timings.delivery
+                ))
+                .font(LerroTheme.font(12))
+                .monospacedDigit()
+                .foregroundStyle(LerroTheme.metadataText)
+            }
+        }
+        .transition(.opacity)
+    }
+
+    private func receiptChip(_ title: String, icon: String) -> some View {
+        Label(LocalizedStringKey(title), systemImage: icon)
+            .font(LerroTheme.font(12, weight: .medium))
+            .foregroundStyle(LerroTheme.secondaryText)
+            .padding(.horizontal, 7)
+            .frame(height: 24)
+            .background(LerroTheme.fillSelected)
+            .clipShape(Capsule())
+    }
+
+    private func routeTitle(_ route: HistoryProcessingRoute) -> String {
+        switch route {
+        case .raw: "原始转写"
+        case .local: "本地 AI"
+        case .remote: "API 模型"
+        case .appleTranslation: "Apple 翻译"
+        case .localSnippet: "本地快捷语"
+        }
+    }
+
+    private func contextCategoryTitle(_ category: HistoryContextCategory) -> String {
+        switch category {
+        case .application: "应用"
+        case .windowTitle: "窗口标题"
+        case .nearbyText: "光标上下文"
+        case .selectedText: "选中文字"
+        case .dictionary: "个人词典"
+        case .tone: "应用语气"
+        }
+    }
+
+    private func contextCategoryIcon(_ category: HistoryContextCategory) -> String {
+        switch category {
+        case .application: "app"
+        case .windowTitle: "macwindow"
+        case .nearbyText: "text.cursor"
+        case .selectedText: "selection.pin.in.out"
+        case .dictionary: "character.book.closed"
+        case .tone: "slider.horizontal.3"
         }
     }
 

@@ -6,6 +6,26 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-10
+
+### Added
+
+- A live two-line transcript HUD with the current target app and stable versus
+  progressive Speech state.
+- A six-second delivery receipt with focus-safe Undo, immediate correction,
+  correction learning, and explicit first-use voice-send confirmation.
+- Per-app voice-send approvals for hands-free Dictation ending in “发送” or
+  “send it”, with terminal, search, address, secure, and unknown targets denied.
+- History receipts for processing route, captured context categories, remote
+  context sharing, voice-send state, and recording/transcription/processing/
+  delivery timings.
+
+### Changed
+
+- History correction now preserves raw, processed, and corrected text lineage.
+- Text delivery now returns a one-time receipt bound to the target process,
+  bundle, focused element, focused value, and secure-input state.
+
 ## [1.3.0] - 2026-08-10
 
 ### Added

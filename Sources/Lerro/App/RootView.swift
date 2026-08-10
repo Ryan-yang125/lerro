@@ -141,7 +141,7 @@ struct RootView: View {
             case "ask":
                 AskAnswerCardView(session: session)
                     .frame(width: 800, height: 500)
-            case "hud-waiting", "hud-recording", "hud-profile", "hud-dictating", "hud-hands-free", "hud-processing", "hud-error":
+            case "hud-waiting", "hud-recording", "hud-profile", "hud-dictating", "hud-hands-free", "hud-processing", "hud-error", "hud-receipt", "hud-send-confirmation":
                 CaptureHUDView(session: session)
                     .frame(width: 750, height: 500)
             default:

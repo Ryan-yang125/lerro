@@ -20,8 +20,8 @@ Lerro 是本地优先的语音输入工具，并提供用户主动配置的 BYOK
 
 | 数据 | 内容 | 默认写入 | 删除方式 |
 | --- | --- | --- | --- |
-| Preferences | 语言、设备 UID、外观、热键、本地资料、模型授权、Provider、Base URL、Model ID、明文 API Key、上下文开关、引导状态 | 是 | 设置页清除 Key，或用户删除应用数据目录 |
-| History | transcript、结果、模式、时长、目标 app 元数据、状态、可选录音相对路径 | retention 非 `never` 时 | 应用内单条/全部删除与 retention |
+| Preferences | 语言、设备 UID、外观、热键、本地资料、模型授权、Provider、Base URL、Model ID、明文 API Key、上下文开关、语音发送 app 名称/bundle、引导状态 | 是 | 设置页清除 Key/语音发送 app，或用户删除应用数据目录 |
+| History | raw/processed/corrected text、模式、目标 app 元数据、处理路径、上下文类别、remote 共享类别、阶段耗时、语音发送状态、可选录音相对路径 | retention 非 `never` 时 | 应用内单条/全部删除与 retention |
 | Dictionary | 手动词条、自动学习词条、app scope、使用信息 | 有词条时 | 应用内删除 |
 | Audio | 原始麦克风 CAF | 默认关闭；明确开启且 retention 非 `never` 时 | 删除历史、retention、取消/错误清理、启动对账 |
 | Models | 模型权重、tokenizer、缓存 marker | 用户确认下载后 | 用户删除 Models 目录 |
@@ -97,6 +97,12 @@ transcript 始终作为模型任务输入。
 
 选区改写遇到安全状态 unavailable、secure、目标 app 改变或选区改变时停止交付，结果进入可恢复的失败状态。
 
+普通交付完成后可创建六秒进程内回执。回执保存实际提交目标的 PID/bundle 以及 focused
+element 和完整 AX value 的进程内 fingerprint；不保存 focused value 正文。Undo、即时修正
+和语音发送执行前再次确认目标、输入框、完整值、安全输入状态和 Accessibility。回执过期、
+新 capture、焦点变化、输入变化或权限变化都会停止动作。回执 fingerprint 不写 preferences、
+history 或日志。
+
 对应实现与测试：
 
 - [`AccessibilityTextDeliverer.swift`](../Sources/LerroMac/Accessibility/AccessibilityTextDeliverer.swift)
@@ -112,6 +118,9 @@ transcript 始终作为模型任务输入。
 3. 选区改写严格保存全部 item/type，使用 session marker 和 change count 维护所有权，并在 Command-V 前校验安全焦点、目标 PID/bundle 和选区一致性。
 4. 严格事务仅在临时内容仍属于当前 session 时恢复；用户或其他应用已经更新剪贴板时保留新内容。
 5. Command-V 提交前允许取消；提交构成交付 commit point，随后完成消费等待和对应恢复流程。
+6. 回执 Undo 使用校验后的 Command-Z；即时修正在同一 adapter 事务内连续提交 Command-Z
+   与 Command-V；语音发送使用校验后的 Return。合成事件携带 Lerro source marker，
+   热键监视器直接透传。
 
 严格 Rewrite 的人工验收需要使用多 item、多 type 数据，包括纯文本、富文本、图片或文件 URL；验证前后类型和字节保持一致。
 

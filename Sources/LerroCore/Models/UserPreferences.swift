@@ -79,6 +79,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     public var remoteProvider: RemoteProviderConfiguration
     public var hotkeys: [HotkeyDefinition]
     public var appToneProfiles: [AppToneProfile]
+    public var voiceFinishApplications: [VoiceFinishApplication]
     public var hasApprovedModelDownload: Bool
     public var hasCompletedOnboarding: Bool
     public var onboardingStepIndex: Int?
@@ -106,6 +107,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         remoteProvider: RemoteProviderConfiguration = RemoteProviderConfiguration(),
         hotkeys: [HotkeyDefinition] = UserPreferences.defaultHotkeys,
         appToneProfiles: [AppToneProfile] = [],
+        voiceFinishApplications: [VoiceFinishApplication] = [],
         hasApprovedModelDownload: Bool = false,
         hasCompletedOnboarding: Bool = false,
         onboardingStepIndex: Int? = nil
@@ -129,6 +131,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         self.remoteProvider = remoteProvider
         self.hotkeys = hotkeys
         self.appToneProfiles = appToneProfiles
+        self.voiceFinishApplications = voiceFinishApplications
         self.hasApprovedModelDownload = hasApprovedModelDownload
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.onboardingStepIndex = onboardingStepIndex
@@ -153,6 +156,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         case remoteProvider
         case hotkeys
         case appToneProfiles
+        case voiceFinishApplications
         case hasApprovedModelDownload
         case hasCompletedOnboarding
         case onboardingStepIndex
@@ -238,6 +242,10 @@ public struct UserPreferences: Codable, Equatable, Sendable {
                 [AppToneProfile].self,
                 forKey: .appToneProfiles
             ) ?? defaults.appToneProfiles,
+            voiceFinishApplications: try container.decodeIfPresent(
+                [VoiceFinishApplication].self,
+                forKey: .voiceFinishApplications
+            ) ?? defaults.voiceFinishApplications,
             hasApprovedModelDownload: try container.decodeIfPresent(
                 Bool.self,
                 forKey: .hasApprovedModelDownload

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 
-type HudStage = "listening" | "processing";
+type HudStage = "listening" | "processing" | "receipt";
 
 const quietBars = [0.18, 0.24, 0.2, 0.3, 0.23, 0.28, 0.19, 0.25, 0.21, 0.17];
 const reducedBars = [0.32, 0.62, 0.86, 0.5, 1, 0.72, 0.4, 0.9, 0.56, 0.76];
@@ -29,7 +29,7 @@ function createVoiceFrame(tick: number, seed: number) {
   return { bars, seed: nextSeed };
 }
 
-export function HeroHud() {
+export function HeroHud({ locale }: { locale: "en" | "zh" }) {
   const reducedMotion = useReducedMotion();
   const [stage, setStage] = useState<HudStage>("listening");
   const [bars, setBars] = useState(quietBars);
@@ -60,7 +60,13 @@ export function HeroHud() {
         return;
       }
 
-      if (elapsed >= 1440) {
+      if (stage === "processing" && elapsed >= 1440) {
+        setStage("receipt");
+        stageStartedAt.current = performance.now();
+        return;
+      }
+
+      if (elapsed >= 2200) {
         setStage("listening");
         setBars(quietBars);
         stageStartedAt.current = performance.now();
@@ -70,22 +76,50 @@ export function HeroHud() {
     return () => window.clearInterval(timer);
   }, [reducedMotion, stage]);
 
+  const copy = locale === "zh"
+    ? {
+        app: "邮件",
+        transcript: "明天下午三点把新版发布清单发给设计和工程团队。",
+        receipt: "已写入邮件",
+        undo: "撤回",
+        correct: "修正",
+      }
+    : {
+        app: "Mail",
+        transcript: "Send the release checklist to design and engineering at 3 PM tomorrow.",
+        receipt: "Inserted in Mail",
+        undo: "Undo",
+        correct: "Correct",
+      };
+
   return (
     <div className="hero-hud-wrap" aria-hidden="true">
       <div className={`hero-hud hero-hud--${displayedStage}`} data-stage={displayedStage}>
-        <div className="hero-hud__waveform">
-          {displayedBars.map((height, index) => (
-            <span
-              className="hero-hud__bar"
-              key={index}
-              style={{ transform: `scaleY(${height})` }}
-            />
-          ))}
+        <div className="hero-hud__live">
+          <strong>{copy.app}</strong>
+          <span>{copy.transcript}</span>
+          <div className="hero-hud__activity">
+            <div className="hero-hud__waveform">
+              {displayedBars.map((height, index) => (
+                <i
+                  className="hero-hud__bar"
+                  key={index}
+                  style={{ transform: `scaleY(${height})` }}
+                />
+              ))}
+            </div>
+            <div className="hero-hud__processing">
+              <i />
+              <i />
+              <i />
+            </div>
+          </div>
         </div>
-        <div className="hero-hud__processing">
-          <span />
-          <span />
-          <span />
+        <div className="hero-hud__receipt">
+          <span className="hero-hud__check">✓</span>
+          <span><strong>{copy.receipt}</strong><small>{copy.transcript}</small></span>
+          <b>{copy.undo}</b>
+          <b>{copy.correct}</b>
         </div>
       </div>
     </div>

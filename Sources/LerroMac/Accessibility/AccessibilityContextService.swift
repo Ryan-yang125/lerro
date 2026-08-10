@@ -94,6 +94,7 @@ public struct AccessibilityContextService: ContextCapturing {
                 cursorBefore: cursorNeighborhood?.before,
                 cursorAfter: cursorNeighborhood?.after,
                 role: role,
+                subrole: subrole,
                 isSecureField: isSecureField
             )
         }
