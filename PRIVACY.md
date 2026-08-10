@@ -17,7 +17,10 @@ macOS user can still read this file. Raw-audio retention is disabled by default.
 Selecting “never save” for history prevents new history and recording files from
 being persisted.
 
-History and dictionary records can be deleted from the app. When a history item
+History can include the original, processed, corrected, and versioned follow-up
+text plus the spoken edit instruction. Dictionary records can include app-scoped
+exact replacements learned from reviewable corrections. Both can be deleted from
+the app. When a history item
 owns an audio file, Lerro removes the audio before removing its index entry.
 Model files can be removed by following the documented cache-removal procedure.
 
@@ -84,12 +87,14 @@ Focused text and selections are held only for the active operation. Application
 logs exclude transcripts, selected text, focused text, prompts, answers, API
 keys, authorization headers, invitation codes, and personal identifiers.
 
-After a successful insertion, Lerro can hold an in-memory six-second delivery
-receipt containing the target process and bundle identifiers plus hashes of the
+After a successful insertion, Lerro shows a six-second receipt and can retain its
+focus-bound target in memory for up to 60 seconds for spoken follow-up editing. The
+receipt contains the target process and bundle identifiers plus hashes of the
 focused element and its complete value. The hashes are not persisted. Undo and
-voice send re-check the same target, field, value, Accessibility access, and
+voice edits, voice send, and Undo re-check the same target, field, value, Accessibility access, and
 secure-input state before posting Command-Z or Return. A mismatch disables the
-action. History can persist the processing route, context-category presence,
+action. Every accepted follow-up produces a fresh validated receipt. History can
+persist the edit version chain and instruction, processing route, context-category presence,
 remote-sharing category names, per-phase timings, and voice-send status. It does
 not add selected text, nearby text, or focused-value hashes to history.
 

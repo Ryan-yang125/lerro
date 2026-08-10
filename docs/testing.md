@@ -117,18 +117,20 @@ swift package show-dependencies --format json
 | Hub progress、已有 partial 的 Range 合并、取消、temp cleanup、staged atomic blob、截断恢复、metadata 失败保留 source、显式 destination fallback | [`FileOperationsTests.swift`](../Vendor/swift-huggingface/Tests/HuggingFaceTests/HubTests/FileOperationsTests.swift)、[`HubCacheTests.swift`](../Vendor/swift-huggingface/Tests/HuggingFaceTests/HubTests/HubCacheTests.swift) |
 | 偏好默认值、旧 enhancement 迁移、remote 配置、模型、录音与语音发送 app 授权策略 | [`UserPreferencesTests.swift`](../Tests/LerroCoreTests/UserPreferencesTests.swift)、[`IntelligenceProviderModelsTests.swift`](../Tests/LerroCoreTests/IntelligenceProviderModelsTests.swift) |
 | “发送”/“send it”末尾解析与安全目标策略 | [`VoiceFinishActionResolverTests.swift`](../Tests/LerroCoreTests/VoiceFinishActionResolverTests.swift) |
+| 明确语音编辑意图、普通新句隔离、确定性替换/删句/撤销/重新听写与版本父链 | [`VoiceEditCommandResolverTests.swift`](../Tests/LerroCoreTests/VoiceEditCommandResolverTests.swift)、[`DeliveryEditLineageTests.swift`](../Tests/LerroCoreTests/DeliveryEditLineageTests.swift) |
 | JSON 历史分页、查询、snapshot 缓存、多实例文件协调、紧凑格式兼容、词典、偏好 `0600`、竞态和 retention | [`FileRepositoriesTests.swift`](../Tests/LerroCoreTests/FileRepositoriesTests.swift) |
 | CSV 基本导入与错误 | [`SettingsAndPersistenceLogicTests.swift`](../Tests/LerroCoreTests/SettingsAndPersistenceLogicTests.swift) |
 | 音频 buffer、转换、CAF 写入 | [`AudioLifecycleTests.swift`](../Tests/LerroMacTests/AudioLifecycleTests.swift) |
 | 麦克风测试 session 隔离 | [`MicrophoneLevelTesterTests.swift`](../Tests/LerroMacTests/MicrophoneLevelTesterTests.swift) |
 | Ask key panel 与被动 HUD 的 key/main window 能力、HUD 主 actor 定时更新 | [`FloatingPanelControllerTests.swift`](../Tests/LerroMacTests/FloatingPanelControllerTests.swift) |
-| secure capture context、普通 current-focus paste、AX element/selection unavailable 兼容、Rewrite 焦点/选区二次确认、目标回切、Command-V commit point、回执目标/element/value 校验、原子修正契约、提交后取消隔离、剪贴板多 item/type 恢复、外部所有权和并发交付隔离 | [`AccessibilityTextDelivererTests.swift`](../Tests/LerroMacTests/AccessibilityTextDelivererTests.swift) |
+| secure capture context、普通 current-focus paste、AX element/selection unavailable 兼容、Rewrite 焦点/选区二次确认、目标回切、Command-V commit point、回执目标/element/value 校验、连续修正与逐版恢复、提交后焦点漂移失效、原子修正契约、提交后取消隔离、剪贴板多 item/type 恢复、外部所有权和并发交付隔离 | [`AccessibilityTextDelivererTests.swift`](../Tests/LerroMacTests/AccessibilityTextDelivererTests.swift) |
+| Quick Dictate 首声、静音、恢复、单次 endpoint 与 1.2 秒窗口 | [`AppleSpeechServiceTests.swift`](../Tests/LerroMacTests/AppleSpeechServiceTests.swift) |
 | 单修饰键 hold/toggle、Fn 前缀升级、精确 modifier、Fn 63/Globe 179 实体生命周期、重复 flags、key-only 与混合重排、keyboard-only `0x1C00` mask、reset drain、tap-disabled 完整重建与 stop generation、Secure Input watchdog、自产 Command-V 透传 | [`GlobalHotkeyMonitorTests.swift`](../Tests/LerroMacTests/GlobalHotkeyMonitorTests.swift) |
 | 录制器自动开始、窗口级 modifier 事件、monitor 清理、peak chord、无效候选隔离、单修饰键、三键上限、日常输入保护与系统保留组合 | [`ShortcutRecorderPolicyTests.swift`](../Tests/LerroTests/ShortcutRecorderPolicyTests.swift) |
 | 主窗口四级字号、tracking、1 pt 按下反馈、Reduce Motion 几何稳定性 | [`LerroPressFeedbackTests.swift`](../Tests/LerroTests/LerroPressFeedbackTests.swift) |
 | Aqua、Dark Aqua 与高对比外观下的灰阶解析、正文对比度、边界强度、hover/selection 区分 | [`LerroThemeAccessibilityTests.swift`](../Tests/LerroTests/LerroThemeAccessibilityTests.swift) |
 | 菜单栏图片分辨率与进程内缓存 | [`LerroMenuBarPresentationTests.swift`](../Tests/LerroTests/LerroMenuBarPresentationTests.swift) |
-| 原始听写、实时 partial/final HUD、写入回执、Undo、首次语音发送确认、remote 配置快照、FIFO trigger、Fn 前缀 action 转交、hold binding 身份、HUD 锁定、toggle 启动竞态、持久化失败、模型回退、翻译、Ask、交付提交前取消、提交后完成与其他失败取消 | [`AppSessionCoreFlowTests.swift`](../Tests/LerroTests/AppSessionCoreFlowTests.swift) |
+| 原始听写、实时 partial/final HUD、Quick Dictate endpoint、写入回执、语音确定性/语义修改、逐版恢复、重新听写、普通新句隔离、Undo、首次语音发送确认、remote 配置快照、FIFO trigger、Fn 前缀 action 转交、hold binding 身份、HUD 锁定、toggle 启动竞态、持久化失败、模型回退、翻译、Ask、交付提交前取消、提交后完成与其他失败取消 | [`AppSessionCoreFlowTests.swift`](../Tests/LerroTests/AppSessionCoreFlowTests.swift) |
 | Provider 表单校验、预设切换、view-local Key draft 与六项开关 | [`IntelligenceSettingsDraftTests.swift`](../Tests/LerroTests/IntelligenceSettingsDraftTests.swift) |
 
 ## 场景化听写基准
@@ -337,7 +339,7 @@ open -F -n \
   dist/Lerro.app
 ```
 
-v1.4 实时转写、写入回执与首次发送确认：
+v1.4–v1.5 实时转写、写入后 Fn 修改回执与首次发送确认：
 
 ```zsh
 open -F -n --env LERRO_FIXTURE_MODE=1 --env LERRO_FIXTURE_PRESENTATION=hud-dictating --env LERRO_FIXTURE_PANEL_ONLY=1 dist/Lerro.app
@@ -401,9 +403,10 @@ Logo、App Icon、菜单栏或公开模板变化时先执行：
 | 快捷键录制 | 在 Onboarding 与设置分别录入 Fn、Option、Command、Fn + Space；切换两种触发方式并重复按下 | keycap 在 down/up 时立即变化；候选保存；测试期间无麦克风、HUD、历史和文本交付；退出后全局触发恢复 |
 | Fn 系统动作隔离 | 系统键盘设置选择“按下 Fn/Globe 键：显示表情与符号”；Lerro 退出时按一次作控制组；启动最终 Release app 后在 TextEdit 分别点按内置 Fn、外接 Globe，并连续执行两轮 | 控制组打开系统字符面板；Lerro 运行时每轮只触发配置 action，`CharacterPaletteIM` 不出现；第二轮仍可正常开始和完成；松开后普通输入与未配置系统 chord 正常 |
 | 原始听写 hold | 选择原始听写，在 TextEdit 按住已配置键说话后松开；再选中既有文本重复一次 | 无模型下载或 API；Apple Speech 原文完整交付；文本写入当前键盘焦点；已有选区遵循 Command-V 标准替换语义；completed history；无 CAF；全程无应用音效 |
-| 原始听写 toggle | 选择原始听写，点按已配置键开始，说话后再次点按 | 首次点按 50 ms 内从原位连续展开 116×34 hands-free HUD；准备期显示静态低亮声线，麦克风 ready 时外壳保持稳定；真实语音驱动的峰值位置持续变化，停止说话后约 300 ms 回到基线；第二次点按一帧内显示 processing 且只停止一次；插入完成后 100 ms 内收起；全程无应用音效 |
+| Quick Dictate | 选择原始听写，点按 Fn，说一句并保持自然静音 | 首次点按 50 ms 内显示 HUD；首声前静音不结束；自然短停顿恢复说话时取消 endpoint；完成说话后约 1.2 秒自动进入 processing 并只停止一次；插入完成后 100 ms 内收起；环境噪声不会产生空交付 |
 | Lerro Live | 在 TextEdit 和浏览器普通文本框分别使用 toggle 听写，连续说两行并等待一次 final revision | HUD 显示实际目标 app；partial 与 final 强调可区分；最多两行且无跳窗；Command-V 前目标输入框内容不变；Reduce Motion/Transparency/Contrast 与 VoiceOver 保持可读 |
 | 写入回执 | 完成普通文本写入后立即点击撤回；重新写入后先编辑一个字符再点击撤回；再从回执进入修正 | 六秒回执可交互且不抢键盘焦点；相同 app/element/value 时 Command-Z 成功；编辑或切换焦点后动作 fail closed；修正安全替换并保存 raw/processed/corrected 沿袭与应用级学习词条 |
+| 语音跟进编辑 | 写入后依次说“把 Toni 改成 Tony”“恢复上一版”“重新听写”；再测试改短与语气修改 | 精确替换在本机完成并进入应用级学习；每次修改生成新回执与历史版本；恢复上一版准确；重新听写等待下一句；语义修改只走已授权 local/BYOK；切换 app/输入框或改动文字后 fail closed；普通新句创建独立听写 |
 | 免手发送 | 在仅用于验收的本地无害文本目标说“测试消息，发送”；首次确认后重复；再测试 search/address/secure/Terminal | 首次只写正文并等待确认；成功后 app 出现在个性化设置；第二次可自动 Return；危险/未知目标仅保留正文并停用发送；不得向真实联系人或外部系统发送未获授权内容 |
 | 空转写 | 选择原始听写，保持静音后结束录音 | 进入 HUD-only empty transcription 失败状态；无主窗口 alert、Dock attention 和应用音效；无文本交付、无 completed history、`lastResult` 为空；无未索引 CAF |
 | 本地 AI 听写 | 产品内确认模型，重复听写 | 模型状态可见；原始 transcript 进入模型；生成后插入；history `wasEnhanced` 正确 |

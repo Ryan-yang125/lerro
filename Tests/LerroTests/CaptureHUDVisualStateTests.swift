@@ -83,7 +83,7 @@ struct CaptureHUDVisualStateTests {
             to: .receipt,
             phase: .idle,
             mode: .dictation
-        ) == "文本已写入，可以撤回或修正")
+        ) == "文本已写入，可以撤回、修正或继续说一句修改")
     }
 
     @Test("Interaction bounds preserve the minimum discoverability target")

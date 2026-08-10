@@ -21,7 +21,7 @@ Lerro 是本地优先的语音输入工具，并提供用户主动配置的 BYOK
 | 数据 | 内容 | 默认写入 | 删除方式 |
 | --- | --- | --- | --- |
 | Preferences | 语言、设备 UID、外观、热键、本地资料、模型授权、Provider、Base URL、Model ID、明文 API Key、上下文开关、语音发送 app 名称/bundle、引导状态 | 是 | 设置页清除 Key/语音发送 app，或用户删除应用数据目录 |
-| History | raw/processed/corrected text、模式、目标 app 元数据、处理路径、上下文类别、remote 共享类别、阶段耗时、语音发送状态、可选录音相对路径 | retention 非 `never` 时 | 应用内单条/全部删除与 retention |
+| History | raw/processed/corrected text、修改版本父链与指令、模式、目标 app 元数据、处理路径、上下文类别、remote 共享类别、阶段耗时、语音发送状态、可选录音相对路径 | retention 非 `never` 时 | 应用内单条/全部删除与 retention |
 | Dictionary | 手动词条、自动学习词条、app scope、使用信息 | 有词条时 | 应用内删除 |
 | Audio | 原始麦克风 CAF | 默认关闭；明确开启且 retention 非 `never` 时 | 删除历史、retention、取消/错误清理、启动对账 |
 | Models | 模型权重、tokenizer、缓存 marker | 用户确认下载后 | 用户删除 Models 目录 |
@@ -53,7 +53,7 @@ Application Support 根目录在准备和迁移时强制为 `0700`，`preference
 
 TCC 授权由用户和 macOS 控制。usage description、entitlement 和代码签名只提供系统声明与身份，不能代替授权。
 
-Apple Speech 与传统 Apple Translation 由系统管理语言资源。Lerro 使用 SwiftUI
+Apple Speech、SpeechDetector 与传统 Apple Translation 由系统管理语言资源。Lerro 使用 SwiftUI
 系统资源准备流程，并在快捷键运行时只调用已安装的本地资源；这两项能力不增加
 Speech Recognition、Input Monitoring 或 Translation TCC。
 
@@ -97,11 +97,12 @@ transcript 始终作为模型任务输入。
 
 选区改写遇到安全状态 unavailable、secure、目标 app 改变或选区改变时停止交付，结果进入可恢复的失败状态。
 
-普通交付完成后可创建六秒进程内回执。回执保存实际提交目标的 PID/bundle 以及 focused
+普通交付完成后可创建六秒可见回执，并保留最多 60 秒的进程内语音编辑目标。回执保存实际提交目标的 PID/bundle 以及 focused
 element 和完整 AX value 的进程内 fingerprint；不保存 focused value 正文。Undo、即时修正
 和语音发送执行前再次确认目标、输入框、完整值、安全输入状态和 Accessibility。回执过期、
 新 capture、焦点变化、输入变化或权限变化都会停止动作。回执 fingerprint 不写 preferences、
-history 或日志。
+history 或日志。语音跟进编辑的指令与每版结果遵循现有 history retention；选择 `never`
+时不会创建可编辑回执或版本链。
 
 对应实现与测试：
 

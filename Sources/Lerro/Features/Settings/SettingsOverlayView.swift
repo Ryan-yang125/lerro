@@ -662,9 +662,13 @@ private struct MainSettingsPage: View {
 
     private func shortcutDetail(for action: HotkeyAction, primary: String) -> String {
         guard let definition = shortcuts(action).first else { return localized(primary) }
-        let mode = definition.activation.resolved == .hold
-            ? localized("按下开始，松开完成")
-            : localized("按一下开始，再按一下完成")
+        let mode = if definition.activation.resolved == .hold {
+            localized("按下开始，松开完成")
+        } else if action == .dictate {
+            localized("按一下开始，说完自动完成")
+        } else {
+            localized("按一下开始，再按一下完成")
+        }
         return LerroInterfaceLocalization.format(
             "%@；%@",
             locale: locale,

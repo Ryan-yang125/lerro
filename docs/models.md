@@ -16,6 +16,13 @@ and whether the target app already has permission to perform a voice finish acti
 ## Live transcription and finish actions
 
 Apple Speech partial and final events remain the source of the live HUD transcript.
+Quick Dictate adds `SpeechDetector` only to endpoint-enabled Dictate sessions. Its
+speech/silence results control capture completion and never become model input.
+Voice follow-up semantic edits use `rewriteSelection`: the prior delivered version
+is the selected text and the new spoken instruction is the transcript. AppSession
+freezes local/BYOK configuration at follow-up capture start. Raw mode supports the
+deterministic editor only and returns an explicit model-required error for semantic
+requests.
 Partial text is presentation-only: Lerro never runs it through a language model,
 persists it, or writes it into the target application. Only the final event enters
 the selected intelligence route.

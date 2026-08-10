@@ -17,6 +17,9 @@ public actor AccessibilityTextDeliverer: TextDelivering {
     private let activationPollAttempts: Int
     private let activationPollInterval: Duration
     private let pasteOverride: (@Sendable (String, CapturedContext, Bool) async throws -> Void)?
+    private let receiptActionOverride: (
+        @Sendable (ReceiptAction, TextDeliveryReceipt) async throws -> Void
+    )?
     private var activeTransactionIdentifier: UUID?
 
     public init() {
@@ -25,6 +28,7 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         activationPollAttempts = 25
         activationPollInterval = .milliseconds(40)
         pasteOverride = nil
+        receiptActionOverride = nil
     }
 
     init(secureFieldCheck: @escaping @Sendable () -> Bool) {
@@ -35,6 +39,7 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         activationPollAttempts = 1
         activationPollInterval = .zero
         pasteOverride = nil
+        receiptActionOverride = nil
     }
 
     init(
@@ -42,13 +47,17 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         focusSnapshot: @escaping @Sendable () -> DeliveryFocusSnapshot,
         activationPollAttempts: Int = 1,
         activationPollInterval: Duration = .zero,
-        pasteOverride: (@Sendable (String, CapturedContext, Bool) async throws -> Void)? = nil
+        pasteOverride: (@Sendable (String, CapturedContext, Bool) async throws -> Void)? = nil,
+        receiptActionOverride: (
+            @Sendable (ReceiptAction, TextDeliveryReceipt) async throws -> Void
+        )? = nil
     ) {
         self.activateTarget = activateTarget
         self.focusSnapshot = focusSnapshot
         self.activationPollAttempts = max(1, activationPollAttempts)
         self.activationPollInterval = activationPollInterval
         self.pasteOverride = pasteOverride
+        self.receiptActionOverride = receiptActionOverride
     }
 
     public func deliver(
@@ -136,7 +145,11 @@ public actor AccessibilityTextDeliverer: TextDelivering {
     }
 
     public func undo(_ receipt: TextDeliveryReceipt) async throws {
-        try await performReceiptAction(receipt, keyCode: keyCode(for: "z") ?? CGKeyCode(0x06))
+        try await performReceiptAction(
+            receipt,
+            action: .undo,
+            keyCode: keyCode(for: "z") ?? CGKeyCode(0x06)
+        )
     }
 
     public func correct(
@@ -145,6 +158,9 @@ public actor AccessibilityTextDeliverer: TextDelivering {
     ) async throws -> TextDeliveryReceipt {
         guard activeTransactionIdentifier == nil else {
             throw LerroError.insertionFailed("另一项文本写入仍在进行")
+        }
+        guard receipt.canUndo else {
+            throw LerroError.insertionFailed("当前输入框无法安全执行该操作")
         }
         let transactionIdentifier = UUID()
         activeTransactionIdentifier = transactionIdentifier
@@ -155,6 +171,14 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         }
 
         _ = try await settledReceiptFocus(receipt)
+        if let receiptActionOverride {
+            try validateReceiptFocus(focusSnapshot(), receipt: receipt)
+            try await receiptActionOverride(.correct(text), receipt)
+            return makeDeliveryReceipt(
+                fallback: receipt.context,
+                continuing: receipt
+            )
+        }
         let snapshotProvider = focusSnapshot
         let transaction = try await MainActor.run {
             try Task.checkCancellation()
@@ -188,14 +212,22 @@ public actor AccessibilityTextDeliverer: TextDelivering {
                 }
             }
         )
-        return makeDeliveryReceipt(fallback: receipt.context)
+        return makeDeliveryReceipt(
+            fallback: receipt.context,
+            continuing: receipt
+        )
     }
 
     public func submit(_ receipt: TextDeliveryReceipt) async throws {
         guard VoiceFinishActionResolver.permitsSubmit(in: receipt.context) else {
             throw LerroError.insertionFailed("当前输入框不支持语音发送")
         }
-        try await performReceiptAction(receipt, keyCode: CGKeyCode(kVK_Return), flags: [])
+        try await performReceiptAction(
+            receipt,
+            action: .submit,
+            keyCode: CGKeyCode(kVK_Return),
+            flags: []
+        )
     }
 
     private func reactivateCapturedApplicationForPlainInsertion(
@@ -370,20 +402,34 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         return makeDeliveryReceipt(fallback: context)
     }
 
-    private func makeDeliveryReceipt(fallback: CapturedContext) -> TextDeliveryReceipt {
+    private func makeDeliveryReceipt(
+        fallback: CapturedContext,
+        continuing previousReceipt: TextDeliveryReceipt? = nil
+    ) -> TextDeliveryReceipt {
         let snapshot = focusSnapshot()
-        let identityMatches = snapshot.processIdentifier != nil
-            && snapshot.bundleIdentifier != nil
-        let context = CapturedContext(
-            applicationName: snapshot.applicationName ?? fallback.applicationName,
-            processIdentifier: snapshot.processIdentifier,
-            bundleIdentifier: snapshot.bundleIdentifier,
-            windowTitle: fallback.windowTitle,
-            selectionState: snapshot.selectionState,
-            role: snapshot.role ?? fallback.role,
-            subrole: snapshot.subrole ?? fallback.subrole,
-            isSecureField: snapshot.safety == .secure
-        )
+        let identityMatches: Bool
+        if let previousReceipt {
+            identityMatches = receiptFocusMatches(snapshot, receipt: previousReceipt)
+                && snapshot.focusedElementFingerprint
+                    == previousReceipt.focusedElementFingerprint
+        } else {
+            identityMatches = snapshot.processIdentifier != nil
+                && snapshot.bundleIdentifier != nil
+        }
+        let context = if previousReceipt != nil && !identityMatches {
+            fallback
+        } else {
+            CapturedContext(
+                applicationName: snapshot.applicationName ?? fallback.applicationName,
+                processIdentifier: snapshot.processIdentifier,
+                bundleIdentifier: snapshot.bundleIdentifier,
+                windowTitle: fallback.windowTitle,
+                selectionState: snapshot.selectionState,
+                role: snapshot.role ?? fallback.role,
+                subrole: snapshot.subrole ?? fallback.subrole,
+                isSecureField: snapshot.safety == .secure
+            )
+        }
         return TextDeliveryReceipt(
             context: context,
             focusedValueFingerprint: identityMatches && snapshot.safety == .safe
@@ -397,6 +443,7 @@ public actor AccessibilityTextDeliverer: TextDelivering {
 
     private func performReceiptAction(
         _ receipt: TextDeliveryReceipt,
+        action: ReceiptAction,
         keyCode: CGKeyCode,
         flags: CGEventFlags = .maskCommand
     ) async throws {
@@ -415,6 +462,11 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         }
 
         _ = try await settledReceiptFocus(receipt)
+        if let receiptActionOverride {
+            try validateReceiptFocus(focusSnapshot(), receipt: receipt)
+            try await receiptActionOverride(action, receipt)
+            return
+        }
         try await MainActor.run {
             try Task.checkCancellation()
             guard CGPreflightPostEventAccess() else {
@@ -513,6 +565,12 @@ func finalizeCommittedPasteDelivery(
         await waitForConsumption()
         try await restorePasteboard()
     }.value
+}
+
+enum ReceiptAction: Equatable, Sendable {
+    case undo
+    case correct(String)
+    case submit
 }
 
 struct ResolvedDeliveryTarget: Equatable, Sendable {

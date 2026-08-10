@@ -90,7 +90,7 @@ enum CaptureHUDAnnouncement {
             case .ask: "正在处理指令"
             }
         case .error: errorMessage ?? "听写失败，可以重试"
-        case .receipt: "文本已写入，可以撤回或修正"
+        case .receipt: "文本已写入，可以撤回、修正或继续说一句修改"
         case .idleHidden where phase == .cancelled: "听写已取消"
         case .idleHidden where previous == .processing: "听写完成"
         case .idleHidden: nil
@@ -506,7 +506,7 @@ struct CaptureHUDView: View {
         switch receipt.status {
         case .delivered:
             LerroInterfaceLocalization.format(
-                "已写入 %@",
+                "已写入 %@ · Fn 修改",
                 locale: locale,
                 arguments: receipt.applicationName
             )

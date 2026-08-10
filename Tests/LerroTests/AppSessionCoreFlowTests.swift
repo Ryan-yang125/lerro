@@ -198,7 +198,8 @@ struct AppSessionCoreFlowTests {
                 localeIdentifier: "zh_CN",
                 microphoneDeviceUID: nil,
                 muteOtherAudio: false,
-                saveAudio: false
+                saveAudio: false,
+                detectSpeechEndpoint: false
             )
         ])
         #expect(intelligenceRequests.isEmpty)
@@ -352,6 +353,244 @@ struct AppSessionCoreFlowTests {
         let learned = try #require(await dictionary.entries().first)
         #expect(learned.phrase == "larrow")
         #expect(learned.replacement == "Lerro")
+    }
+
+    @Test("Quick Dictate finishes after detected speech and endpoint silence")
+    @MainActor
+    func quickDictateFinishesFromSpeechEndpoint() async {
+        let harness = makeHarness(
+            preferences: basePreferences(),
+            transcription: SpeechTranscription(
+                rawText: "quick result",
+                localeIdentifier: "en_US",
+                duration: 1
+            )
+        )
+
+        await harness.session.start()
+        harness.session.handleHotkey(HotkeyTrigger(
+            action: .dictate,
+            activation: .toggle,
+            phase: .began,
+            definitionID: "dictate:fn:toggle"
+        ))
+        #expect(await waitUntil { harness.session.phase == .listening })
+        #expect(harness.session.isQuickDictateCapture)
+        await harness.speech.emit(.speechStarted)
+        await harness.speech.emit(.silenceElapsed)
+
+        #expect(await waitUntil {
+            harness.session.phase == .idle
+                && harness.session.lastResult == "quick result"
+        })
+        #expect(await harness.speech.startRequests().last?.detectSpeechEndpoint == true)
+    }
+
+    @Test("Voice follow-up edits stack and restore the previous version")
+    @MainActor
+    func voiceFollowUpStacksAndRestores() async throws {
+        let context = CapturedContext(
+            applicationName: "Notes",
+            processIdentifier: 7,
+            bundleIdentifier: "com.apple.Notes",
+            selectionState: .knownEmpty,
+            role: "AXTextArea"
+        )
+        let dictionary = InMemoryDictionaryRepository()
+        let harness = makeHarness(
+            preferences: basePreferences(),
+            transcription: SpeechTranscription(
+                rawText: "Hello Toni.",
+                localeIdentifier: "en_US",
+                duration: 1
+            ),
+            context: context,
+            dictionaryRepository: dictionary
+        )
+
+        await harness.session.start()
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.deliveryReceipt?.text == "Hello Toni." })
+
+        await harness.speech.setTranscription(SpeechTranscription(
+            rawText: "把 Toni 改成 Tony",
+            localeIdentifier: "zh_CN",
+            duration: 0.8
+        ))
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.deliveryReceipt?.text == "Hello Tony." })
+
+        await harness.speech.setTranscription(SpeechTranscription(
+            rawText: "恢复上一版",
+            localeIdentifier: "zh_CN",
+            duration: 0.6
+        ))
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.deliveryReceipt?.text == "Hello Toni." })
+
+        #expect(await harness.delivery.correctionCount() == 2)
+        let history = try #require(await harness.history.entries().first)
+        #expect(history.finalText == "Hello Toni.")
+        #expect(history.editLineage?.versions.count == 2)
+        #expect(history.editLineage?.currentPath.map(\.text) == ["Hello Toni."])
+        let learned = try #require(await dictionary.entries().first)
+        #expect(learned.phrase == "Toni")
+        #expect(learned.replacement == "Tony")
+    }
+
+    @Test("Ordinary dictation after a receipt starts a new delivery")
+    @MainActor
+    func ordinaryDictationDoesNotEditPreviousDelivery() async {
+        let context = CapturedContext(
+            applicationName: "Notes",
+            processIdentifier: 7,
+            bundleIdentifier: "com.apple.Notes",
+            selectionState: .knownEmpty,
+            role: "AXTextArea"
+        )
+        let harness = makeHarness(
+            preferences: basePreferences(),
+            transcription: SpeechTranscription(
+                rawText: "First delivery.",
+                localeIdentifier: "en_US",
+                duration: 1
+            ),
+            context: context
+        )
+
+        await harness.session.start()
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.deliveryReceipt != nil })
+        await harness.speech.setTranscription(SpeechTranscription(
+            rawText: "A separate new thought.",
+            localeIdentifier: "en_US",
+            duration: 1
+        ))
+
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.lastResult == "A separate new thought." })
+
+        #expect(await harness.delivery.correctionCount() == 0)
+        #expect(await harness.delivery.deliveries().map(\.text) == [
+            "First delivery.",
+            "A separate new thought.",
+        ])
+        #expect(await harness.history.entries().count == 2)
+    }
+
+    @Test("Semantic follow-up rewrites the delivered text with the selected model")
+    @MainActor
+    func semanticVoiceFollowUpUsesFrozenModelConfiguration() async throws {
+        let context = CapturedContext(
+            applicationName: "Notes",
+            processIdentifier: 7,
+            bundleIdentifier: "com.apple.Notes",
+            selectionState: .knownEmpty,
+            role: "AXTextArea"
+        )
+        let harness = makeHarness(
+            preferences: basePreferences(),
+            transcription: SpeechTranscription(
+                rawText: "This is a long original delivery.",
+                localeIdentifier: "en_US",
+                duration: 1
+            ),
+            intelligenceResult: IntelligenceResult(
+                text: "Short delivery.",
+                disposition: .replaceSelection,
+                modelIdentifier: "test-qwen",
+                source: .local
+            ),
+            context: context
+        )
+
+        await harness.session.start()
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.deliveryReceipt != nil })
+        harness.session.preferences.hasApprovedModelDownload = true
+        harness.session.preferences.intelligenceMode = .local
+        await harness.speech.setTranscription(SpeechTranscription(
+            rawText: "把刚才改短一点",
+            localeIdentifier: "zh_CN",
+            duration: 0.8
+        ))
+
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.deliveryReceipt?.text == "Short delivery." })
+
+        let request = try #require(await harness.intelligence.requests().last)
+        #expect(request.task == .rewriteSelection)
+        #expect(request.transcript == "把刚才改短一点")
+        #expect(request.selectedText == "This is a long original delivery.")
+        #expect(request.mode == .local)
+        let history = try #require(await harness.history.entries().first)
+        #expect(history.editLineage?.currentVersion?.origin == .semantic)
+        #expect(history.editLineage?.currentVersion?.instruction == "把刚才改短一点")
+        #expect(history.editLineage?.currentVersion?.modelIdentifier == "test-qwen")
+        #expect(history.editLineage?.currentVersion?.processingRoute == .local)
+    }
+
+    @Test("Voice redictation replaces the previous delivery on the next utterance")
+    @MainActor
+    func voiceRedictationReplacesOnNextUtterance() async {
+        let context = CapturedContext(
+            applicationName: "Notes",
+            processIdentifier: 7,
+            bundleIdentifier: "com.apple.Notes",
+            selectionState: .knownEmpty,
+            role: "AXTextArea"
+        )
+        let harness = makeHarness(
+            preferences: basePreferences(),
+            transcription: SpeechTranscription(
+                rawText: "Original delivery.",
+                localeIdentifier: "en_US",
+                duration: 1
+            ),
+            context: context
+        )
+
+        await harness.session.start()
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.deliveryReceipt != nil })
+        await harness.speech.setTranscription(SpeechTranscription(
+            rawText: "重新听写",
+            localeIdentifier: "zh_CN",
+            duration: 0.5
+        ))
+
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        await harness.speech.setTranscription(SpeechTranscription(
+            rawText: "Replacement delivery.",
+            localeIdentifier: "en_US",
+            duration: 1
+        ))
+        harness.session.toggleCapture(.dictation)
+
+        #expect(await waitUntil {
+            harness.session.deliveryReceipt?.text == "Replacement delivery."
+        })
+        #expect(await harness.delivery.correctionCount() == 1)
+        #expect(await harness.history.entries().first?.finalText == "Replacement delivery.")
     }
 
     @Test("Hold shortcut begins on key down and completes only for its matching release")
@@ -2641,10 +2880,11 @@ private struct SpeechStartRecord: Equatable, Sendable {
     let microphoneDeviceUID: String?
     let muteOtherAudio: Bool
     let saveAudio: Bool
+    let detectSpeechEndpoint: Bool
 }
 
 private actor StubSpeech: SpeechTranscribing {
-    private let transcription: SpeechTranscription
+    private var transcription: SpeechTranscription
     private var recordedStarts: [SpeechStartRecord] = []
     private var continuation: AsyncThrowingStream<SpeechEvent, any Error>.Continuation?
     private var cancellations = 0
@@ -2662,13 +2902,15 @@ private actor StubSpeech: SpeechTranscribing {
         localeIdentifier: String,
         microphoneDeviceUID: String?,
         muteOtherAudio: Bool,
-        saveAudio: Bool
+        saveAudio: Bool,
+        detectSpeechEndpoint: Bool
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error> {
         recordedStarts.append(SpeechStartRecord(
             localeIdentifier: localeIdentifier,
             microphoneDeviceUID: microphoneDeviceUID,
             muteOtherAudio: muteOtherAudio,
-            saveAudio: saveAudio
+            saveAudio: saveAudio,
+            detectSpeechEndpoint: detectSpeechEndpoint
         ))
         await startGate.wait()
         try Task.checkCancellation()
@@ -2693,6 +2935,12 @@ private actor StubSpeech: SpeechTranscribing {
 
     func startRequests() -> [SpeechStartRecord] { recordedStarts }
     func cancelCount() -> Int { cancellations }
+    func setTranscription(_ transcription: SpeechTranscription) {
+        self.transcription = transcription
+    }
+    func emit(_ event: SpeechEvent) {
+        continuation?.yield(event)
+    }
     func stopCount() -> Int { stops }
 }
 

@@ -87,6 +87,7 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
     public var contextReceipt: HistoryContextReceipt?
     public var phaseTimings: HistoryPhaseTimings?
     public var finishAction: HistoryFinishAction?
+    public var editLineage: DeliveryEditLineage?
 
     public init(
         id: UUID = UUID(),
@@ -109,7 +110,8 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
         modelIdentifier: String? = nil,
         contextReceipt: HistoryContextReceipt? = nil,
         phaseTimings: HistoryPhaseTimings? = nil,
-        finishAction: HistoryFinishAction? = nil
+        finishAction: HistoryFinishAction? = nil,
+        editLineage: DeliveryEditLineage? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -132,6 +134,7 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
         self.contextReceipt = contextReceipt
         self.phaseTimings = phaseTimings
         self.finishAction = finishAction
+        self.editLineage = editLineage
     }
 
     public var wordCount: Int {

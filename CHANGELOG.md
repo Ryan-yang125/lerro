@@ -6,6 +6,24 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-10
+
+### Added
+
+- Quick Dictate starts from one Fn press and finishes after speech followed by
+  about 1.2 seconds of silence.
+- A spoken follow-up can modify the most recent focus-bound delivery with local
+  Undo, sentence deletion, exact replacement, or a semantic model instruction.
+- Delivery edits keep a version chain so repeated changes can restore the prior
+  version while preserving the original history entry.
+
+### Changed
+
+- The delivery receipt now introduces spoken follow-up editing alongside the
+  existing focus-safe Undo, manual correction, and confirmed voice-send actions.
+- History records the delivered text version lineage for review without storing
+  additional focused-field content.
+
 ## [1.4.0] - 2026-08-10
 
 ### Added

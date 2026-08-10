@@ -445,7 +445,9 @@ private struct HistoryListRow: View {
             }
 
             HStack(spacing: 4) {
-                if entry.contextReceipt != nil || entry.phaseTimings != nil {
+                if entry.contextReceipt != nil
+                    || entry.phaseTimings != nil
+                    || (entry.editLineage?.versions.count ?? 0) > 1 {
                     Button { showContextReceipt.toggle() } label: {
                         Image(systemName: "info.circle")
                             .frame(width: 28, height: 28)
@@ -563,6 +565,16 @@ private struct HistoryListRow: View {
                 }
                 if entry.finishAction == .submitted {
                     receiptChip("已发送", icon: "paperplane.fill")
+                }
+                if let lineage = entry.editLineage, lineage.versions.count > 1 {
+                    receiptChip(
+                        LerroInterfaceLocalization.format(
+                            "%lld 个版本",
+                            locale: locale,
+                            arguments: Int64(lineage.versions.count)
+                        ),
+                        icon: "clock.arrow.circlepath"
+                    )
                 }
                 if let receipt = entry.contextReceipt {
                     ForEach(

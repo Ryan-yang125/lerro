@@ -26,6 +26,7 @@ final class AppSession {
         var status: DeliveryReceiptStatus
         var canCorrect: Bool
         var requestedSubmit: Bool
+        var editLineage: DeliveryEditLineage? = nil
     }
 
     static let syntheticDeliveryProbeText = "Lerro delivery probe 7F3C2A"
@@ -45,6 +46,8 @@ final class AppSession {
     var audioLevel: Float = 0
     var captureElapsed: TimeInterval = 0
     var isHandsFreeCapture = false
+    private(set) var isQuickDictateCapture = false
+    private(set) var quickDictateDetectedSpeech = false
     private(set) var isHUDSuppressed = false
     private(set) var captureError: String?
     var currentError: String?
@@ -136,6 +139,9 @@ final class AppSession {
     private var eventTask: Task<Void, Never>?
     private var completionTask: Task<Void, Never>?
     private var deliveryReceiptTask: Task<Void, Never>?
+    private var recentVoiceEditTarget: DeliveryReceiptPresentation?
+    private var activeVoiceEditTarget: DeliveryReceiptPresentation?
+    private var isVoiceRedictationCapture = false
     private var captureGeneration: UUID?
     private var committedTextDeliverySessionID: UUID?
     private(set) var isStartingCapture = false
@@ -890,7 +896,12 @@ final class AppSession {
         pendingHotkeysAfterCancellation.removeAll()
         isStartingCapture = false
         isCleaningCapture = true
+        if let activeVoiceEditTarget {
+            recentVoiceEditTarget = activeVoiceEditTarget
+        }
         activeSession = nil
+        activeVoiceEditTarget = nil
+        isVoiceRedictationCapture = false
         answerController.hide()
         answerText = nil
         answerQuestion = ""
@@ -911,6 +922,8 @@ final class AppSession {
             eventTask?.cancel()
             captureTimerTask?.cancel()
             isHandsFreeCapture = false
+            isQuickDictateCapture = false
+            quickDictateDetectedSpeech = false
             // Let any already-enqueued release for a more specific shortcut
             // clear the pending upgrade before a new capture generation starts.
             try? await Task.sleep(for: .milliseconds(20))
@@ -962,6 +975,7 @@ final class AppSession {
         deliveryReceiptTask?.cancel()
         deliveryReceiptTask = nil
         deliveryReceipt = nil
+        recentVoiceEditTarget = nil
         updateHUD()
     }
 
@@ -985,12 +999,14 @@ final class AppSession {
                 guard var current = deliveryReceipt, current.id == receipt.id else { return }
                 current.status = .undone
                 deliveryReceipt = current
+                recentVoiceEditTarget = nil
                 scheduleDeliveryReceiptDismissal(after: .seconds(2))
                 updateHUD()
             } catch {
                 guard var current = deliveryReceipt, current.id == receipt.id else { return }
                 current.status = .failed(userFacingError(error, context: "撤回失败"))
                 deliveryReceipt = current
+                recentVoiceEditTarget = nil
                 scheduleDeliveryReceiptDismissal()
                 updateHUD()
             }
@@ -1032,12 +1048,14 @@ final class AppSession {
                 guard var current = deliveryReceipt, current.id == receipt.id else { return }
                 current.status = .submitted
                 deliveryReceipt = current
+                recentVoiceEditTarget = nil
                 scheduleDeliveryReceiptDismissal(after: .seconds(2))
                 updateHUD()
             } catch {
                 guard var current = deliveryReceipt, current.id == receipt.id else { return }
                 current.status = .failed(userFacingError(error, context: "发送失败"))
                 deliveryReceipt = current
+                recentVoiceEditTarget = nil
                 scheduleDeliveryReceiptDismissal()
                 updateHUD()
             }
@@ -1083,6 +1101,17 @@ final class AppSession {
             guard let entry = entries.first(where: { $0.id == receipt.historyID }) else {
                 throw LerroError.localData("找不到对应的历史记录")
             }
+            var lineage: DeliveryEditLineage
+            if let existingLineage = receipt.editLineage ?? entry.editLineage {
+                lineage = existingLineage
+            } else {
+                lineage = try DeliveryEditLineage(originalText: receipt.text)
+            }
+            try lineage.append(
+                text: corrected,
+                origin: .manual,
+                instruction: phrase.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
             let correctedReceipt = try await dependencies.textDelivery.correct(
                 corrected,
                 using: receipt.systemReceipt
@@ -1091,20 +1120,21 @@ final class AppSession {
                 entry,
                 correctedText: corrected,
                 phrase: phrase,
-                replacement: replacement
+                replacement: replacement,
+                editLineage: lineage
             ) else { return false }
             answerController.hide()
-            deliveryReceipt = DeliveryReceiptPresentation(
+            presentDeliveryReceipt(DeliveryReceiptPresentation(
                 historyID: receipt.historyID,
                 text: corrected,
                 applicationName: correctedReceipt.context.applicationName,
                 systemReceipt: correctedReceipt,
                 status: .delivered,
                 canCorrect: true,
-                requestedSubmit: false
-            )
+                requestedSubmit: false,
+                editLineage: lineage
+            ))
             lastResult = corrected
-            scheduleDeliveryReceiptDismissal()
             updateHUD()
             return true
         } catch {
@@ -1123,6 +1153,7 @@ final class AppSession {
     private func presentDeliveryReceipt(_ receipt: DeliveryReceiptPresentation) {
         deliveryReceiptTask?.cancel()
         deliveryReceipt = receipt
+        recentVoiceEditTarget = receipt.canCorrect ? receipt : nil
         scheduleDeliveryReceiptDismissal()
     }
 
@@ -1359,7 +1390,8 @@ final class AppSession {
         _ entry: HistoryEntry,
         correctedText: String,
         phrase: String,
-        replacement: String
+        replacement: String,
+        editLineage: DeliveryEditLineage? = nil
     ) async -> Bool {
         let corrected = correctedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !corrected.isEmpty else { return false }
@@ -1370,6 +1402,9 @@ final class AppSession {
             }
             updated.finalText = corrected
             updated.answerText = entry.mode == .ask ? corrected : entry.answerText
+            if let editLineage {
+                updated.editLineage = editLineage
+            }
             try await dependencies.history.save(updated)
 
             let source = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1774,7 +1809,11 @@ final class AppSession {
             }
             if phase == .idle || phase == .success || phase == .failed || phase == .cancelled {
                 activeHotkeyOrigin = nil
-                startCapture(mode, handsFree: true)
+                startCapture(
+                    mode,
+                    handsFree: true,
+                    quickDictate: mode == .dictation
+                )
                 return
             }
         }
@@ -1845,7 +1884,13 @@ final class AppSession {
         startCapture(mode, handsFree: true)
     }
 
-    private func startCapture(_ mode: CaptureMode, handsFree: Bool) {
+    private func startCapture(
+        _ mode: CaptureMode,
+        handsFree: Bool,
+        quickDictate: Bool = false,
+        voiceEditTarget: DeliveryReceiptPresentation? = nil,
+        redictation: Bool = false
+    ) {
         guard !isShortcutConfigurationActive else {
             currentError = "快捷键测试期间不会开始录音"
             return
@@ -1858,6 +1903,22 @@ final class AppSession {
         guard !isCleaningCapture else { return }
         guard !hasActiveCapture else { return }
         guard mode == .translation || authorizeIntelligenceIfNeeded(for: mode) else { return }
+        let recentReceipt = deliveryReceipt ?? recentVoiceEditTarget
+        let receiptEditTarget: DeliveryReceiptPresentation? = if mode == .dictation,
+                                                                 preferences.historyRetention != .never,
+                                                                 let receipt = recentReceipt,
+                                                                 receipt.canCorrect,
+                                                                 receipt.status == .delivered
+                                                                    || receipt.status == .confirmSubmit,
+                                                                 Date.now.timeIntervalSince(
+                                                                    receipt.systemReceipt.committedAt
+                                                                 ) <= 60 {
+            receipt
+        } else {
+            nil
+        }
+        activeVoiceEditTarget = voiceEditTarget ?? receiptEditTarget
+        isVoiceRedictationCapture = redictation && activeVoiceEditTarget != nil
         dismissDeliveryReceipt()
         let intelligenceMode = preferences.intelligenceMode
         let remoteProvider = intelligenceMode == .remote
@@ -1868,6 +1929,8 @@ final class AppSession {
         committedTextDeliverySessionID = nil
         activeMode = mode
         isHandsFreeCapture = handsFree
+        isQuickDictateCapture = quickDictate && mode == .dictation
+        quickDictateDetectedSpeech = false
         isHUDSuppressed = false
         captureError = nil
         partialTranscript = ""
@@ -1899,10 +1962,17 @@ final class AppSession {
         guard captureGeneration == generation, !Task.isCancelled else { return }
         guard await ensureCapturePermissions() else {
             if captureGeneration == generation {
+                if let activeVoiceEditTarget {
+                    recentVoiceEditTarget = activeVoiceEditTarget
+                }
                 captureGeneration = nil
                 activeHotkeyOrigin = nil
                 isStartingCapture = false
                 isHandsFreeCapture = false
+                isQuickDictateCapture = false
+                quickDictateDetectedSpeech = false
+                activeVoiceEditTarget = nil
+                isVoiceRedictationCapture = false
             }
             return
         }
@@ -1924,7 +1994,8 @@ final class AppSession {
                 localeIdentifier: preferences.recognitionLocaleIdentifier,
                 microphoneDeviceUID: preferences.microphoneDeviceUID,
                 muteOtherAudio: preferences.muteOtherAudio,
-                saveAudio: preferences.shouldSaveCaptureAudio
+                saveAudio: preferences.shouldSaveCaptureAudio,
+                detectSpeechEndpoint: isQuickDictateCapture
             )
             guard captureGeneration == generation, !Task.isCancelled else {
                 await dependencies.speech.cancel()
@@ -2012,6 +2083,20 @@ final class AppSession {
             }
             partialTranscript = transcription.rawText
             partialTranscriptIsStable = true
+            if let editTarget = activeVoiceEditTarget,
+               isVoiceRedictationCapture
+                    || VoiceEditCommandResolver.resolve(transcription.rawText) != nil {
+                phase = .enhancing
+                updateHUD()
+                try await completeVoiceEdit(
+                    target: editTarget,
+                    transcription: transcription,
+                    isRedictation: isVoiceRedictationCapture
+                )
+                return
+            }
+            activeVoiceEditTarget = nil
+            isVoiceRedictationCapture = false
             phase = .enhancing
             updateHUD()
             try await complete(
@@ -2042,6 +2127,237 @@ final class AppSession {
             }
             guard activeSession?.id == session.id else { return }
             fail(reportedError)
+        }
+    }
+
+    private func completeVoiceEdit(
+        target: DeliveryReceiptPresentation,
+        transcription: SpeechTranscription,
+        isRedictation: Bool
+    ) async throws {
+        let entries = try await dependencies.history.entries()
+        guard var history = entries.first(where: { $0.id == target.historyID }) else {
+            throw LerroError.localData("找不到对应的历史记录")
+        }
+        var lineage: DeliveryEditLineage
+        if let existingLineage = target.editLineage ?? history.editLineage {
+            lineage = existingLineage
+        } else {
+            lineage = try DeliveryEditLineage(originalText: target.text)
+        }
+        let instruction = transcription.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if isRedictation {
+            try lineage.append(
+                text: instruction,
+                origin: .redictation,
+                instruction: "重新听写"
+            )
+            try await applyVoiceEdit(
+                instruction,
+                target: target,
+                history: &history,
+                lineage: lineage,
+                transcription: transcription
+            )
+            return
+        }
+
+        guard let request = VoiceEditCommandResolver.resolve(instruction) else {
+            throw LerroError.insertionFailed("没有识别到明确的修改指令")
+        }
+        switch request {
+        case .deterministic(let command):
+            let outcome: DeterministicVoiceEditOutcome
+            do {
+                outcome = try DeterministicVoiceEditor.outcome(
+                    for: command,
+                    currentText: target.text
+                )
+            } catch DeterministicVoiceEditError.sentenceNumberOutOfRange {
+                throw LerroError.insertionFailed("找不到指定的句子")
+            } catch DeterministicVoiceEditError.sourceTextMissing {
+                throw LerroError.insertionFailed("原文中找不到要替换的内容")
+            } catch DeterministicVoiceEditError.emptyResult {
+                throw LerroError.insertionFailed("修改后没有可写入的文字")
+            }
+
+            switch outcome {
+            case .restorePreviousVersion:
+                guard let previous = lineage.undo() else {
+                    try await dependencies.textDelivery.undo(target.systemReceipt)
+                    history.status = .undone
+                    history.editLineage = lineage
+                    try await dependencies.history.save(history)
+                    try await deleteAudioFile(relativePath: transcription.audioRelativePath)
+                    await refreshHistoryAndUsage()
+                    finishVoiceEditCapture()
+                    presentDeliveryReceipt(DeliveryReceiptPresentation(
+                        historyID: target.historyID,
+                        text: target.text,
+                        applicationName: target.applicationName,
+                        systemReceipt: target.systemReceipt,
+                        status: .undone,
+                        canCorrect: false,
+                        requestedSubmit: false,
+                        editLineage: lineage
+                    ))
+                    updateHUD()
+                    return
+                }
+                try await applyVoiceEdit(
+                    previous.text,
+                    target: target,
+                    history: &history,
+                    lineage: lineage,
+                    transcription: transcription
+                )
+            case .replaceText(let text):
+                try lineage.append(
+                    text: text,
+                    origin: .deterministic,
+                    instruction: instruction
+                )
+                try await applyVoiceEdit(
+                    text,
+                    target: target,
+                    history: &history,
+                    lineage: lineage,
+                    transcription: transcription
+                )
+                if case .replaceExact(let source, let replacement) = command {
+                    await learnVoiceReplacement(
+                        source: source,
+                        replacement: replacement,
+                        history: history
+                    )
+                }
+            case .beginRedictation:
+                try await deleteAudioFile(relativePath: transcription.audioRelativePath)
+                finishVoiceEditCapture()
+                startCapture(
+                    .dictation,
+                    handsFree: true,
+                    quickDictate: true,
+                    voiceEditTarget: target,
+                    redictation: true
+                )
+            }
+        case .semantic(let semantic):
+            guard let session = activeSession else { throw CancellationError() }
+            guard session.intelligenceMode != .raw else {
+                throw LerroError.modelUnavailable("语义修改需要在“智能处理”中选择本地 AI 或 API 模型")
+            }
+            let modelStatusMonitor = session.intelligenceMode == .local
+                ? startModelStatusMonitor()
+                : nil
+            defer { modelStatusMonitor?.cancel() }
+            let result = try await dependencies.intelligence.process(IntelligenceRequest(
+                task: .rewriteSelection,
+                mode: session.intelligenceMode,
+                remoteProvider: session.remoteProvider,
+                transcript: semantic.instruction,
+                selectedText: target.text,
+                context: target.systemReceipt.context,
+                dictionary: dictionaryEntries.filter { !$0.isSnippet },
+                toneInstruction: session.toneInstruction
+            ))
+            try lineage.append(
+                text: result.text,
+                origin: .semantic,
+                instruction: semantic.instruction,
+                modelIdentifier: result.modelIdentifier,
+                processingRoute: historyProcessingRoute(result: result)
+            )
+            try await applyVoiceEdit(
+                result.text,
+                target: target,
+                history: &history,
+                lineage: lineage,
+                transcription: transcription
+            )
+        }
+    }
+
+    private func applyVoiceEdit(
+        _ text: String,
+        target: DeliveryReceiptPresentation,
+        history: inout HistoryEntry,
+        lineage: DeliveryEditLineage,
+        transcription: SpeechTranscription
+    ) async throws {
+        let correctedReceipt = try await dependencies.textDelivery.correct(
+            text,
+            using: target.systemReceipt
+        )
+        if history.processedText == nil, history.finalText != text {
+            history.processedText = history.finalText
+        }
+        history.finalText = text
+        history.status = .completed
+        history.editLineage = lineage
+        try await dependencies.history.save(history)
+        try await deleteAudioFile(relativePath: transcription.audioRelativePath)
+        await refreshHistoryAndUsage()
+        lastResult = text
+        finishVoiceEditCapture()
+        presentDeliveryReceipt(DeliveryReceiptPresentation(
+            historyID: target.historyID,
+            text: text,
+            applicationName: correctedReceipt.context.applicationName,
+            systemReceipt: correctedReceipt,
+            status: .delivered,
+            canCorrect: correctedReceipt.canUndo,
+            requestedSubmit: false,
+            editLineage: lineage
+        ))
+        updateHUD()
+    }
+
+    private func finishVoiceEditCapture() {
+        activeSession = nil
+        activeVoiceEditTarget = nil
+        isVoiceRedictationCapture = false
+        captureGeneration = nil
+        committedTextDeliverySessionID = nil
+        captureError = nil
+        activeHotkeyOrigin = nil
+        pendingHotkeysAfterCancellation.removeAll()
+        isStartingCapture = false
+        isHandsFreeCapture = false
+        isQuickDictateCapture = false
+        quickDictateDetectedSpeech = false
+        phase = .idle
+        isHUDSuppressed = false
+        partialTranscript = ""
+        partialTranscriptIsStable = false
+        audioLevel = 0
+        captureElapsed = 0
+    }
+
+    private func learnVoiceReplacement(
+        source: String,
+        replacement: String,
+        history: HistoryEntry
+    ) async {
+        guard source.caseInsensitiveCompare(replacement) != .orderedSame else { return }
+        var learned = dictionaryEntries.first {
+            $0.source == .learned
+                && $0.phrase.caseInsensitiveCompare(source) == .orderedSame
+                && $0.applicationBundleIdentifier == history.bundleIdentifier
+        } ?? DictionaryEntry(
+            phrase: source,
+            replacement: replacement,
+            source: .learned,
+            applicationBundleIdentifier: history.bundleIdentifier
+        )
+        learned.replacement = replacement
+        learned.updatedAt = .now
+        do {
+            try await dependencies.dictionary.save(learned)
+            await refreshDictionaryAndUsage()
+        } catch {
+            currentError = "自动词典保存失败：\(error.localizedDescription)"
         }
     }
 
@@ -2220,6 +2536,9 @@ final class AppSession {
         guard activeSession?.id == session.id else { throw CancellationError() }
         suppressHUD(for: session.id)
         lastResult = result.text
+        if systemReceipt != nil, session.mode == .dictation {
+            history.editLineage = try? DeliveryEditLineage(originalText: result.text)
+        }
         history.phaseTimings = HistoryPhaseTimings(
             recording: transcription.duration,
             transcription: transcriptionLatency,
@@ -2247,6 +2566,8 @@ final class AppSession {
         }
 
         activeSession = nil
+        activeVoiceEditTarget = nil
+        isVoiceRedictationCapture = false
         captureGeneration = nil
         committedTextDeliverySessionID = nil
         captureError = nil
@@ -2254,6 +2575,8 @@ final class AppSession {
         pendingHotkeysAfterCancellation.removeAll()
         isStartingCapture = false
         isHandsFreeCapture = false
+        isQuickDictateCapture = false
+        quickDictateDetectedSpeech = false
         phase = .idle
         isHUDSuppressed = false
         partialTranscript = ""
@@ -2272,7 +2595,8 @@ final class AppSession {
                 canCorrect: systemReceipt.canUndo
                     && preferences.historyRetention != .never
                     && session.mode == .dictation,
-                requestedSubmit: canSubmit
+                requestedSubmit: canSubmit,
+                editLineage: history.editLineage
             ))
         }
         updateHUD()
@@ -2331,6 +2655,16 @@ final class AppSession {
         case .availability(let message):
             partialTranscript = message
             partialTranscriptIsStable = false
+        case .speechStarted:
+            if isQuickDictateCapture {
+                quickDictateDetectedSpeech = true
+            }
+        case .silenceElapsed:
+            if isQuickDictateCapture,
+               quickDictateDetectedSpeech,
+               phase == .listening {
+                requestFinishCapture()
+            }
         }
     }
 
@@ -2880,7 +3214,11 @@ final class AppSession {
         isStartingCapture = false
         isCleaningCapture = true
         activeSession = nil
+        activeVoiceEditTarget = nil
+        isVoiceRedictationCapture = false
         isHandsFreeCapture = false
+        isQuickDictateCapture = false
+        quickDictateDetectedSpeech = false
         isHUDSuppressed = false
         dependencies.hotkeys.resetTransientState()
         eventTask?.cancel()

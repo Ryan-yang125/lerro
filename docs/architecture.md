@@ -232,9 +232,10 @@ The long-lived boundary is recorded in
 [`FileHistoryRepository.swift`](../Sources/LerroCore/Stores/FileHistoryRepository.swift) 在 actor 内复用稳定排序的
 snapshot，分页、统计与连续 mutation 共享同一份解码结果。mutation 以 revision-CAS 提交一次紧凑、确定性的
 原子 JSON 写入；磁盘 fingerprint 与 `NSFileCoordinator` 让同一路径的多实例 mutation 保持有序，并让外部更新立即失效缓存。
-旧版 pretty-printed JSON 保持可读。v1.4 历史条目可选保存 raw→processed→corrected 沿袭、
+旧版 pretty-printed JSON 保持可读。历史条目可选保存 raw→processed→corrected 沿袭、
 处理路由、模型标识、上下文类别、remote 共享类别、阶段耗时与发送状态；不保存
-post-delivery focused value 或 element fingerprint。历史视图只渲染已经展示的页面，完整 snapshot 仅用于本地统计、
+post-delivery focused value 或 element fingerprint。v1.5 的 `editLineage` 以版本父链保存
+原始写入、手动修改、确定性修改、语义修改与重新听写结果。历史视图只渲染已经展示的页面，完整 snapshot 仅用于本地统计、
 retention 与录音索引对账。历史和词典搜索先进入视图本地状态，120 ms 可取消延迟后更新缓存结果，避免每次击键重算完整列表。
 
 [`identity.md`](identity.md#legacy-compatibility-boundary) 记录的兼容数据根到

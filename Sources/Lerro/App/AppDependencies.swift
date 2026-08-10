@@ -79,6 +79,18 @@ struct AppDependencies: Sendable {
 
     private static func fixture(startupStorageError: String? = nil) -> AppDependencies {
         let now = Date(timeIntervalSince1970: 1_785_283_200)
+        let editedLineage: DeliveryEditLineage? = {
+            guard var lineage = try? DeliveryEditLineage(
+                originalText: "这是一段用于视觉回归的口述。",
+                createdAt: now.addingTimeInterval(-12)
+            ) else { return nil }
+            _ = try? lineage.append(
+                text: "这是一段用于视觉回归的合成口述。",
+                origin: .deterministic,
+                instruction: "加上合成"
+            )
+            return lineage
+        }()
         let history = [
             HistoryEntry(
                 createdAt: now,
@@ -87,7 +99,8 @@ struct AppDependencies: Sendable {
                 finalText: "这是一段用于视觉回归的合成口述。",
                 duration: 18,
                 applicationName: "Notes",
-                wasEnhanced: true
+                wasEnhanced: true,
+                editLineage: editedLineage
             ),
             HistoryEntry(
                 createdAt: now.addingTimeInterval(-3_600),
@@ -173,7 +186,8 @@ private actor FixtureSpeechTranscriber: SpeechTranscribing {
         localeIdentifier: String,
         microphoneDeviceUID: String?,
         muteOtherAudio: Bool,
-        saveAudio: Bool
+        saveAudio: Bool,
+        detectSpeechEndpoint: Bool
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error> {
         AsyncThrowingStream { continuation in
             continuation.yield(.availability("Fixture speech adapter"))

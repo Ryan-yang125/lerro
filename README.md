@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  Press once, speak, then press again. Lerro writes at your cursor with Apple Speech on macOS 26.<br>
+  Press Fn once and speak. Quick Dictate writes after a short silence with Apple Speech on macOS 26.<br>
   Fast, accurate voice writing that keeps its core work on your Mac.
 </p>
 
@@ -27,9 +27,9 @@
 
 ## One shortcut. A clear path to text.
 
-Press a shortcut to start, speak naturally, then press it again to place the
-result in the active app. Configure press-and-hold when releasing the key is the
-completion gesture you prefer.
+Press Fn once, speak naturally, and Quick Dictate finishes after your voice is
+followed by a short silence. Press-and-hold remains available when key release
+is the completion gesture you prefer.
 
 | Mode | What it does | Where it runs |
 | --- | --- | --- |
@@ -37,12 +37,11 @@ completion gesture you prefer.
 | **Translate** | Speech → another language → cursor | Apple Translation on your Mac |
 | **Command** | Transform selected text or answer with current app context | Optional local MLX model or your own API |
 
-Lerro 1.4 shows the target app and transcript while you speak. After delivery,
-a six-second receipt can safely undo or immediately correct text while the same
-app, field, and value remain intact. Hands-free Dictate can end with **“send
-it”** or **“发送”**; Lerro confirms each app before enabling future voice sends.
-App styles, exact spoken snippets, app-scoped correction learning, and **Fn
-Space** Command remain available.
+Lerro 1.5 lets you keep speaking after delivery: say a follow-up to restore the
+prior version, delete a sentence, replace an exact phrase, or request a semantic
+rewrite. Every edit remains bound to the same app, focused field, and delivered
+text. The live transcript, correction learning, confirmed voice send, app
+styles, spoken snippets, and **Fn Space** Command remain available.
 
 ![Lerro shortcut setup](https://lerroapp.com/screenshots/en/lerro-onboarding-shortcuts-light.png)
 

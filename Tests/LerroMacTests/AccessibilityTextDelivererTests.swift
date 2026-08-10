@@ -910,6 +910,241 @@ struct AccessibilityTextDelivererTests {
             #expect(error.localizedDescription.contains("焦点已切换"))
         }
     }
+
+    @Test("Corrections can chain and restore earlier text through fresh receipts")
+    func correctionsChainThroughFreshReceipts() async throws {
+        let context = CapturedContext(
+            applicationName: "Notes",
+            processIdentifier: 42,
+            bundleIdentifier: "com.apple.Notes",
+            role: "AXTextArea"
+        )
+        let original = receiptSnapshot(value: 11)
+        let shortened = receiptSnapshot(value: 22)
+        let renamed = receiptSnapshot(value: 33)
+        let snapshots = SnapshotSequence([
+            original, original, shortened,
+            shortened, shortened, renamed,
+            renamed, renamed, original,
+        ])
+        let actions = ReceiptActionRecorder()
+        let deliverer = AccessibilityTextDeliverer(
+            activateTarget: { _ in true },
+            focusSnapshot: { snapshots.next() },
+            receiptActionOverride: { action, receipt in
+                await actions.record(action, receipt: receipt)
+            }
+        )
+        let firstReceipt = TextDeliveryReceipt(
+            context: context,
+            focusedValueFingerprint: 11,
+            focusedElementFingerprint: 7
+        )
+
+        let shortenedReceipt = try await deliverer.correct(
+            "shortened",
+            using: firstReceipt
+        )
+        let renamedReceipt = try await deliverer.correct(
+            "renamed",
+            using: shortenedReceipt
+        )
+        let restoredReceipt = try await deliverer.correct(
+            "original",
+            using: renamedReceipt
+        )
+
+        #expect(shortenedReceipt.id != firstReceipt.id)
+        #expect(renamedReceipt.id != shortenedReceipt.id)
+        #expect(restoredReceipt.id != renamedReceipt.id)
+        #expect(shortenedReceipt.focusedValueFingerprint == 22)
+        #expect(renamedReceipt.focusedValueFingerprint == 33)
+        #expect(restoredReceipt.focusedValueFingerprint == 11)
+        #expect(shortenedReceipt.canUndo)
+        #expect(renamedReceipt.canUndo)
+        #expect(restoredReceipt.canUndo)
+        #expect(
+            await actions.actions() == [
+                .correct("shortened"),
+                .correct("renamed"),
+                .correct("original"),
+            ]
+        )
+        #expect(
+            await actions.receiptIDs() == [
+                firstReceipt.id,
+                shortenedReceipt.id,
+                renamedReceipt.id,
+            ]
+        )
+    }
+
+    @Test("Correction rejects app, security, value, and element drift before acting")
+    func correctionRejectsReceiptDrift() async {
+        let context = CapturedContext(
+            applicationName: "Notes",
+            processIdentifier: 42,
+            bundleIdentifier: "com.apple.Notes",
+            role: "AXTextArea"
+        )
+        let receipt = TextDeliveryReceipt(
+            context: context,
+            focusedValueFingerprint: 11,
+            focusedElementFingerprint: 7
+        )
+        let driftedSnapshots = [
+            DeliveryFocusSnapshot(
+                safety: .safe,
+                processIdentifier: 99,
+                bundleIdentifier: "com.apple.TextEdit",
+                focusedValueFingerprint: 11,
+                focusedElementFingerprint: 7
+            ),
+            DeliveryFocusSnapshot(
+                safety: .secure,
+                processIdentifier: 42,
+                bundleIdentifier: "com.apple.Notes",
+                focusedValueFingerprint: 11,
+                focusedElementFingerprint: 7
+            ),
+            receiptSnapshot(value: 12),
+            receiptSnapshot(value: 11, element: 8),
+        ]
+
+        for snapshot in driftedSnapshots {
+            let actions = ReceiptActionRecorder()
+            let deliverer = AccessibilityTextDeliverer(
+                activateTarget: { _ in false },
+                focusSnapshot: { snapshot },
+                receiptActionOverride: { action, receipt in
+                    await actions.record(action, receipt: receipt)
+                }
+            )
+
+            await #expect(throws: LerroError.self) {
+                try await deliverer.correct("changed", using: receipt)
+            }
+            #expect(await actions.actions().isEmpty)
+        }
+    }
+
+    @Test("Correction requires a fully bound receipt")
+    func correctionRequiresBoundReceipt() async {
+        let actions = ReceiptActionRecorder()
+        let snapshot = receiptSnapshot(value: 11)
+        let deliverer = AccessibilityTextDeliverer(
+            activateTarget: { _ in true },
+            focusSnapshot: { snapshot },
+            receiptActionOverride: { action, receipt in
+                await actions.record(action, receipt: receipt)
+            }
+        )
+        let receipt = TextDeliveryReceipt(
+            context: CapturedContext(
+                applicationName: "Notes",
+                processIdentifier: 42,
+                bundleIdentifier: "com.apple.Notes"
+            ),
+            focusedValueFingerprint: 11
+        )
+
+        await #expect(throws: LerroError.self) {
+            try await deliverer.correct("changed", using: receipt)
+        }
+        #expect(await actions.actions().isEmpty)
+    }
+
+    @Test("A focus switch after correction disables the returned receipt")
+    func correctionPostCommitFocusSwitchInvalidatesReceipt() async throws {
+        let context = CapturedContext(
+            applicationName: "Notes",
+            processIdentifier: 42,
+            bundleIdentifier: "com.apple.Notes",
+            role: "AXTextArea"
+        )
+        let original = receiptSnapshot(value: 11)
+        let switched = DeliveryFocusSnapshot(
+            safety: .safe,
+            processIdentifier: 99,
+            bundleIdentifier: "com.apple.TextEdit",
+            focusedValueFingerprint: 22,
+            focusedElementFingerprint: 8
+        )
+        let snapshots = SnapshotSequence([original, original, switched])
+        let actions = ReceiptActionRecorder()
+        let deliverer = AccessibilityTextDeliverer(
+            activateTarget: { _ in true },
+            focusSnapshot: { snapshots.next() },
+            receiptActionOverride: { action, receipt in
+                await actions.record(action, receipt: receipt)
+            }
+        )
+        let receipt = TextDeliveryReceipt(
+            context: context,
+            focusedValueFingerprint: 11,
+            focusedElementFingerprint: 7
+        )
+
+        let nextReceipt = try await deliverer.correct("changed", using: receipt)
+
+        #expect(nextReceipt.context.processIdentifier == 42)
+        #expect(nextReceipt.context.bundleIdentifier == "com.apple.Notes")
+        #expect(nextReceipt.focusedValueFingerprint == nil)
+        #expect(nextReceipt.focusedElementFingerprint == nil)
+        #expect(!nextReceipt.canUndo)
+        #expect(await actions.actions() == [.correct("changed")])
+    }
+
+    @Test("Concurrent corrections cannot interleave their receipt transactions")
+    func concurrentCorrectionsAreRejected() async throws {
+        let context = CapturedContext(
+            applicationName: "Notes",
+            processIdentifier: 42,
+            bundleIdentifier: "com.apple.Notes",
+            role: "AXTextArea"
+        )
+        let snapshot = receiptSnapshot(value: 11)
+        let blocker = BlockingReceiptActionRecorder()
+        let deliverer = AccessibilityTextDeliverer(
+            activateTarget: { _ in true },
+            focusSnapshot: { snapshot },
+            receiptActionOverride: { action, _ in
+                await blocker.recordAndWait(action)
+            }
+        )
+        let receipt = TextDeliveryReceipt(
+            context: context,
+            focusedValueFingerprint: 11,
+            focusedElementFingerprint: 7
+        )
+        let first = Task {
+            try await deliverer.correct("first", using: receipt)
+        }
+        await blocker.waitUntilStarted()
+
+        await #expect(throws: LerroError.self) {
+            try await deliverer.correct("second", using: receipt)
+        }
+
+        await blocker.resume()
+        _ = try await first.value
+        #expect(await blocker.actions() == [.correct("first")])
+    }
+
+    private func receiptSnapshot(
+        value: Int,
+        element: Int = 7
+    ) -> DeliveryFocusSnapshot {
+        DeliveryFocusSnapshot(
+            safety: .safe,
+            processIdentifier: 42,
+            bundleIdentifier: "com.apple.Notes",
+            applicationName: "Notes",
+            focusedValueFingerprint: value,
+            focusedElementFingerprint: element,
+            role: "AXTextArea"
+        )
+    }
 }
 
 @MainActor
@@ -953,6 +1188,44 @@ private actor DeliveryInvocationRecorder {
 
     func activationCount() -> Int { activations }
     func pastedTexts() -> [String] { pasted }
+}
+
+private actor ReceiptActionRecorder {
+    private var recordedActions: [ReceiptAction] = []
+    private var recordedReceiptIDs: [UUID] = []
+
+    func record(_ action: ReceiptAction, receipt: TextDeliveryReceipt) {
+        recordedActions.append(action)
+        recordedReceiptIDs.append(receipt.id)
+    }
+
+    func actions() -> [ReceiptAction] { recordedActions }
+    func receiptIDs() -> [UUID] { recordedReceiptIDs }
+}
+
+private actor BlockingReceiptActionRecorder {
+    private var recordedActions: [ReceiptAction] = []
+    private var started = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func recordAndWait(_ action: ReceiptAction) async {
+        recordedActions.append(action)
+        started = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        while !started { await Task.yield() }
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
+    }
+
+    func actions() -> [ReceiptAction] { recordedActions }
 }
 
 private final class SnapshotSequence: @unchecked Sendable {

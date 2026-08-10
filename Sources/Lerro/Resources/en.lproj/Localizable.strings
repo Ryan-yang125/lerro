@@ -695,8 +695,17 @@
 /* Lerro Live */
 "实时转写" = "Live Transcript";
 "文本已写入" = "Text inserted";
-"文本已写入，可以撤回或修正" = "Text inserted. You can undo or correct it.";
+"文本已写入，可以撤回、修正或继续说一句修改" = "Text inserted. Undo, correct, or speak one more edit.";
 "已写入 %@" = "Inserted in %@";
+"已写入 %@ · Fn 修改" = "Inserted in %@ · Fn to edit";
+"%lld 个版本" = "%lld versions";
+"修改后没有可写入的文字" = "The edit would leave no text to insert";
+"原文中找不到要替换的内容" = "The text to replace was not found";
+"找不到指定的句子" = "The requested sentence was not found";
+"没有识别到明确的修改指令" = "No explicit edit instruction was recognized";
+"语义修改需要在“智能处理”中选择本地 AI 或 API 模型" = "Semantic edits require Local AI or an API model in Intelligence";
+"重新听写" = "Redictate";
+"按一下开始，说完自动完成" = "Press once; finish automatically after speaking";
 "在 %@ 发送？" = "Send in %@?";
 "撤回" = "Undo";
 "撤回失败" = "Undo failed";

@@ -15,6 +15,7 @@ ADR 用于记录会长期影响模块、数据、系统权限、模型、发布�
 | [0007](0007-cloudflare-distribution-and-sparkle-updates.md) | accepted | Cloudflare Worker/R2/D1 公开分发与 Sparkle 应用内更新 |
 | [0008](0008-accessibility-owned-fn-shortcuts.md) | accepted | 两项系统权限、HID Fn 物理所有权与空闲 HUD 隐藏 |
 | [0009](0009-bound-delivery-receipts.md) | accepted | 实际交付目标绑定的一次性回执、安全撤回、即时修正与受控语音发送 |
+| [0010](0010-quick-dictate-and-spoken-delivery-edits.md) | accepted | 可选 SpeechDetector 端点、显式语音编辑意图、连续安全回执与历史版本链 |
 
 ## 需要 ADR 的变化
 

@@ -14,6 +14,22 @@ export type Release = {
 // they shipped with, while the homepage always points to the latest release.
 const releases: readonly Release[] = [
   {
+    version: "1.5.0",
+    build: "11",
+    publishedAt: "2026-08-10",
+    publishedLabel: "August 10, 2026",
+    summary: "Keep speaking to revise what Lerro just wrote.",
+    highlights: [
+      "Quick Dictate starts with one Fn press and finishes after speech followed by a short silence.",
+      "Say a follow-up to undo, delete a sentence, replace an exact phrase, or request a semantic rewrite.",
+      "Every accepted edit stays bound to the same app, focused field, and delivered text fingerprint.",
+      "A version chain supports repeated edits and restoring the prior version.",
+      "History keeps the original delivery and its revision lineage for review.",
+    ],
+    downloadUrl:
+      "https://updates.lerroapp.com/releases/1.5.0/11/Lerro-macOS-arm64.zip",
+  },
+  {
     version: "1.4.0",
     build: "10",
     publishedAt: "2026-08-10",
@@ -104,6 +120,11 @@ const releases: readonly Release[] = [
 ];
 
 const chineseReleaseCopy = [
+  {
+    publishedLabel: "2026 年 8 月 10 日",
+    summary: "Lerro 写完以后，继续说一句就能修改。",
+    highlights: ["Quick Dictate 按一次 Fn 开始，在说完并短暂静音后自动收尾。", "继续说一句即可撤销、删除指定句、精确替换，或交给已选模型完成语义改写。", "每次修改都绑定同一应用、焦点输入框与已写入文本指纹。", "版本链支持连续修改与恢复上一版。", "历史记录保留原始写入及其修改沿袭，便于复核。"],
+  },
   {
     publishedLabel: "2026 年 8 月 10 日",
     summary: "实时可见、写入可撤回，并提供受控免手完成动作的语音写作。",

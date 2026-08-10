@@ -246,14 +246,17 @@ captured selectedText + spoken instruction
 3. 本地模型结果学习符合边界的词典替换；remote/raw 结果跳过自动学习。
 4. 普通文本交付返回仅存在于进程内的 `TextDeliveryReceipt`，绑定实际提交目标的 PID、
    bundle、AX focused element fingerprint 和完整 AX value fingerprint。
-5. AppSession 显示六秒写入回执。Undo、即时修正和语音发送会重新确认相同目标、输入框、
-   内容、安全输入状态与 Accessibility；任一变化都会停用动作。
+5. AppSession 显示六秒写入回执，并在进程内保留最多 60 秒的最近语音编辑目标。Undo、
+   即时修正、语音跟进编辑和语音发送会重新确认相同目标、输入框、内容、安全输入状态与
+   Accessibility；任一变化都会停用动作。
 6. 即时修正在同一次 adapter 事务内重新校验 receipt，并连续提交带 source marker 的
    Command-Z 与 Command-V；History 保留 raw、processed 与 corrected 沿袭，用户填写的
    误识别映射继续进入应用级学习词典。
-7. 应用 retention 并删除过期音频。
-8. 更新 `lastResult`、历史第一页、词典和统计；历史页按当前查询继续分页加载。
-9. 清除 active session/generation 并回到 idle。
+7. 每次语音或手动修改生成新 receipt 与 `DeliveryEditLineage` 版本；恢复上一版移动当前
+   版本指针，历史保留完整分支，精确替换继续进入可复核的应用级学习词典。
+8. 应用 retention 并删除过期音频。
+9. 更新 `lastResult`、历史第一页、词典和统计；历史页按当前查询继续分页加载。
+10. 清除 active session/generation 并回到 idle。
 
 ## 交付事务
 
@@ -269,6 +272,17 @@ captured selectedText + spoken instruction
 8. 同一 deliverer 同时只允许一个事务，避免两个异步交付互相覆盖临时剪贴板。
 
 ## 免手完成动作
+
+默认 Fn toggle 听写使用 Quick Dictate。`AppleSpeechService` 仅为这一类 session 把
+`SpeechDetector` 加入 `SpeechAnalyzer`：首个 speech result 之后开始端点判断，语音恢复会
+取消等待，连续静音约 1.2 秒后发出一次 `silenceElapsed`，AppSession 立即进入转写完成。
+hold、Translate、Ask 和从 HUD 进入的锁定录音继续只使用 `SpeechTranscriber`。
+
+普通 Dictate 完成后的 60 秒内，新的 Dictate 会暂存最近安全回执。只有
+`VoiceEditCommandResolver` 命中明确修改意图时才进入跟进编辑；普通新句继续创建新听写。
+确定性撤销、删除第 N 句、精确替换和重新听写在 Core 执行；精简、扩写、语气、翻译与一般
+改写使用 capture 开始时冻结的 local/BYOK 配置。每次写回都通过当前 receipt 的
+`correct` 事务，新回执成为下一版唯一有效目标。
 
 免按住 Dictate 在最终转写末尾识别“发送”或“send it”。resolver 只接受完整末尾命令，
 先移除命令和相邻标点，再把正文交给冻结的 raw/local/remote 路由。空正文保持普通听写。

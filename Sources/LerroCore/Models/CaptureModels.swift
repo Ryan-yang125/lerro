@@ -220,6 +220,8 @@ public enum SpeechEvent: Sendable, Equatable {
     case partial(String)
     case final(String)
     case availability(String)
+    case speechStarted
+    case silenceElapsed
 }
 
 public struct SpeechTranscription: Sendable, Equatable {
