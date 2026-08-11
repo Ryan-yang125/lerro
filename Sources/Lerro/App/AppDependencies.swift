@@ -20,6 +20,7 @@ struct AppDependencies: Sendable {
     let preferences: any PreferencesRepository
     let intelligence: any IntelligenceProcessing
     let translation: any TranslationServicing
+    let deviceCapabilities: any DeviceCapabilityAssessing
 
     static func live() -> AppDependencies {
         if ProcessInfo.processInfo.environment["LERRO_FIXTURE_MODE"] == "1" {
@@ -73,7 +74,8 @@ struct AppDependencies: Sendable {
                 remoteRuntime: remoteModelRuntime,
                 modelIdentifier: defaultPreferences.localModelIdentifier
             ),
-            translation: AppleTranslationService()
+            translation: AppleTranslationService(),
+            deviceCapabilities: MacDeviceCapabilityAssessor(storageURL: paths.rootDirectory)
         )
     }
 
@@ -135,10 +137,14 @@ struct AppDependencies: Sendable {
         let onboardingRequested = ProcessInfo.processInfo.environment["LERRO_FIXTURE_ONBOARDING"] == "1"
         let onboardingStepIndex: Int? = switch ProcessInfo.processInfo.environment["LERRO_FIXTURE_ONBOARDING_STEP"] {
         case "privacy": 0
-        case "local": 1
+        case "ai": 1
         case "permissions": 2
         case "shortcuts": 3
         case "practice": 4
+        case "receipt": 5
+        case "voice-edit": 6
+        case "toolkit": 7
+        case "ready": 8
         default: nil
         }
         let preferences = UserPreferences(
@@ -169,7 +175,8 @@ struct AppDependencies: Sendable {
             dictionary: InMemoryDictionaryRepository(entries: dictionary),
             preferences: InMemoryPreferencesRepository(value: preferences),
             intelligence: RuleBasedIntelligenceService(),
-            translation: FixtureTranslationService()
+            translation: FixtureTranslationService(),
+            deviceCapabilities: FixtureDeviceCapabilityAssessor()
         )
     }
 }
@@ -305,4 +312,16 @@ private struct FixtureLoginItemManager: LoginItemManaging {
 
 private struct FixtureApplicationIdentityMonitor: ApplicationIdentityMonitoring {
     func legacyApplicationIsRunning() -> Bool { false }
+}
+
+private struct FixtureDeviceCapabilityAssessor: DeviceCapabilityAssessing {
+    func snapshot() -> DeviceCapabilitySnapshot {
+        DeviceCapabilitySnapshot(
+            chipName: "Apple M4",
+            isAppleSilicon: true,
+            supportsMetal: true,
+            physicalMemoryBytes: 24 * 1_024 * 1_024 * 1_024,
+            availableStorageBytes: 80 * 1_024 * 1_024 * 1_024
+        )
+    }
 }

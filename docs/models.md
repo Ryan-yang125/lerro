@@ -47,12 +47,24 @@ approximately 3.03 GB; the model page and actual download metadata remain the
 source of truth for a release. Lerro asks for explicit consent before starting
 the first download.
 
+Onboarding reads the current Mac's chip class, Metal availability, physical
+memory, and free storage locally. Apple silicon with Metal, at least 16 GiB of
+memory, and at least 10 GiB of free storage receives the local-AI recommendation.
+Constrained memory or storage receives the API recommendation. The user can
+still choose local AI when the platform supports it.
+
 ## Download and cache boundary
 
 - The public Hugging Face client uses `bearerToken: nil`.
 - Model files stay under `~/Library/Application Support/app.lerro.mac/Models/`.
-- Download progress is monotonic and cancellation propagates to the underlying
-  request.
+- Download progress is monotonic and includes transferred bytes, total bytes,
+  and an estimated transfer rate when available.
+- Pause cancels the active request after persisting URLSession resume data and
+  a small model checkpoint. Closing Onboarding or the main window leaves the
+  AppSession-owned task running; quitting preserves the checkpoint for the next
+  launch.
+- Stop removes only incomplete files, resume data, and the Lerro download
+  checkpoint. Completed blobs remain available for reuse.
 - Complete blobs are staged in the cache directory and published atomically.
 - Snapshot or ref failures preserve a complete source for a retry.
 - Existing cache data is validated before reuse.
@@ -79,6 +91,11 @@ patch boundary and upgrade procedure.
 owns model loading, generation, cancellation, and idle unloading. Shared load
 tasks are committed only after a final cancellation check. Session generation
 IDs prevent results from an earlier capture from updating the current capture.
+
+While an approved local model is downloading or paused, Quick Dictate keeps the
+selected local preference and delivers the final Apple Speech transcript through
+the raw route. Model-backed Dictate, Command, and semantic edits become available
+as soon as the runtime reports ready.
 
 Lerro keeps prompts, transcripts, selected text, answers, API keys and
 Authorization headers out of logs. Local generation keeps generation content on

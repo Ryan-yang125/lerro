@@ -57,6 +57,8 @@ public protocol PreferencesRepository: Sendable {
 
 public protocol IntelligenceProcessing: Sendable {
     func prepare(modelIdentifier: String) async throws
+    func pauseLocalModelPreparation() async
+    func discardLocalModelDownload() async throws
     func process(_ request: IntelligenceRequest) async throws -> IntelligenceResult
     func processStream(
         _ request: IntelligenceRequest
@@ -69,6 +71,8 @@ public protocol IntelligenceProcessing: Sendable {
 
 public protocol LocalLanguageModelRuntime: Sendable {
     func load(modelIdentifier: String) async throws
+    func pauseLoad() async
+    func discardDownload() async throws
     func generate(systemPrompt: String, userPrompt: String, maxTokens: Int) async throws -> String
     func generateStream(
         systemPrompt: String,
@@ -97,6 +101,10 @@ public protocol RemoteLanguageModelRuntime: Sendable {
 }
 
 public extension IntelligenceProcessing {
+    func pauseLocalModelPreparation() async {}
+
+    func discardLocalModelDownload() async throws {}
+
     func processStream(
         _ request: IntelligenceRequest
     ) async throws -> AsyncThrowingStream<IntelligenceResult, any Error> {
@@ -115,6 +123,10 @@ public extension IntelligenceProcessing {
 }
 
 public extension LocalLanguageModelRuntime {
+    func pauseLoad() async {}
+
+    func discardDownload() async throws {}
+
     func generateStream(
         systemPrompt: String,
         userPrompt: String,
@@ -155,6 +167,7 @@ public extension RemoteLanguageModelRuntime {
 public enum LocalModelState: String, Codable, Sendable {
     case unavailable
     case downloading
+    case paused
     case ready
     case loading
     case loaded
@@ -166,16 +179,25 @@ public struct LocalModelStatus: Codable, Sendable, Equatable {
     public var modelIdentifier: String
     public var progress: Double
     public var message: String
+    public var downloadedBytes: Int64
+    public var totalBytes: Int64
+    public var bytesPerSecond: Double?
 
     public init(
         state: LocalModelState,
         modelIdentifier: String,
         progress: Double = 0,
-        message: String = ""
+        message: String = "",
+        downloadedBytes: Int64 = 0,
+        totalBytes: Int64 = 0,
+        bytesPerSecond: Double? = nil
     ) {
         self.state = state
         self.modelIdentifier = modelIdentifier
         self.progress = progress
         self.message = message
+        self.downloadedBytes = max(0, downloadedBytes)
+        self.totalBytes = max(0, totalBytes)
+        self.bytesPerSecond = bytesPerSecond
     }
 }

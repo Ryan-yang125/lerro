@@ -116,6 +116,8 @@ Lerro -> LerroIntelligence -> LerroCore
 - 原始音频默认关闭；`saveAudio` 默认值保持 `false`。
 - `historyRetention == .never` 时禁止写入新历史和新录音。
 - 默认模型约 3.03 GB，下载前取得用户明确确认。
+- 本地模型下载由 AppSession 持有，支持后台继续、暂停、重启恢复和停止；停止只清理未完成
+  文件、resume data 与下载 checkpoint，完整 blob 保留。
 - Hugging Face 公共客户端保持 `bearerToken: nil`，不继承本机 CLI 登录令牌。
 - 真实缓存模型 smoke 默认跳过。标准显式入口是 `LERRO_LIVE_MODEL_OFFLINE=1 ./script/test_live_model.sh`，执行前记录授权、模型 ID、缓存来源、网络状态、硬件和结果。
 - 测试与 fixture 使用临时目录和 inert adapters，避开真实 Application Support、麦克风、TCC、AX、CGEventTap、剪贴板和登录项。

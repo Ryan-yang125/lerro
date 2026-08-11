@@ -6,6 +6,9 @@
 - 关联任务/PR：[PR #50](https://github.com/huggingface/swift-huggingface/pull/50)、[Issue #52](https://github.com/huggingface/swift-huggingface/issues/52)
 - 替代：无
 
+> 2026-08-11：本记录的首次中断恢复边界由
+> [ADR 0011](0011-device-aware-ai-onboarding-and-resumable-model-downloads.md) 扩展；其余 Vendor、缓存提交与来源决策继续有效。
+
 ## 背景
 
 Lerro 的默认 MLX 模型约 3.03 GB。首次使用需要可见且单调的下载进度；取消、已有 `.incomplete` 的 Range 合并、重复 blob 和缓存命中也需要明确的文件所有权与临时文件生命周期。

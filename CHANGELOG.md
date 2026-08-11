@@ -6,6 +6,25 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-08-11
+
+### Added
+
+- A nine-step first-run guide that teaches AI setup, permissions, shortcuts,
+  Quick Dictate, delivery receipts, spoken follow-up editing, and the complete
+  voice toolkit.
+- Device-aware local-AI guidance based on Apple silicon, Metal, memory, and free
+  storage, with inline OpenAI-compatible API setup and connection testing.
+- Pause, resume, background progress, transferred bytes, and stop controls for
+  the local model download.
+
+### Changed
+
+- Quick Dictate remains immediately usable through Apple Speech while an
+  approved local model downloads or stays paused.
+- Local model cancellation now preserves URLSession resume data and a restart-
+  safe checkpoint; stopping clears only incomplete artifacts.
+
 ## [1.5.0] - 2026-08-10
 
 ### Added

@@ -474,14 +474,17 @@ swift test --filter LerroIntelligenceTests
 
 调用者提供显式 destination 时，snapshot commit failure 会让 cache lookup miss，`HubClient` 随后把保留的临时 payload 转移到 destination。若 destination 文件完整，下载调用可以成功返回，同时把 cache metadata 故障留给后续重试；cache-only 调用没有 destination 时继续返回 path resolution 错误。用 `FileOperationsTests` 的显式 destination fallback 用例区分 payload 交付与 cache 发布问题。
 
-自动 Range 合并只覆盖调用开始前已有 `<etag>.incomplete` 的情况。首次网络中断或取消不会持久化 URLSession resume data，也不会自动生成供下一次调用使用的 `.incomplete`；跨请求或 app 重启后通常重新下载当前文件。排查时把该行为单独记录，避免把预置 partial 的自动测试当作首次中断续传证明。
+自动 Range 合并覆盖调用开始前已有 `<etag>.incomplete` 的情况。ETag-aware Apple 下载取消时
+还会尝试保存 `<etag>.resume-data`，下一次请求优先恢复；系统未生成 resume data 或恢复数据
+失效时会清理断点并完整重试当前文件。排查时同时记录 `.incomplete`、`.resume-data`、
+`.lerro-model-download.json` 的文件名、大小和 mtime，并用真实暂停、重启、继续结果区分两条恢复路径。
 
 只读检查应用模型目录中的未完成文件：
 
 ```zsh
 model_cache="$HOME/Library/Application Support/app.lerro.mac/Models"
 find "$model_cache" -type f \
-  \( -name '*.incomplete' -o -name '*.tmp' -o -name '*.partial' \) \
+  \( -name '*.incomplete' -o -name '*.resume-data' -o -name '*.tmp' -o -name '*.partial' -o -name '.lerro-model-download.json' \) \
   -print
 ```
 

@@ -61,6 +61,61 @@ struct MLXLanguageModelRuntimeTests {
         #expect(await client.bearerToken == nil)
     }
 
+    @Test("A persisted checkpoint restores the paused download state")
+    func persistedCheckpointRestoresPausedState() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "LerroCheckpointTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let checkpoint: [String: Any] = [
+            "modelIdentifier": "test/model",
+            "progress": 0.42,
+            "downloadedBytes": 420,
+            "totalBytes": 1_000
+        ]
+        let data = try JSONSerialization.data(withJSONObject: checkpoint)
+        try data.write(to: directory.appending(path: ".lerro-model-download.json"))
+
+        let runtime = MLXLanguageModelRuntime(
+            defaultModelIdentifier: "test/model",
+            modelCacheDirectory: directory
+        )
+        let status = await runtime.status()
+
+        #expect(status.state == .paused)
+        #expect(status.progress == 0.42)
+        #expect(status.downloadedBytes == 420)
+        #expect(status.totalBytes == 1_000)
+    }
+
+    @Test("Stopping a download removes only resumable artifacts")
+    func discardRemovesResumableArtifacts() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "LerroDiscardTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let blobs = directory.appending(path: "models--test--model/blobs")
+        try FileManager.default.createDirectory(at: blobs, withIntermediateDirectories: true)
+        let completed = blobs.appending(path: "complete-etag")
+        let incomplete = blobs.appending(path: "partial-etag.incomplete")
+        let resumeData = blobs.appending(path: "partial-etag.resume-data")
+        let hiddenResumeData = blobs.appending(path: ".resume-data")
+        try Data("complete".utf8).write(to: completed)
+        try Data("partial".utf8).write(to: incomplete)
+        try Data("resume".utf8).write(to: resumeData)
+        try Data("hidden-resume".utf8).write(to: hiddenResumeData)
+        try Data("{}".utf8).write(to: directory.appending(path: ".lerro-model-download.json"))
+
+        try MLXLanguageModelRuntime.removeResumableArtifacts(from: directory)
+
+        #expect(FileManager.default.fileExists(atPath: completed.path))
+        #expect(!FileManager.default.fileExists(atPath: incomplete.path))
+        #expect(!FileManager.default.fileExists(atPath: resumeData.path))
+        #expect(!FileManager.default.fileExists(atPath: hiddenResumeData.path))
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appending(path: ".lerro-model-download.json").path
+        ))
+    }
+
     @Test(
         "Live cached model loads and generates when explicitly enabled",
         .enabled(if: ProcessInfo.processInfo.environment["LERRO_LIVE_MODEL_SMOKE"] == "1")

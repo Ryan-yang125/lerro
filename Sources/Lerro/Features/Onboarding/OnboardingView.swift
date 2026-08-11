@@ -4,20 +4,28 @@ import LerroCore
 
 private enum OnboardingStep: Int, CaseIterable, Identifiable {
     case privacy
-    case localMode
+    case aiSetup
     case permissions
     case shortcuts
     case practice
+    case receipt
+    case voiceEdit
+    case toolkit
+    case ready
 
     var id: Int { rawValue }
 
     var title: String {
         switch self {
         case .privacy: "隐私从这台 Mac 开始"
-        case .localMode: "选择初始处理方式"
+        case .aiSetup: "为这台 Mac 选择 AI"
         case .permissions: "连接 macOS 权限"
         case .shortcuts: "设置快捷键"
-        case .practice: "完成一次语音输入"
+        case .practice: "完成第一次 Quick Dictate"
+        case .receipt: "掌握写入后的安全操作"
+        case .voiceEdit: "继续说，直接修改上一段"
+        case .toolkit: "认识完整的语音工具箱"
+        case .ready: "你的 Lerro 已准备完成"
         }
     }
 
@@ -25,34 +33,50 @@ private enum OnboardingStep: Int, CaseIterable, Identifiable {
         switch self {
         case .privacy:
             "了解收音、历史与本地处理，再按自己的节奏完成设置。"
-        case .localMode:
-            "基础听写可直接使用 Apple 语音识别；本地 AI 可整理表达。完成引导后，也能在“智能处理”中配置自己的 API。"
+        case .aiSetup:
+            "Lerro 会读取本机硬件与可用磁盘，给出本地 AI 或 API 模型建议。下载可以在后台继续。"
         case .permissions:
             "两项权限分别负责收音、全局快捷键和文字写入。您也可以稍后在设置中继续。"
         case .shortcuts:
             "选择顺手的按键和触发方式，实时确认这块键盘是否成功送出按下与松开事件。"
         case .practice:
-            "将光标放进练习编辑器，使用刚设置的快捷键或下方按钮开始听写。"
+            "将光标放进练习编辑器，点按一次听写快捷键，说完后自然停顿，Lerro 会自动写入。"
+        case .receipt:
+            "每次写入后都有短暂回执，让你撤销、修正或确认发送，同时保护当前输入目标。"
+        case .voiceEdit:
+            "写入后的 60 秒内，再按一次听写并说出修改指令，Lerro 会安全更新同一段文字。"
+        case .toolkit:
+            "Quick Dictate、长听写、翻译、Ask、词典与应用语气覆盖不同工作场景。"
+        case .ready:
+            "最后确认快捷键和 AI 状态。你可以随时从设置重新打开这套教学。"
         }
     }
 
     var icon: String {
         switch self {
         case .privacy: "hand.raised.fill"
-        case .localMode: "cpu.fill"
+        case .aiSetup: "cpu.fill"
         case .permissions: "lock.shield.fill"
         case .shortcuts: "keyboard.fill"
         case .practice: "waveform"
+        case .receipt: "checkmark.bubble.fill"
+        case .voiceEdit: "arrow.trianglehead.2.clockwise.rotate.90"
+        case .toolkit: "square.grid.2x2.fill"
+        case .ready: "checkmark.seal.fill"
         }
     }
 
     var shortTitle: String {
         switch self {
         case .privacy: "隐私"
-        case .localMode: "处理"
+        case .aiSetup: "AI"
         case .permissions: "权限"
         case .shortcuts: "快捷键"
         case .practice: "练习"
+        case .receipt: "回执"
+        case .voiceEdit: "修改"
+        case .toolkit: "工具"
+        case .ready: "完成"
         }
     }
 }
@@ -214,7 +238,7 @@ struct OnboardingView: View {
                 if !shortcutConfigurationPrepared {
                     shortcutSaveError = session.currentError ?? "请完成当前语音输入后再设置快捷键。"
                 }
-            case .privacy, .localMode:
+            case .privacy, .aiSetup, .receipt, .voiceEdit, .toolkit, .ready:
                 break
             }
         }
@@ -322,14 +346,22 @@ struct OnboardingView: View {
         switch step {
         case .privacy:
             privacyContent
-        case .localMode:
-            localModeContent
+        case .aiSetup:
+            OnboardingAISetupView(session: session)
         case .permissions:
             permissionsContent
         case .shortcuts:
             shortcutsContent
         case .practice:
             practiceContent
+        case .receipt:
+            receiptContent
+        case .voiceEdit:
+            voiceEditContent
+        case .toolkit:
+            toolkitContent
+        case .ready:
+            readyContent
         }
     }
 
@@ -377,92 +409,6 @@ struct OnboardingView: View {
         .overlay {
             RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
                 .stroke(LerroTheme.thinBorder)
-        }
-    }
-
-    private var localModeContent: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Picker("听写处理", selection: intelligenceModeBinding) {
-                Text("原始听写").tag(IntelligenceMode.raw)
-                Text("本地 AI").tag(IntelligenceMode.local)
-                Text("API 模型").tag(IntelligenceMode.remote)
-            }
-            .pickerStyle(.segmented)
-            .accessibilityHint("选择原始听写、本地 AI 或已配置的 API 模型")
-
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: onboardingIntelligenceIcon)
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(LerroTheme.accent)
-                        .frame(width: 28)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(LocalizedStringKey(onboardingIntelligenceTitle))
-                            .font(LerroTheme.font(14, weight: .medium))
-                        Text(LocalizedStringKey(localModeDetail))
-                            .font(LerroTheme.font(13))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                if session.preferences.intelligenceMode == .local {
-                    Divider()
-
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("模型状态")
-                                .font(LerroTheme.font(12, weight: .medium))
-                                .foregroundStyle(.secondary)
-                            Text(LocalizedStringKey(localModelStatusText))
-                                .font(LerroTheme.font(13, weight: .medium))
-                                .foregroundStyle(.primary)
-                        }
-                        Spacer()
-                        Button {
-                            if session.preferences.hasApprovedModelDownload {
-                                session.activateIntelligenceMode(.local)
-                            } else {
-                                session.requestLocalModelPreparation()
-                            }
-                        } label: {
-                            Text(verbatim: localized(localModelActionTitle))
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(localModelActionDisabled)
-                    }
-
-                    if showsLocalModelProgress {
-                        ProgressView(value: min(1, max(0, session.modelStatus.progress)))
-                            .accessibilityLabel("本地模型准备进度")
-                    }
-
-                    Text("首次准备会在您确认后下载约 3.03 GB。本地模型或 API 可用于增强听写、指令和改写。")
-                        .font(LerroTheme.font(12))
-                        .foregroundStyle(.secondary)
-                } else if session.preferences.intelligenceMode == .remote {
-                    Divider()
-                    Label {
-                        Text(verbatim: "\(session.preferences.remoteProvider.provider.lerroDisplayName) · \(session.preferences.remoteProvider.modelIdentifier)")
-                    } icon: {
-                        Image(systemName: "checkmark.circle.fill")
-                    }
-                    .font(LerroTheme.font(13, weight: .medium))
-                    .foregroundStyle(LerroTheme.green)
-
-                    Text("API Key 与上下文发送项可在“设置 → 智能处理”中测试和调整。")
-                        .font(LerroTheme.font(12))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(18)
-            .background(LerroTheme.fillContainerThin)
-            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
-                    .stroke(LerroTheme.thinBorder)
-            }
         }
     }
 
@@ -738,6 +684,263 @@ struct OnboardingView: View {
                 }
             }
         }
+    }
+
+    private var receiptContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("已写入 Notes", systemImage: "checkmark.circle.fill")
+                        .font(LerroTheme.font(13, weight: .medium))
+                        .foregroundStyle(LerroTheme.green)
+                    Spacer()
+                    Text("6 秒")
+                        .font(LerroTheme.font(12, weight: .medium))
+                        .foregroundStyle(LerroTheme.secondaryText)
+                }
+                Text("明天下午三点讨论 onboarding 的最终验收。")
+                    .font(LerroTheme.font(14))
+                    .textSelection(.enabled)
+                HStack(spacing: 8) {
+                    Label("撤销", systemImage: "arrow.uturn.backward")
+                    Label("修正", systemImage: "pencil")
+                    Label("继续说", systemImage: "waveform")
+                }
+                .font(LerroTheme.font(12, weight: .medium))
+                .foregroundStyle(LerroTheme.secondaryText)
+            }
+            .padding(16)
+            .background(LerroTheme.fillContainerThin)
+            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
+                    .stroke(LerroTheme.thinBorder)
+            }
+
+            informationRow(
+                title: "撤销",
+                detail: "在回执出现时点按撤销，Lerro 会确认应用、输入框和文字仍然匹配，再发送 Command-Z。",
+                icon: "arrow.uturn.backward.circle.fill"
+            )
+            informationRow(
+                title: "修正",
+                detail: "直接编辑回执中的结果。Lerro 会原子地撤回旧文字并写入新版本，同时学习这次纠正。",
+                icon: "pencil.circle.fill"
+            )
+            informationRow(
+                title: "焦点保护",
+                detail: "切换应用、移动输入框或修改目标文字后，回执操作会安全停用，避免改到其他位置。",
+                icon: "scope"
+            )
+        }
+    }
+
+    private var voiceEditContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            voiceCommandCard(
+                phrase: "把产品名改成 Lerro",
+                result: "精确替换刚写入的文字",
+                requiresAI: false
+            )
+            voiceCommandCard(
+                phrase: "删除第二句",
+                result: "删除指定句子并保留其余内容",
+                requiresAI: false
+            )
+            voiceCommandCard(
+                phrase: "恢复上一版",
+                result: "沿版本链回到上一次结果",
+                requiresAI: false
+            )
+            voiceCommandCard(
+                phrase: "说得更简洁一些",
+                result: "使用已启用的本地 AI 或 API 模型改写",
+                requiresAI: true
+            )
+
+            Label {
+                Text("操作顺序：完成听写 → 保持光标不动 → 60 秒内再次点按听写 → 说出修改要求。")
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "1.circle.fill")
+            }
+            .font(LerroTheme.font(13, weight: .medium))
+            .foregroundStyle(LerroTheme.accent)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LerroTheme.fillContainerThin)
+            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+        }
+    }
+
+    private var toolkitContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                toolkitCard(
+                    title: "Quick Dictate",
+                    detail: "点按一次 Fn，说完自然停顿，约 1.2 秒后自动写入。",
+                    icon: "waveform"
+                )
+                toolkitCard(
+                    title: "长听写",
+                    detail: "按住说话，或从 HUD 锁定录音；再次操作时手动完成。",
+                    icon: "timer"
+                )
+                toolkitCard(
+                    title: "设备端翻译",
+                    detail: "Fn + Shift 说话，使用已准备的 Apple Translation 资源。",
+                    icon: "character.bubble.fill"
+                )
+                toolkitCard(
+                    title: "Ask / Command",
+                    detail: "Fn + Space 提问；选中文字时，口述要求会安全改写原选区。",
+                    icon: "sparkles"
+                )
+                toolkitCard(
+                    title: "词典与快捷语",
+                    detail: "保存专有名词和整段模板；精确说出触发词即可展开。",
+                    icon: "text.book.closed.fill"
+                )
+                toolkitCard(
+                    title: "应用语气",
+                    detail: "为 Mail、Slack 或其他应用设置不同表达方式，捕获开始时自动选择。",
+                    icon: "slider.horizontal.3"
+                )
+            }
+
+            Label {
+                Text("“发送”与 “send it” 只在已确认的安全输入框和获准应用中执行；首次使用一定会询问。")
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "lock.shield.fill")
+            }
+            .font(LerroTheme.font(12))
+            .foregroundStyle(LerroTheme.secondaryText)
+            .padding(.top, 4)
+        }
+    }
+
+    private var readyContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                Image(systemName: session.selectedAIIsReady ? "checkmark.circle.fill" : "clock.fill")
+                    .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
+                    .foregroundStyle(session.selectedAIIsReady ? LerroTheme.green : LerroTheme.orange)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(LocalizedStringKey(session.selectedAIIsReady ? "AI 能力已就绪" : "基础听写已就绪"))
+                        .font(LerroTheme.font(14, weight: .medium))
+                    Text(LocalizedStringKey(finalAIStatusText))
+                        .font(LerroTheme.font(12))
+                        .foregroundStyle(LerroTheme.secondaryText)
+                }
+                Spacer()
+            }
+            .padding(16)
+            .background(LerroTheme.fillContainerThin)
+            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
+                    .stroke(LerroTheme.thinBorder)
+            }
+
+            shortcutRow(
+                title: "Quick Dictate",
+                detail: "一次点按、开口说话、自然停顿后自动完成",
+                icon: "waveform",
+                shortcut: shortcutName(for: .dictate)
+            )
+            shortcutRow(
+                title: "翻译",
+                detail: "设备端翻译并写入当前光标",
+                icon: "character.bubble",
+                shortcut: shortcutName(for: .translate)
+            )
+            shortcutRow(
+                title: "Ask / Command",
+                detail: "提问或改写当前选区，需要 AI 就绪",
+                icon: "sparkles",
+                shortcut: shortcutName(for: .ask)
+            )
+
+            Text("提示：按 Escape 可取消当前录音或处理中任务；完整历史、词典、AI 和快捷键设置都在主窗口中。")
+                .font(LerroTheme.font(12))
+                .foregroundStyle(LerroTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func voiceCommandCard(phrase: String, result: String, requiresAI: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "quote.bubble.fill")
+                .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
+                .foregroundStyle(LerroTheme.accent)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 7) {
+                    Text(verbatim: "“\(phrase)”")
+                        .font(LerroTheme.font(14, weight: .medium))
+                    if requiresAI {
+                        Text("AI")
+                            .font(LerroTheme.font(12, weight: .medium))
+                            .foregroundStyle(LerroTheme.accent)
+                    }
+                }
+                Text(LocalizedStringKey(result))
+                    .font(LerroTheme.font(12))
+                    .foregroundStyle(LerroTheme.secondaryText)
+            }
+            Spacer()
+        }
+        .padding(13)
+        .background(LerroTheme.fillContainerThin)
+        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                .stroke(LerroTheme.thinBorder)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func toolkitCard(title: String, detail: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
+                .foregroundStyle(LerroTheme.accent)
+            Text(LocalizedStringKey(title))
+                .font(LerroTheme.font(14, weight: .medium))
+            Text(LocalizedStringKey(detail))
+                .font(LerroTheme.font(12))
+                .foregroundStyle(LerroTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+        .background(LerroTheme.fillContainerThin)
+        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                .stroke(LerroTheme.thinBorder)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func shortcutName(for action: HotkeyAction) -> String {
+        session.preferences.hotkeys.first(where: { $0.action == action })?.displayName ?? "—"
+    }
+
+    private var finalAIStatusText: String {
+        if session.selectedAIIsReady {
+            return session.preferences.intelligenceMode == .local
+                ? "本地模型已准备，可以使用增强听写、Ask 和语义改写。"
+                : "API 模型已配置，可以使用增强听写、Ask 和语义改写。"
+        }
+        if session.modelStatus.state == .downloading {
+            return "本地模型正在后台下载；完成前 Quick Dictate 会直接交付 Apple Speech 转写。"
+        }
+        if session.modelStatus.state == .paused {
+            return "本地模型下载已暂停；可从“设置 → 智能处理”继续。"
+        }
+        return "你可以立即使用 Quick Dictate，并从“设置 → 智能处理”继续启用 AI。"
     }
 
     private func onboardingShortcutActionCard(
@@ -1043,7 +1246,7 @@ struct OnboardingView: View {
 
     private func advanceFromCurrentStep() {
         session.savePreferences()
-        guard step != .practice else {
+        guard step != .ready else {
             session.completeOnboarding()
             return
         }
@@ -1130,7 +1333,7 @@ struct OnboardingView: View {
                 arguments: dictateShortcutDraft.displayName
             )
             : LerroInterfaceLocalization.format(
-                "把光标放在这里，按一下 %@ 开始，再按一下完成。",
+                "把光标放在这里，按一下 %@，说完自然停顿即可。",
                 locale: locale,
                 arguments: dictateShortcutDraft.displayName
             )
@@ -1141,7 +1344,11 @@ struct OnboardingView: View {
         practiceEditorFocused = true
         Task { @MainActor in
             await Task.yield()
-            session.toggleCapture(.dictation)
+            if session.preferredDictationActivation == .toggle {
+                session.toggleQuickDictate()
+            } else {
+                session.toggleCapture(.dictation)
+            }
         }
     }
 
@@ -1184,7 +1391,9 @@ struct OnboardingView: View {
         case .permissions where !session.requiredPermissionsGranted:
             "稍后继续"
         case .practice:
-            "完成设置"
+            "继续学习"
+        case .ready:
+            "开始使用 Lerro"
         default:
             "继续"
         }
@@ -1199,20 +1408,6 @@ struct OnboardingView: View {
         }
     }
 
-    private var intelligenceModeBinding: Binding<IntelligenceMode> {
-        Binding {
-            session.preferences.intelligenceMode
-        } set: { mode in
-            if mode == .remote,
-               session.preferences.remoteProvider.apiKey
-                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                session.currentError = "请先在“设置 → 智能处理”中填写并测试 API 配置"
-                return
-            }
-            session.activateIntelligenceMode(mode)
-        }
-    }
-
     private var microphoneSelection: Binding<String> {
         Binding {
             session.preferences.microphoneDeviceUID ?? ""
@@ -1221,75 +1416,6 @@ struct OnboardingView: View {
             session.preferences.microphoneDeviceUID = value.isEmpty ? nil : value
             session.savePreferences()
         }
-    }
-
-    private var localModeDetail: String {
-        switch session.preferences.intelligenceMode {
-        case .raw:
-            "完成语音识别后直接插入原始文字，无需准备语言模型。"
-        case .local:
-            "听写完成后在本机整理语句；指令与改写也可使用本地模型。"
-        case .remote:
-            "使用您在设置中保存的 API 模型整理文字；发送内容由六项上下文开关控制。"
-        }
-    }
-
-    private var onboardingIntelligenceIcon: String {
-        switch session.preferences.intelligenceMode {
-        case .raw: "waveform"
-        case .local: "cpu.fill"
-        case .remote: "network"
-        }
-    }
-
-    private var onboardingIntelligenceTitle: String {
-        switch session.preferences.intelligenceMode {
-        case .raw: "Apple Speech 原始听写"
-        case .local: "Qwen3.5 4B 本地 AI"
-        case .remote: "自带 Key 的 API 模型"
-        }
-    }
-
-    private var localModelStatusText: String {
-        guard session.preferences.hasApprovedModelDownload else {
-            return "等待您的下载确认"
-        }
-        if !session.modelStatus.message.isEmpty {
-            return localizedStatus(session.modelStatus.message)
-        }
-        return switch session.modelStatus.state {
-        case .unavailable: "等待准备"
-        case .downloading: "正在下载"
-        case .ready: "已下载"
-        case .loading: "正在加载"
-        case .loaded: "已就绪"
-        case .failed: "准备失败"
-        }
-    }
-
-    private var localModelActionTitle: String {
-        guard session.preferences.hasApprovedModelDownload else { return "准备本地模型" }
-        return switch session.modelStatus.state {
-        case .loaded: "已就绪"
-        case .downloading, .loading: "准备中"
-        case .failed: "重试"
-        case .ready: "加载"
-        case .unavailable: "准备本地模型"
-        }
-    }
-
-    private var localModelActionDisabled: Bool {
-        switch session.modelStatus.state {
-        case .loaded, .downloading, .loading:
-            true
-        case .unavailable, .ready, .failed:
-            false
-        }
-    }
-
-    private var showsLocalModelProgress: Bool {
-        session.preferences.hasApprovedModelDownload
-            && (session.modelStatus.state == .downloading || session.modelStatus.state == .loading)
     }
 
     private var microphoneTestButtonTitle: String {
@@ -1361,21 +1487,29 @@ struct OnboardingView: View {
     private var visualTitle: String {
         switch step {
         case .privacy: "由您掌控"
-        case .localMode: "本地优先"
+        case .aiSetup: "适合这台 Mac"
         case .permissions: "按用途授权"
         case .shortcuts: "随处开口"
         case .practice: "声音成为文字"
+        case .receipt: "每次写入都可恢复"
+        case .voiceEdit: "接着说就能改"
+        case .toolkit: "一套完整工作流"
+        case .ready: "现在开始"
         }
     }
 
     private var visualCaption: String {
         switch step {
         case .privacy: "清楚了解数据去向，并随时调整保存选项。"
-        case .localMode: "基础听写即时可用，本地增强按需准备。"
+        case .aiSetup: "本地 AI、API 模型与基础听写都由你选择。"
         case .permissions: "每项权限都有明确用途和独立设置入口。"
         case .shortcuts:
-            "\(selectedShortcutDraft.wrappedValue?.displayName ?? "Fn") · \(selectedShortcutActivation.wrappedValue.resolved == .hold ? "按住说话" : "按一下开关")"
-        case .practice: "自在说，清楚写。"
+            "\(selectedShortcutDraft.wrappedValue?.displayName ?? "Fn") · \(selectedShortcutActivation.wrappedValue.resolved == .hold ? "按住说话" : "一次点按")"
+        case .practice: "一次点按，停顿后自动完成。"
+        case .receipt: "撤销、修正、继续说，焦点变化时安全停用。"
+        case .voiceEdit: "精确指令直接执行，语义修改使用已启用 AI。"
+        case .toolkit: "听写、翻译、提问、改写和发送。"
+        case .ready: "Fn 开口，Lerro 写入。"
         }
     }
 
@@ -1384,7 +1518,7 @@ struct OnboardingView: View {
         let shortcut = selectedShortcutDraft.wrappedValue?.displayName ?? "Fn"
         let activation = selectedShortcutActivation.wrappedValue.resolved == .hold
             ? localized("按住说话")
-            : localized("按一下开关")
+            : localized("一次点按")
         return "\(shortcut) · \(activation)"
     }
 }

@@ -15,7 +15,9 @@ Lerro 是本地优先的语音输入工具，并提供用户主动配置的 BYOK
 │   └── <uuid>.caf
 └── Models/
     ├── Hugging Face / MLX cache
-    └── model-ready markers
+    ├── model-ready markers
+    ├── URLSession resume data
+    └── .lerro-model-download.json
 ```
 
 | 数据 | 内容 | 默认写入 | 删除方式 |
@@ -24,13 +26,17 @@ Lerro 是本地优先的语音输入工具，并提供用户主动配置的 BYOK
 | History | raw/processed/corrected text、修改版本父链与指令、模式、目标 app 元数据、处理路径、上下文类别、remote 共享类别、阶段耗时、语音发送状态、可选录音相对路径 | retention 非 `never` 时 | 应用内单条/全部删除与 retention |
 | Dictionary | 手动词条、自动学习词条、app scope、使用信息 | 有词条时 | 应用内删除 |
 | Audio | 原始麦克风 CAF | 默认关闭；明确开启且 retention 非 `never` 时 | 删除历史、retention、取消/错误清理、启动对账 |
-| Models | 模型权重、tokenizer、缓存 marker | 用户确认下载后 | 用户删除 Models 目录 |
+| Models | 模型权重、tokenizer、缓存 marker、断点续传数据、无内容的下载进度 checkpoint | 用户确认下载后 | 设置中的“停止”清理未完成断点；用户可删除 Models 目录 |
 | Remote request | 原始 transcript 与用户允许的上下文；仅存在于请求生命周期 | 选择并启用 API 模式后 | 依 Provider 条款；Lerro 不建立服务端副本 |
 
 本地邮箱、邀请码和 onboarding 选择存入 preferences；Lerro 没有自建远程账号提交路径。
 Application Support 根目录在准备和迁移时强制为 `0700`，`preferences.json` 在读取与原子
 替换后强制为 `0600`。同一 macOS 用户权限下运行的软件仍可读取明文 API Key，系统备份和
 手动复制也可能携带该字段。
+
+Onboarding 的设备建议只读取芯片类型、Metal 可用性、物理内存和目标卷可用空间。这份快照
+只保留在当前进程内，不写入 preferences、history、日志或网络请求。下载 checkpoint 只保存
+模型 ID、完成比例和字节数，不包含 transcript、prompt、上下文或凭据。
 
 ### 旧数据根迁移
 
@@ -213,6 +219,10 @@ Release 构建通过 Swift 与 Clang compiler prefix map 清除构建工作区�
 - `local` 经过模型下载授权并使用 MLX runtime。
 - `remote` 要求完整配置和用户主动保存启用。
 - 首次需要模型时展示下载大小、来源和本地存储说明。
+- Onboarding 在进入权限与练习前提供本地 AI、API 模型和基础听写三条明确路径；API Key
+  在引导内完成填写、固定合成消息连接测试和保存启用。
+- 本地下载支持暂停、继续和停止。暂停保留断点；停止清除未完成文件、resume data 与进度
+  checkpoint，已经完整提交的 blob 保留。
 - API 设置页持续展示发送字段与明文 JSON 存储事实。
 - 用户在设置中也可主动准备模型。
 

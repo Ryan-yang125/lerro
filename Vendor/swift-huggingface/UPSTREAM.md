@@ -31,21 +31,22 @@ required by the Lerro local model flow.
   positive linked size that differs from an existing ETag blob removes that
   blob before the cached-path fast path, allowing a complete download to
   replace the truncated entry.
-- Resume boundary: automatic Range merging starts from an existing
-  `<etag>.incomplete` file. A first network interruption or cancellation does
-  not persist response bytes or `URLSession` resume data for a later request or
-  app launch.
+- Local resume patch: automatic Range merging still starts from an existing
+  `<etag>.incomplete` file. ETag-aware Apple downloads also persist
+  `URLSession` resume data at `<etag>.resume-data` when cancellation provides
+  it, restore from that data on the next request, and discard invalid resume
+  data before retrying the complete request.
 
 The progress import owns the Apple `hfAsyncDownload` bridge and its original
 progress tests. The Lerro-local patch owns the bridge cancellation
-guard and error normalization, post-download temporary-URL cleanup,
+guard, resume-data persistence and error normalization, post-download temporary-URL cleanup,
 `X-Linked-Size` preflight validation, `HubCache.storeFile(consumeSource:)`, the
 download call-site opt-in, first-write/duplicate-blob source-consumption tests,
 snapshot/ref commit failure-injection tests, truncated-blob recovery, and the
 explicit-destination fallback after snapshot failure. Snapshot or ref failure
 keeps the original temporary source available to `HubCache`; `HubClient` can
 move that payload to an explicit destination when cache publication misses.
-Keep those ownership boundaries and the resume boundary explicit while
+Keep those ownership boundaries and both resume paths explicit while
 comparing future upstream releases.
 
 The upstream Apache 2.0 license remains in [`LICENSE`](LICENSE). Before updating

@@ -28,6 +28,14 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         try await runtime.load(modelIdentifier: modelIdentifier)
     }
 
+    public func pauseLocalModelPreparation() async {
+        await runtime.pauseLoad()
+    }
+
+    public func discardLocalModelDownload() async throws {
+        try await runtime.discardDownload()
+    }
+
     public func process(_ request: IntelligenceRequest) async throws -> IntelligenceResult {
         let rawTranscript = request.transcript
         guard !rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

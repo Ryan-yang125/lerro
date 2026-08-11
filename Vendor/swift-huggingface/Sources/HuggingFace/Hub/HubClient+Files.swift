@@ -525,6 +525,7 @@ public extension HubClient {
         if let cache, let etag = preflightMetadata?.normalizedEtag {
             let blobPath = try cache.blobPath(repo: repo, kind: kind, etag: etag)
             let incompleteBlobPath = try cache.incompleteBlobPath(repo: repo, kind: kind, etag: etag)
+            let resumeDataPath = try cache.resumeDataPath(repo: repo, kind: kind, etag: etag)
             let lock = FileLock(path: cache.lockPath(for: blobPath), maxRetries: nil)
             return try await lock.withLock {
                 if let expectedSize = preflightMetadata?.linkedSize,
@@ -610,11 +611,32 @@ public extension HubClient {
                         #if canImport(FoundationNetworking)
                             (tempURL, response) = try await session.asyncDownload(for: request, progress: progress)
                         #else
-                            (tempURL, response) = try await session.hfAsyncDownload(
-                                for: request,
-                                progress: progress,
-                                resumeOffset: resumeOffset
-                            )
+                            if resumeOffset == 0,
+                               let resumeData = try? Data(contentsOf: resumeDataPath),
+                               !resumeData.isEmpty {
+                                do {
+                                    (tempURL, response) = try await session.hfAsyncDownload(
+                                        resumeFrom: resumeData,
+                                        progress: progress,
+                                        resumeDataDestination: resumeDataPath
+                                    )
+                                } catch is CancellationError {
+                                    throw CancellationError()
+                                } catch {
+                                    try? FileManager.default.removeItem(at: resumeDataPath)
+                                    continue
+                                }
+                            } else {
+                                if resumeOffset > 0 {
+                                    try? FileManager.default.removeItem(at: resumeDataPath)
+                                }
+                                (tempURL, response) = try await session.hfAsyncDownload(
+                                    for: request,
+                                    progress: progress,
+                                    resumeOffset: resumeOffset,
+                                    resumeDataDestination: resumeDataPath
+                                )
+                            }
                         #endif
                     } catch {
                         if error is CancellationError {
@@ -634,6 +656,7 @@ public extension HubClient {
                         throw error
                     }
                     defer { try? FileManager.default.removeItem(at: tempURL) }
+                    try? FileManager.default.removeItem(at: resumeDataPath)
 
                     // Validate response and normalize resume edge cases
                     guard let httpResponse = response as? HTTPURLResponse else {
@@ -967,6 +990,11 @@ public extension HubClient {
         private let lock = NSLock()
         private var task: URLSessionDownloadTask?
         private var cancellationRequested = false
+        private let resumeDataDestination: URL?
+
+        init(resumeDataDestination: URL?) {
+            self.resumeDataDestination = resumeDataDestination
+        }
 
         func installAndResume(_ task: URLSessionDownloadTask) {
             lock.lock()
@@ -975,7 +1003,7 @@ public extension HubClient {
             lock.unlock()
 
             if shouldCancel {
-                task.cancel()
+                cancel(task)
                 return
             }
             task.resume()
@@ -986,7 +1014,24 @@ public extension HubClient {
             cancellationRequested = true
             let task = task
             lock.unlock()
-            task?.cancel()
+            if let task {
+                cancel(task)
+            }
+        }
+
+        private func cancel(_ task: URLSessionDownloadTask) {
+            guard let resumeDataDestination else {
+                task.cancel()
+                return
+            }
+            task.cancel(byProducingResumeData: { resumeData in
+                guard let resumeData, !resumeData.isEmpty else { return }
+                try? FileManager.default.createDirectory(
+                    at: resumeDataDestination.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try? resumeData.write(to: resumeDataDestination, options: .atomic)
+            })
         }
     }
 
@@ -994,14 +1039,16 @@ public extension HubClient {
         func hfAsyncDownload(
             for request: URLRequest,
             progress: Progress? = nil,
-            resumeOffset: Int64 = 0
+            resumeOffset: Int64 = 0,
+            resumeDataDestination: URL? = nil
         ) async throws -> (URL, URLResponse) {
-            let box = DownloadTaskBox()
+            let box = DownloadTaskBox(resumeDataDestination: resumeDataDestination)
             return try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { continuation in
                     let delegate = DownloadProgressDelegate(
                         progress: progress ?? Progress(totalUnitCount: 0),
                         resumeOffset: resumeOffset,
+                        resumeDataDestination: resumeDataDestination,
                         continuation: continuation
                     )
                     let session = URLSession(
@@ -1020,14 +1067,16 @@ public extension HubClient {
 
         func hfAsyncDownload(
             resumeFrom resumeData: Data,
-            progress: Progress? = nil
+            progress: Progress? = nil,
+            resumeDataDestination: URL? = nil
         ) async throws -> (URL, URLResponse) {
-            let box = DownloadTaskBox()
+            let box = DownloadTaskBox(resumeDataDestination: resumeDataDestination)
             return try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { continuation in
                     let delegate = DownloadProgressDelegate(
                         progress: progress ?? Progress(totalUnitCount: 0),
                         appliesResumeOffsetToAllResponses: true,
+                        resumeDataDestination: resumeDataDestination,
                         continuation: continuation
                     )
                     let session = URLSession(
@@ -1049,6 +1098,7 @@ public extension HubClient {
         private let progress: Progress
         private let appliesResumeOffsetToAllResponses: Bool
         private let continuation: CheckedContinuation<(URL, URLResponse), Error>?
+        private let resumeDataDestination: URL?
         fileprivate weak var session: URLSession?
         private var currentResumeOffset: Int64
         private var hasResumed = false
@@ -1057,11 +1107,13 @@ public extension HubClient {
             progress: Progress,
             resumeOffset: Int64 = 0,
             appliesResumeOffsetToAllResponses: Bool = false,
+            resumeDataDestination: URL? = nil,
             continuation: CheckedContinuation<(URL, URLResponse), Error>? = nil
         ) {
             self.progress = progress
             self.currentResumeOffset = resumeOffset
             self.appliesResumeOffsetToAllResponses = appliesResumeOffsetToAllResponses
+            self.resumeDataDestination = resumeDataDestination
             self.continuation = continuation
         }
 
@@ -1130,6 +1182,15 @@ public extension HubClient {
             guard let continuation, !hasResumed else { return }
             hasResumed = true
             session?.invalidateAndCancel()
+            if let resumeDataDestination,
+               let resumeData = (error as NSError?)?.userInfo[NSURLSessionDownloadTaskResumeData] as? Data,
+               !resumeData.isEmpty {
+                try? FileManager.default.createDirectory(
+                    at: resumeDataDestination.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try? resumeData.write(to: resumeDataDestination, options: .atomic)
+            }
             if let urlError = error as? URLError, urlError.code == .cancelled {
                 continuation.resume(throwing: CancellationError())
             } else {

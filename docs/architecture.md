@@ -121,7 +121,11 @@ Vendor 的 `UPSTREAM.md` 放入 `Contents/Resources/ThirdPartyLicenses`。复验
 - `HubCache.storeFile` 的 snapshot 或 ref 提交失败会向上抛错，并在该调用返回时保持传入 source 完整。`HubClient` 可先执行显式 destination fallback；下载调用最终退出时由 scope cleanup 清理 URLSession temp。已经写入的完整 blob 或 snapshot 可以留在 cache 中，后续重试按内容地址和目标路径完成缺失的元数据。
 - [`HubCacheTests.swift`](../Vendor/swift-huggingface/Tests/HuggingFaceTests/HubTests/HubCacheTests.swift) 覆盖首次写入、已有 blob、截断 blob 原子恢复、snapshot commit 故障注入和 ref commit 故障注入；两项失败测试都断言 source 保留，截断恢复测试还断言无 staging 残留。
 - `HubClient.downloadFile(..., to: explicitDestination)` 将 cache 写入视为 best effort。snapshot commit 失败导致 cache lookup miss 时，保留的下载临时文件会转移到显式 destination，调用者仍获得完整 payload；未提供 destination 时继续报告 cache path resolution 错误。
-- 自动 Range 合并以已经存在的 `<etag>.incomplete` 为入口：请求从文件 size 设置 `Range`，206 响应追加后原子发布 blob。当前首次网络中断或取消不会把未完成响应体写成 `.incomplete`，也不会持久化 `URLSession` resume data；跨请求与 app 重启的首次中断续传属于 Release 人工边界。
+- 自动 Range 合并以已经存在的 `<etag>.incomplete` 为入口：请求从文件 size 设置 `Range`，206 响应追加后原子发布 blob。
+- ETag-aware Apple 下载把 `cancel(byProducingResumeData:)` 的结果保存为
+  `<etag>.resume-data`。下一次请求优先恢复该任务；无效 resume data 会被删除并回到完整下载。
+  `MLXLanguageModelRuntime` 同步保存模型 ID 与字节进度，暂停和 app 重启都呈现可继续状态；
+  用户选择停止时只清理未完成文件、resume data 与该 checkpoint。
 
 [`MLXLanguageModelRuntime.swift`](../Sources/LerroIntelligence/MLXLanguageModelRuntime.swift) 继续传递该取消语义：等待 load 的调用者取消时会取消底层 load task；await 返回后、`commitLoadedContainer` 前再次执行 `Task.checkCancellation()`。因此已取消的 load 无权提交 container、loaded 状态或 cache marker。
 
@@ -160,6 +164,7 @@ macOS adapters
 ├── AccessibilityTextDeliverer
 ├── GlobalHotkeyMonitor
 ├── MacPermissionService
+├── MacDeviceCapabilityAssessor
 └── MacLoginItemManager
 
 PipelineIntelligenceService
@@ -184,12 +189,16 @@ The long-lived boundary is recorded in
 [`AppSession`](../Sources/Lerro/App/AppSession.swift)。`AppSession` 使用 `@MainActor` 和 Observation，拥有：
 
 - 当前 sidebar/settings/onboarding 页面状态。
-- `CapturePhase`、`CaptureMode`、generation、active session 与异步任务。
+- `CapturePhase`、`CaptureMode`、generation、active session、设备 AI 建议与异步任务。
 - 历史、词典、偏好、模型状态和权限快照。
 - HUD 与 Ask panel controller。
 - 核心命令：开始、完成、取消、重试、交付、保存和清理。
 
 视图通过 `@Bindable` 读取状态并转发用户意图。跨页面共享状态应继续由 `AppSession` 或 Core store 管理。
+
+Onboarding 的设备策略位于 Core 的 `LocalAIReadiness`，生产硬件读取位于 LerroMac 的
+`MacDeviceCapabilityAssessor`。App target 负责呈现本地、API 和基础听写路径。未完成的本地
+下载由 AppSession 持有，因此关闭 Onboarding 或主窗口不会取消任务；退出 app 会保留可恢复断点。
 
 设置页把 `UserPreferences` 的旧值与新值一并交给 `AppSession`。持久化仍通过串行合并队列完成；外观、Dock 可见性、全局快捷键和 Login Item 只在各自字段发生变化时访问对应系统服务。启动时完整应用当前外观与 Dock 状态，保存失败时按回滚前后的字段差异恢复对应系统状态。
 

@@ -105,6 +105,21 @@ struct HubCacheTests {
         #expect(lockPath == expected)
     }
 
+    @Test("Resume data path shares the validated blob identity")
+    func resumeDataPath() throws {
+        let cache = HubCache(cacheDirectory: tempDirectory)
+        let repoID: Repo.ID = "user/repo"
+
+        let path = try cache.resumeDataPath(
+            repo: repoID,
+            kind: .model,
+            etag: "\"etag-123\""
+        )
+
+        #expect(path.lastPathComponent == "etag-123.resume-data")
+        #expect(path.deletingLastPathComponent().lastPathComponent == "blobs")
+    }
+
     // MARK: - Ref Resolution Tests
 
     @Test("Resolve revision from ref file")

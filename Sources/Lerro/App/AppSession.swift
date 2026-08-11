@@ -69,6 +69,7 @@ final class AppSession {
         modelIdentifier: "",
         message: "正在检查本地模型"
     )
+    private(set) var localAIReadiness: LocalAIReadiness?
     var isModelDownloadConsentPresented = false
     var visualFixturePresentation: String?
     var isPanelOnlyVisualFixture = false
@@ -221,6 +222,22 @@ final class AppSession {
         !hasActiveCapture
     }
 
+    var localAIIsReady: Bool {
+        modelStatus.state == .loaded
+            || (modelStatus.state == .ready && modelStatus.progress >= 1)
+    }
+
+    var selectedAIIsReady: Bool {
+        switch preferences.intelligenceMode {
+        case .raw:
+            false
+        case .local:
+            localAIIsReady
+        case .remote:
+            preferences.remoteProvider.isReadyForUse
+        }
+    }
+
     var isCaptureCancellationAvailable: Bool {
         switch phase {
         case .listening, .transcribing, .enhancing:
@@ -268,6 +285,9 @@ final class AppSession {
         let audioInputDevicesTask = Task { [dependencies] in
             await dependencies.microphoneTest.availableInputDevices()
         }
+        let deviceCapabilityTask = Task { [dependencies] in
+            await dependencies.deviceCapabilities.snapshot()
+        }
         do {
             try await applyRetentionAndClean(preferences.historyRetention, now: .now)
         } catch {
@@ -276,6 +296,7 @@ final class AppSession {
         await refreshData()
         await refreshLanguageResources()
         audioInputDevices = await audioInputDevicesTask.value
+        localAIReadiness = LocalAIReadiness(device: await deviceCapabilityTask.value)
         if let selectedUID = preferences.microphoneDeviceUID,
            !audioInputDevices.contains(where: { $0.uid == selectedUID }) {
             preferences.microphoneDeviceUID = nil
@@ -786,12 +807,69 @@ final class AppSession {
         }
     }
 
+    func toggleQuickDictate() {
+        guard !isCleaningCapture else { return }
+        if isStartingCapture {
+            guard activeMode == .dictation else { return }
+            cancelCapture()
+            return
+        }
+        switch phase {
+        case .idle, .success, .failed, .cancelled:
+            startCapture(.dictation, handsFree: true, quickDictate: true)
+        case .listening:
+            guard activeMode == .dictation else { return }
+            requestFinishCapture()
+        case .transcribing, .enhancing, .inserting:
+            return
+        }
+    }
+
     func requestLocalModelPreparation() {
         guard preferences.hasApprovedModelDownload else {
             presentModelDownloadConsent(for: nil)
             return
         }
         prepareLocalModel()
+    }
+
+    func pauseLocalModelPreparation() {
+        guard modelStatus.state == .downloading || modelStatus.state == .loading else { return }
+        modelStatus.state = .paused
+        modelStatus.message = "本地模型下载已暂停，可继续下载"
+        modelStatus.bytesPerSecond = nil
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await pauseLocalModelPreparationAndWait()
+        }
+    }
+
+    func prepareForApplicationTermination() async {
+        guard modelStatus.state == .downloading || modelStatus.state == .loading else { return }
+        await pauseLocalModelPreparationAndWait()
+    }
+
+    func discardLocalModelDownload() {
+        guard modelStatus.state == .downloading
+                || modelStatus.state == .loading
+                || modelStatus.state == .paused
+                || (modelStatus.state == .failed && modelStatus.progress > 0) else { return }
+        modelLoadTask?.cancel()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await dependencies.intelligence.discardLocalModelDownload()
+                modelStatus = await dependencies.intelligence.modelStatus()
+            } catch {
+                currentError = userFacingError(error, context: "本地模型下载无法停止")
+            }
+        }
+    }
+
+    private func pauseLocalModelPreparationAndWait() async {
+        modelLoadTask?.cancel()
+        await dependencies.intelligence.pauseLocalModelPreparation()
+        modelStatus = await dependencies.intelligence.modelStatus()
     }
 
     func activateIntelligenceMode(_ mode: IntelligenceMode) {
@@ -801,7 +879,9 @@ final class AppSession {
         }
         preferences.intelligenceMode = mode
         savePreferences()
-        if mode == .local, preferences.hasApprovedModelDownload {
+        if mode == .local,
+           preferences.hasApprovedModelDownload,
+           modelStatus.state != .paused {
             prepareLocalModel()
         }
     }
@@ -861,7 +941,9 @@ final class AppSession {
         preferences.hasApprovedModelDownload = true
         preferences.intelligenceMode = .local
         savePreferences()
-        presentSettings(SettingsDestination.intelligence)
+        if !isOnboardingPresented {
+            presentSettings(SettingsDestination.intelligence)
+        }
         NSApp.activate(ignoringOtherApps: true)
         prepareLocalModel()
     }
@@ -1920,7 +2002,13 @@ final class AppSession {
         activeVoiceEditTarget = voiceEditTarget ?? receiptEditTarget
         isVoiceRedictationCapture = redictation && activeVoiceEditTarget != nil
         dismissDeliveryReceipt()
-        let intelligenceMode = preferences.intelligenceMode
+        let intelligenceMode: IntelligenceMode = if mode == .dictation,
+                                                    preferences.intelligenceMode == .local,
+                                                    !localAIIsReady {
+            .raw
+        } else {
+            preferences.intelligenceMode
+        }
         let remoteProvider = intelligenceMode == .remote
             ? normalizedRemoteProvider(preferences.remoteProvider)
             : nil
@@ -2859,7 +2947,7 @@ final class AppSession {
                 switch status.state {
                 case .downloading, .loading:
                     observedActiveState = true
-                case .loaded, .failed:
+                case .loaded, .failed, .paused:
                     return
                 case .ready, .unavailable:
                     if observedActiveState || initialTerminalSamples >= 2 {
@@ -3026,12 +3114,7 @@ final class AppSession {
 
     private func configureVisualFixtureIfRequested() {
         let environment = ProcessInfo.processInfo.environment
-        guard environment["LERRO_FIXTURE_MODE"] == "1",
-              let presentation = environment["LERRO_FIXTURE_PRESENTATION"] else {
-            return
-        }
-        visualFixturePresentation = presentation
-        isPanelOnlyVisualFixture = environment["LERRO_FIXTURE_PANEL_ONLY"] == "1"
+        guard environment["LERRO_FIXTURE_MODE"] == "1" else { return }
         visualFixtureReduceMotion = environment["LERRO_FIXTURE_REDUCE_MOTION"] == "1"
         visualFixtureIncreaseContrast = environment["LERRO_FIXTURE_INCREASE_CONTRAST"] == "1"
         visualFixtureReduceTransparency = environment["LERRO_FIXTURE_REDUCE_TRANSPARENCY"] == "1"
@@ -3042,6 +3125,10 @@ final class AppSession {
         }
         configureAppearance(preferences.appearance)
         lastAppliedSystemPreferences = preferences
+
+        guard let presentation = environment["LERRO_FIXTURE_PRESENTATION"] else { return }
+        visualFixturePresentation = presentation
+        isPanelOnlyVisualFixture = environment["LERRO_FIXTURE_PANEL_ONLY"] == "1"
 
         switch presentation {
         case "ask":

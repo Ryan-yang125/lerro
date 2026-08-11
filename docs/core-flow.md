@@ -164,6 +164,11 @@ SpeechTranscription
 本地 AI 需要用户确认约 3.03 GB 下载。API 模型需要完整 Base URL、Model ID 和 API Key；
 用户可分别控制应用、窗口标题、光标附近文字、选中文字、词典和语气六类上下文。
 
+Onboarding 先在本机评估芯片、Metal、物理内存和可用空间，再推荐本地 AI 或 API 模型。
+用户可以直接配置并测试 API，也可以启动本地模型后台下载。已批准的本地模型处于
+downloading、loading 或 paused 时，Quick Dictate 本次 capture 冻结为 raw 路由并直接交付
+Apple Speech transcript；偏好继续保持 local，模型 ready 后的新 capture 自动进入本地增强。
+
 Dictate 的模型调用异常或空结果会回退到 Apple Speech 原始 transcript，并把历史标记为
 未增强。任务取消继续作为取消传播。Command 与 Rewrite 保留明确失败，避免把原文当作对应任务
 的有效结果。
@@ -375,6 +380,9 @@ preferences.saveAudio == true
 - 从应用 Models 目录检查缓存 marker。
 - 合并同模型并发加载。
 - 报告 downloading/loading/loaded/failed 状态。
+- 报告 paused 状态、传输字节、总字节与可用的速度估算。
+- 暂停时持久化 URLSession resume data 与模型 checkpoint；下一次启动可继续。
+- 停止时清理未完成下载、resume data 与 checkpoint，保留完整 blob。
 - 流式生成并在终止时取消底层任务。
 - 生成结束后延迟卸载内存中的模型，保留磁盘缓存。
 

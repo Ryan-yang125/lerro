@@ -205,6 +205,68 @@ struct AppSessionCoreFlowTests {
         #expect(intelligenceRequests.isEmpty)
     }
 
+    @Test("Local model preparation keeps Quick Dictate available through raw delivery")
+    @MainActor
+    func localPreparationKeepsQuickDictateAvailable() async throws {
+        var preferences = basePreferences()
+        preferences.intelligenceMode = .local
+        preferences.hasApprovedModelDownload = true
+        let harness = makeHarness(
+            preferences: preferences,
+            transcription: SpeechTranscription(
+                rawText: "download continues in background",
+                localeIdentifier: "en_US",
+                duration: 1
+            ),
+            modelStatus: LocalModelStatus(
+                state: .downloading,
+                modelIdentifier: preferences.localModelIdentifier,
+                progress: 0.4,
+                message: "Downloading"
+            )
+        )
+        await harness.session.start()
+
+        harness.session.toggleQuickDictate()
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleQuickDictate()
+        #expect(await waitUntil { harness.session.phase == .idle })
+
+        #expect(await harness.delivery.deliveries().map(\.text) == ["download continues in background"])
+        #expect(await harness.intelligence.requests().isEmpty)
+        #expect(harness.session.preferences.intelligenceMode == .local)
+    }
+
+    @Test("Application termination pauses an active local model download")
+    @MainActor
+    func applicationTerminationPausesLocalDownload() async {
+        var preferences = basePreferences()
+        preferences.intelligenceMode = .local
+        preferences.hasApprovedModelDownload = true
+        let harness = makeHarness(
+            preferences: preferences,
+            transcription: SpeechTranscription(
+                rawText: "unused",
+                localeIdentifier: "en_US",
+                duration: 0
+            ),
+            modelStatus: LocalModelStatus(
+                state: .downloading,
+                modelIdentifier: preferences.localModelIdentifier,
+                progress: 0.25,
+                message: "Downloading",
+                downloadedBytes: 250,
+                totalBytes: 1_000
+            )
+        )
+        await harness.session.start()
+
+        await harness.session.prepareForApplicationTermination()
+
+        #expect(await harness.intelligence.pauseCount() == 1)
+        #expect(harness.session.modelStatus.state == .paused)
+    }
+
     @Test("Live transcript distinguishes progressive and stable speech events")
     @MainActor
     func liveTranscriptTracksStability() async {
@@ -2766,6 +2828,12 @@ struct AppSessionCoreFlowTests {
         ),
         streamResults: [IntelligenceResult]? = nil,
         intelligenceError: (any Error & Sendable)? = nil,
+        modelStatus: LocalModelStatus = LocalModelStatus(
+            state: .ready,
+            modelIdentifier: "test-qwen",
+            progress: 1,
+            message: "Ready"
+        ),
         context: CapturedContext = CapturedContext(
             applicationName: "Notes",
             bundleIdentifier: "com.apple.Notes"
@@ -2802,7 +2870,8 @@ struct AppSessionCoreFlowTests {
             result: intelligenceResult,
             streamResults: streamResults,
             error: intelligenceError,
-            processGate: intelligenceGate
+            processGate: intelligenceGate,
+            modelStatus: modelStatus
         )
         let dependencies = AppDependencies(
             applicationPaths: applicationPaths,
@@ -2820,7 +2889,8 @@ struct AppSessionCoreFlowTests {
             dictionary: dictionaryRepository ?? InMemoryDictionaryRepository(),
             preferences: preferencesRepository ?? InMemoryPreferencesRepository(value: preferences),
             intelligence: intelligence,
-            translation: translation
+            translation: translation,
+            deviceCapabilities: StubDeviceCapabilityAssessor()
         )
         return Harness(
             session: AppSession(
@@ -3116,22 +3186,33 @@ private actor StubIntelligence: IntelligenceProcessing {
     private let streamResults: [IntelligenceResult]?
     private let error: (any Error & Sendable)?
     private let processGate: AsyncGate
+    private var statusValue: LocalModelStatus
     private var recordedRequests: [IntelligenceRequest] = []
+    private var pauseRequests = 0
 
     init(
         result: IntelligenceResult,
         streamResults: [IntelligenceResult]?,
         error: (any Error & Sendable)?,
-        processGate: AsyncGate
+        processGate: AsyncGate,
+        modelStatus: LocalModelStatus
     ) {
         self.result = result
         self.streamResults = streamResults
         self.error = error
         self.processGate = processGate
+        self.statusValue = modelStatus
     }
 
     func prepare(modelIdentifier: String) throws {
         if let error { throw error }
+    }
+
+    func pauseLocalModelPreparation() {
+        pauseRequests += 1
+        statusValue.state = .paused
+        statusValue.message = "Paused"
+        statusValue.bytesPerSecond = nil
     }
 
     func process(_ request: IntelligenceRequest) async throws -> IntelligenceResult {
@@ -3157,15 +3238,23 @@ private actor StubIntelligence: IntelligenceProcessing {
     }
 
     func modelStatus() -> LocalModelStatus {
-        LocalModelStatus(
-            state: .ready,
-            modelIdentifier: "test-qwen",
-            progress: 1,
-            message: "Ready"
-        )
+        statusValue
     }
 
     func requests() -> [IntelligenceRequest] { recordedRequests }
+    func pauseCount() -> Int { pauseRequests }
+}
+
+private struct StubDeviceCapabilityAssessor: DeviceCapabilityAssessing {
+    func snapshot() -> DeviceCapabilitySnapshot {
+        DeviceCapabilitySnapshot(
+            chipName: "Test Apple silicon",
+            isAppleSilicon: true,
+            supportsMetal: true,
+            physicalMemoryBytes: 16 * 1_024 * 1_024 * 1_024,
+            availableStorageBytes: 40 * 1_024 * 1_024 * 1_024
+        )
+    }
 }
 
 private enum StubError: LocalizedError, Sendable {

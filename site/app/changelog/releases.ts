@@ -14,6 +14,22 @@ export type Release = {
 // they shipped with, while the homepage always points to the latest release.
 const releases: readonly Release[] = [
   {
+    version: "1.5.1",
+    build: "12",
+    publishedAt: "2026-08-11",
+    publishedLabel: "August 11, 2026",
+    summary: "A complete first run, from choosing AI to the first finished workflow.",
+    highlights: [
+      "A nine-step guide teaches AI setup, permissions, shortcuts, Quick Dictate, receipts, spoken editing, and the full toolkit.",
+      "Lerro recommends local AI or an API model from this Mac's chip, Metal support, memory, and free storage.",
+      "OpenAI-compatible Provider, model, API key, context choices, and connection testing are available inside onboarding.",
+      "Local model downloads continue in the background and support pause, resume, restart recovery, and explicit stop.",
+      "Quick Dictate stays available through Apple Speech while local AI is still preparing.",
+    ],
+    downloadUrl:
+      "https://updates.lerroapp.com/releases/1.5.1/12/Lerro-macOS-arm64.zip",
+  },
+  {
     version: "1.5.0",
     build: "11",
     publishedAt: "2026-08-10",
@@ -120,6 +136,11 @@ const releases: readonly Release[] = [
 ];
 
 const chineseReleaseCopy = [
+  {
+    publishedLabel: "2026 年 8 月 11 日",
+    summary: "从选择 AI 到完成第一套工作流，一次引导全部学会。",
+    highlights: ["九步引导完整教授 AI 设置、权限、快捷键、Quick Dictate、回执、语音修改与全部工具。", "Lerro 根据这台 Mac 的芯片、Metal、内存和可用空间推荐本地 AI 或 API 模型。", "Onboarding 内可直接配置 Provider、Model、API Key、上下文并完成连接测试。", "本地模型支持后台下载、暂停、继续、重启恢复和明确停止。", "本地 AI 准备期间，Quick Dictate 继续使用 Apple Speech。"],
+  },
   {
     publishedLabel: "2026 年 8 月 10 日",
     summary: "Lerro 写完以后，继续说一句就能修改。",

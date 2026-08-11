@@ -296,6 +296,14 @@ public struct HubCache: Sendable {
             .appendingPathComponent("\(normalizedEtag).incomplete")
     }
 
+    /// Returns a validated path for URLSession resume data associated with a blob.
+    public func resumeDataPath(repo: Repo.ID, kind: Repo.Kind, etag: String) throws -> URL {
+        let normalizedEtag = normalizeEtag(etag)
+        try validatePathComponent(normalizedEtag)
+        return blobsDirectory(repo: repo, kind: kind)
+            .appendingPathComponent("\(normalizedEtag).resume-data")
+    }
+
     /// Returns a validated snapshot directory path for a commit hash.
     ///
     /// - Parameters:

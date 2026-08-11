@@ -193,6 +193,7 @@ struct MenuBarContentView: View {
             switch session.modelStatus.state {
             case .loaded: localized("本地 AI 已就绪")
             case .loading, .downloading: localized("本地 AI 准备中")
+            case .paused: localized("本地 AI 下载已暂停")
             case .failed: localized("本地 AI 需重试")
             case .ready: localized("本地 AI 可加载")
             case .unavailable: localized("本地 AI 未下载")

@@ -50,6 +50,7 @@ let package = Package(
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("Carbon"),
+                .linkedFramework("Metal"),
                 .linkedFramework("ServiceManagement"),
                 .linkedFramework("Speech"),
                 .linkedFramework("Translation")

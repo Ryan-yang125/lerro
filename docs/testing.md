@@ -93,7 +93,9 @@ swift test --package-path Vendor/swift-huggingface
 
 `FileOperationsTests` 还覆盖显式 destination fallback、`X-Linked-Size` 截断 cache 拦截、Apple task 安装前取消、取消错误归一和下载后 `tempURL` 全出口清理。注入 snapshot commit failure 后，`downloadFile(..., to:)` 仍返回指定路径，destination 内容与 HTTP payload 完全一致。
 
-恢复测试的自动化边界是调用前已经存在 `<etag>.incomplete`：请求按已有字节设置 `Range`，206 响应完成合并。首次网络中断或取消当前不会持久化 URLSession resume data，也不会为后续请求生成 `.incomplete`；跨请求和 app 重启后的首次中断恢复需要单独实机记录，通常会重新下载当前文件。
+恢复测试覆盖 `<etag>.incomplete` 的 Range 合并、`<etag>.resume-data` 的安全路径，以及 runtime
+checkpoint 恢复和停止清理。URLSession 真实 resume data 的生成、跨请求恢复和 app 重启后的
+实际续传仍需要 Release 实机记录；服务端或系统拒绝 resume data 时会清除断点并完整重试。
 
 更新 `Vendor/swift-transformers` 源码或任一 package manifest 时运行：
 
@@ -113,7 +115,8 @@ swift package show-dependencies --format json
 | remote 七例 prompt、原始 transcript、80/40 上下文、六类开关、最多 12 个匹配词典 | [`CloudPromptComposerTests.swift`](../Tests/LerroCoreTests/CloudPromptComposerTests.swift) |
 | raw/local/remote 路由、原文保持、生成、流、空结果、错误传播、连接测试 | [`PipelineIntelligenceServiceTests.swift`](../Tests/LerroCoreTests/PipelineIntelligenceServiceTests.swift) |
 | OpenAI-compatible URL、headers/body、DeepSeek thinking、SSE、连接测试、取消、响应大小、重定向与错误脱敏 | [`OpenAICompatibleHTTPClientTests.swift`](../Tests/LerroIntelligenceTests/OpenAICompatibleHTTPClientTests.swift) |
-| 模型下载进度边界与单调性、公开下载无凭据、显式启用的真实缓存模型生成 | [`MLXLanguageModelRuntimeTests.swift`](../Tests/LerroIntelligenceTests/MLXLanguageModelRuntimeTests.swift) |
+| 模型下载进度边界与单调性、暂停 checkpoint、停止清理、公开下载无凭据、显式启用的真实缓存模型生成 | [`MLXLanguageModelRuntimeTests.swift`](../Tests/LerroIntelligenceTests/MLXLanguageModelRuntimeTests.swift) |
+| 设备内存/磁盘/平台建议与 API 配置就绪策略 | [`LocalAIReadinessTests.swift`](../Tests/LerroCoreTests/LocalAIReadinessTests.swift) |
 | Hub progress、已有 partial 的 Range 合并、取消、temp cleanup、staged atomic blob、截断恢复、metadata 失败保留 source、显式 destination fallback | [`FileOperationsTests.swift`](../Vendor/swift-huggingface/Tests/HuggingFaceTests/HubTests/FileOperationsTests.swift)、[`HubCacheTests.swift`](../Vendor/swift-huggingface/Tests/HuggingFaceTests/HubTests/HubCacheTests.swift) |
 | 偏好默认值、旧 enhancement 迁移、remote 配置、模型、录音与语音发送 app 授权策略 | [`UserPreferencesTests.swift`](../Tests/LerroCoreTests/UserPreferencesTests.swift)、[`IntelligenceProviderModelsTests.swift`](../Tests/LerroCoreTests/IntelligenceProviderModelsTests.swift) |
 | “发送”/“send it”末尾解析与安全目标策略 | [`VoiceFinishActionResolverTests.swift`](../Tests/LerroCoreTests/VoiceFinishActionResolverTests.swift) |
@@ -319,6 +322,9 @@ open -F -n \
   dist/Lerro.app
 ```
 
+九个确定性步骤可用 `LERRO_FIXTURE_ONBOARDING_STEP` 定位：`privacy`、`ai`、
+`permissions`、`shortcuts`、`practice`、`receipt`、`voice-edit`、`toolkit`、`ready`。
+
 独立 HUD 示例：
 
 ```zsh
@@ -400,6 +406,9 @@ Logo、App Icon、菜单栏或公开模板变化时先执行：
 | 场景 | 操作 | 通过条件 |
 | --- | --- | --- |
 | 首次启动 | 启动 clean profile | 引导出现；两项权限状态准确；拒绝后有可恢复路径 |
+| AI 引导分流 | 分别在 8 GB 与 16 GB+ Apple silicon 测试 clean profile | 展示芯片、内存、可用空间；低内存或低磁盘推荐 API；充足配置推荐本地 AI；设备信息保持本机进程内 |
+| 本地模型后台下载 | Onboarding 启动下载，关闭页面后观察进度，再执行暂停、继续和停止 | 下载在 app 运行时继续；暂停后字节不再增长且重启可继续；停止清理未完成断点并保留完整 blob；下载期间 Quick Dictate 直接交付 Apple Speech |
+| Onboarding API 配置 | 引导内填写 Provider、Model、Key 与上下文开关，测试并保存 | 只发送固定合成消息；测试通过后才能保存启用；Key 存入 `0600` preferences；站点 origin 变化会清空旧 Key |
 | 快捷键录制 | 在 Onboarding 与设置分别录入 Fn、Option、Command、Fn + Space；切换两种触发方式并重复按下 | keycap 在 down/up 时立即变化；候选保存；测试期间无麦克风、HUD、历史和文本交付；退出后全局触发恢复 |
 | Fn 系统动作隔离 | 系统键盘设置选择“按下 Fn/Globe 键：显示表情与符号”；Lerro 退出时按一次作控制组；启动最终 Release app 后在 TextEdit 分别点按内置 Fn、外接 Globe，并连续执行两轮 | 控制组打开系统字符面板；Lerro 运行时每轮只触发配置 action，`CharacterPaletteIM` 不出现；第二轮仍可正常开始和完成；松开后普通输入与未配置系统 chord 正常 |
 | 原始听写 hold | 选择原始听写，在 TextEdit 按住已配置键说话后松开；再选中既有文本重复一次 | 无模型下载或 API；Apple Speech 原文完整交付；文本写入当前键盘焦点；已有选区遵循 Command-V 标准替换语义；completed history；无 CAF；全程无应用音效 |
@@ -429,7 +438,7 @@ Logo、App Icon、菜单栏或公开模板变化时先执行：
 | 重启恢复 | 修改设置、历史、词典后退出重启 | 数据与 UI 恢复；损坏偏好报告错误并保留原文件 |
 | 多显示器/Space | 在不同显示器和全屏 Space 触发 HUD/Ask | HUD 跟随目标屏幕且不抢焦点；Ask 可交互 |
 | 登录启动 | 稳定路径安装后切换设置并登录 | SMAppService 状态与偏好一致；失败可回滚 |
-| 模型缓存 | 首次下载后退出、断网、再次使用 | 缓存识别正确；离线加载成功；闲置后释放内存 |
+| 模型缓存 | 首次下载后暂停并退出，重启后继续；完成后断网再次使用 | 断点状态恢复；继续下载复用可用 resume data；完整缓存识别正确；离线加载成功；闲置后释放内存 |
 | Sparkle 主动检查 | 从 `/Applications` 启动上一公开版本，在 Home 或设置点“检查更新” | appcast 读取成功；可见新版本、版本号、发布日期与安装说明；断网时保留可恢复错误 |
 | Sparkle 更新提示 | 从上一公开版本启动并等待静默探测 | 发现更新时左下角出现蓝色下载图标；没有弹出下载窗口；没有后台下载 ZIP |
 | Sparkle 点击更新 | 点击蓝色下载图标并完成安装 | archive Ed25519 签名验证成功；重启为新 build；历史、偏好与权限身份保持可用 |

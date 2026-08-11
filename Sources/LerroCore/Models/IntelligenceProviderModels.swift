@@ -163,6 +163,12 @@ public struct RemoteProviderConfiguration: Codable, Hashable, Sendable {
             contextSharing: contextSharing
         )
     }
+
+    public var isReadyForUse: Bool {
+        !modelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && RemoteProviderEndpointPolicy.validate(baseURL) == .valid
+    }
 }
 
 public struct RemoteConnectionTestOutcome: Sendable, Equatable {

@@ -42,7 +42,7 @@ extension RemoteProviderKind {
         }
     }
 
-    fileprivate var lerroModelPlaceholder: String {
+    var lerroModelPlaceholder: String {
         switch self {
         case .deepSeek: "deepseek-v4-flash"
         case .openAI: "例如 gpt-4.1-mini"
@@ -124,6 +124,7 @@ struct IntelligenceSettingsPage: View {
     @State private var isTestingConnection = false
     @State private var isPersistingConfiguration = false
     @State private var isClearKeyConfirmationPresented = false
+    @State private var isDiscardDownloadConfirmationPresented = false
 
     init(session: AppSession) {
         self.session = session
@@ -181,6 +182,18 @@ struct IntelligenceSettingsPage: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("清除后，API 模型需要重新填写并保存 Key 才能启用。")
+        }
+        .confirmationDialog(
+            "停止本地模型下载？",
+            isPresented: $isDiscardDownloadConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button("停止并删除断点", role: .destructive) {
+                session.discardLocalModelDownload()
+            }
+            Button("继续保留", role: .cancel) {}
+        } message: {
+            Text("已完成的模型文件会继续保留，未完成文件和下载断点将被删除。")
         }
     }
 
@@ -312,22 +325,50 @@ struct IntelligenceSettingsPage: View {
 
                 Spacer(minLength: 12)
 
-                Button {
-                    if session.preferences.hasApprovedModelDownload {
-                        session.activateIntelligenceMode(.local)
+                HStack(spacing: 8) {
+                    if session.modelStatus.state == .downloading
+                        || session.modelStatus.state == .loading {
+                        Button("暂停") {
+                            session.pauseLocalModelPreparation()
+                        }
+                        .buttonStyle(LerroPillButtonStyle())
                     } else {
-                        session.requestLocalModelPreparation()
+                        Button {
+                            if session.preferences.hasApprovedModelDownload {
+                                session.activateIntelligenceMode(.local)
+                            } else {
+                                session.requestLocalModelPreparation()
+                            }
+                        } label: {
+                            Text(LocalizedStringKey(localModelActionTitle))
+                        }
+                        .buttonStyle(LerroPillButtonStyle(prominent: true))
+                        .disabled(localModelActionDisabled)
                     }
-                } label: {
-                    Text(LocalizedStringKey(localModelActionTitle))
+
+                    if session.modelStatus.state == .paused
+                        || session.modelStatus.state == .downloading
+                        || session.modelStatus.state == .loading {
+                        Button("停止", role: .destructive) {
+                            isDiscardDownloadConfirmationPresented = true
+                        }
+                        .buttonStyle(LerroPillButtonStyle(destructive: true))
+                    }
                 }
-                .buttonStyle(LerroPillButtonStyle(prominent: true))
-                .disabled(localModelActionDisabled)
             }
 
             if showsLocalModelProgress {
                 ProgressView(value: min(1, max(0, session.modelStatus.progress)))
                     .accessibilityLabel(Text(verbatim: localized("本地模型准备进度")))
+                HStack {
+                    Text(verbatim: localModelProgressText)
+                    Spacer()
+                    if let remaining = localModelRemainingText {
+                        Text(verbatim: remaining)
+                    }
+                }
+                .font(LerroTheme.font(12))
+                .foregroundStyle(LerroTheme.secondaryText)
             }
 
             Text("听写内容、上下文与生成结果留在这台 Mac；模型缓存可在停用后继续保留。")
@@ -594,6 +635,7 @@ struct IntelligenceSettingsPage: View {
         case .unavailable: "等待下载"
         case .ready: "模型已缓存"
         case .downloading: "正在下载"
+        case .paused: "下载已暂停"
         case .loading: "正在加载"
         case .loaded: "模型已加载"
         case .failed: "准备失败"
@@ -605,11 +647,9 @@ struct IntelligenceSettingsPage: View {
         case .raw:
             true
         case .local:
-            session.preferences.hasApprovedModelDownload
+            session.localAIIsReady
         case .remote:
-            IntelligenceProviderDraft(
-                configuration: session.preferences.remoteProvider
-            ).validationMessage == nil
+            session.preferences.remoteProvider.isReadyForUse
         }
     }
 
@@ -630,6 +670,7 @@ struct IntelligenceSettingsPage: View {
         switch session.modelStatus.state {
         case .loaded: "checkmark.circle.fill"
         case .downloading, .loading: "clock.fill"
+        case .paused: "pause.circle.fill"
         case .failed: "exclamationmark.circle.fill"
         case .ready: "internaldrive.fill"
         case .unavailable: "arrow.down.circle"
@@ -641,6 +682,7 @@ struct IntelligenceSettingsPage: View {
         case .loaded: LerroTheme.green
         case .failed: LerroTheme.red
         case .downloading, .loading: LerroTheme.accent
+        case .paused: LerroTheme.orange
         case .ready, .unavailable: LerroTheme.secondaryText
         }
     }
@@ -650,6 +692,7 @@ struct IntelligenceSettingsPage: View {
         case .loaded where session.preferences.intelligenceMode == .local: "已启用"
         case .loaded: "启用本地 AI"
         case .downloading, .loading: "准备中"
+        case .paused: "继续下载"
         case .failed: "重试"
         case .ready where session.modelStatus.progress >= 1: "加载并启用"
         case .ready, .unavailable: "下载并启用"
@@ -662,13 +705,36 @@ struct IntelligenceSettingsPage: View {
             session.preferences.intelligenceMode == .local
         case .downloading, .loading:
             true
-        case .unavailable, .ready, .failed:
+        case .unavailable, .ready, .paused, .failed:
             false
         }
     }
 
     private var showsLocalModelProgress: Bool {
-        session.modelStatus.state == .downloading || session.modelStatus.state == .loading
+        session.modelStatus.state == .downloading
+            || session.modelStatus.state == .loading
+            || session.modelStatus.state == .paused
+    }
+
+    private var localModelProgressText: String {
+        let status = session.modelStatus
+        guard status.downloadedBytes > 0, status.totalBytes > 0 else {
+            return "\(Int(status.progress * 100))%"
+        }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return "\(formatter.string(fromByteCount: status.downloadedBytes)) / \(formatter.string(fromByteCount: status.totalBytes))"
+    }
+
+    private var localModelRemainingText: String? {
+        let status = session.modelStatus
+        guard status.state == .downloading,
+              let speed = status.bytesPerSecond,
+              speed > 0,
+              status.totalBytes > status.downloadedBytes else { return nil }
+        let seconds = Double(status.totalBytes - status.downloadedBytes) / speed
+        let duration = Duration.seconds(seconds)
+        return "约 \(duration.formatted(.units(allowed: [.hours, .minutes], width: .abbreviated)))"
     }
 
     private func clearRemoteFeedback() {
