@@ -101,5 +101,4 @@ Release 人工矩阵覆盖 8 GB 与 16 GB+ 设备建议、真实下载进度、�
 - [`core-flow.md`](../core-flow.md)
 - [`privacy-security.md`](../privacy-security.md)
 - [`testing.md`](../testing.md)
-- [`ui-parity.md`](../ui-parity.md)
 - [`Vendor/swift-huggingface/UPSTREAM.md`](../../Vendor/swift-huggingface/UPSTREAM.md)
