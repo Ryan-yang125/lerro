@@ -7,6 +7,7 @@ public protocol SpeechTranscribing: Sendable {
         microphoneDeviceUID: String?,
         muteOtherAudio: Bool,
         saveAudio: Bool,
+        vocabulary: [SpeechVocabularyTerm],
         detectSpeechEndpoint: Bool
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error>
     func stop() async throws -> SpeechTranscription

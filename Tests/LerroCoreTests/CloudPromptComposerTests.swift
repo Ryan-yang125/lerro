@@ -166,7 +166,7 @@ struct CloudPromptComposerTests {
     func fallsBackToFocusedText() throws {
         let focused = String(repeating: "F", count: 100)
         let request = IntelligenceRequest(
-            task: .answer,
+            task: .polish,
             mode: .remote,
             remoteProvider: RemoteProviderConfiguration(),
             transcript: "Explain",
@@ -180,36 +180,7 @@ struct CloudPromptComposerTests {
         #expect(workspace["cursor_after"] == nil)
     }
 
-    @Test("Rewrite stops before remote generation when selected text sharing is disabled")
-    func rewriteRequiresSelectedTextSharing() throws {
-        let configuration = RemoteProviderConfiguration(
-            contextSharing: RemoteContextSharing(
-                application: true,
-                windowTitle: true,
-                nearbyText: true,
-                selectedText: false,
-                dictionary: true,
-                tone: true
-            )
-        )
-        let request = IntelligenceRequest(
-            task: .rewriteSelection,
-            mode: .remote,
-            remoteProvider: configuration,
-            transcript: "写得更简洁",
-            selectedText: "需要改写的原文",
-            context: CapturedContext(applicationName: "Notes")
-        )
-
-        do {
-            _ = try composer.prompts(for: request)
-            Issue.record("Expected rewrite to require selected-text sharing")
-        } catch let error as LerroError {
-            #expect(error.errorDescription == "远程模型暂不可用：API 改写需要允许发送选中文字")
-        }
-    }
-
-    @Test("Remote selection context is bounded and oversized Rewrite stops early")
+    @Test("Remote selection context is bounded")
     func boundsRemoteSelection() throws {
         let longSelection = String(
             repeating: "S",
@@ -229,18 +200,6 @@ struct CloudPromptComposerTests {
             (workspace["selected_text"] as? String)?.count
                 == CloudPromptComposer.maximumSelectedTextCharacters
         )
-
-        let rewrite = IntelligenceRequest(
-            task: .rewriteSelection,
-            mode: .remote,
-            remoteProvider: RemoteProviderConfiguration(),
-            transcript: "Make it concise",
-            selectedText: longSelection,
-            context: CapturedContext(applicationName: "Editor")
-        )
-        #expect(throws: LerroError.self) {
-            try composer.prompts(for: rewrite)
-        }
     }
 
     private func decodePayload(_ value: String) throws -> [String: Any] {

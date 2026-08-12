@@ -19,16 +19,13 @@ struct SidebarView: View {
                 navigationButton(.home, title: "首页", systemName: "house")
                 navigationButton(.history, title: "历史", systemName: "clock.arrow.circlepath")
                 navigationButton(.dictionary, title: "词典", systemName: "character.book.closed")
+                navigationButton(.personalization, title: "个性化", systemName: "slider.horizontal.3")
             }
             .padding(.horizontal, 12)
 
             Spacer(minLength: 20)
 
             HStack(spacing: 4) {
-                LerroIconButton(systemName: "person.crop.circle", help: "个性化") {
-                    showSettings(.personalization)
-                }
-                .frame(maxWidth: .infinity)
                 LerroIconButton(systemName: "gearshape", help: "设置") {
                     showSettings(.settings)
                 }
@@ -96,7 +93,7 @@ struct SidebarView: View {
         from destination: SidebarDestination,
         direction: MoveCommandDirection
     ) {
-        let destinations: [SidebarDestination] = [.home, .history, .dictionary]
+        let destinations: [SidebarDestination] = [.home, .history, .dictionary, .personalization]
         guard let index = destinations.firstIndex(of: destination) else { return }
 
         let nextIndex: Int

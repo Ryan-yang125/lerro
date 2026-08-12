@@ -26,30 +26,11 @@ public actor RuleBasedIntelligenceService: IntelligenceProcessing {
         switch request.task {
         case .polish:
             return IntelligenceResult(text: cleaned, disposition: .insert, modelIdentifier: statusValue.modelIdentifier)
-        case .rewriteSelection:
-            let selected = request.selectedText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let replacement = selected.isEmpty ? cleaned : basicRewrite(selected: selected, instruction: cleaned)
-            return IntelligenceResult(text: replacement, disposition: .replaceSelection, modelIdentifier: statusValue.modelIdentifier)
         case .translate:
             throw LerroError.modelUnavailable("翻译需要完成本地语言模型下载")
-        case .answer:
-            throw LerroError.modelUnavailable("指令需要完成本地语言模型下载")
         }
     }
 
     public func modelStatus() -> LocalModelStatus { statusValue }
 
-    private func basicRewrite(selected: String, instruction: String) -> String {
-        let lowercased = instruction.lowercased()
-        if lowercased.contains("大写") || lowercased.contains("uppercase") {
-            return selected.uppercased()
-        }
-        if lowercased.contains("小写") || lowercased.contains("lowercase") {
-            return selected.lowercased()
-        }
-        if lowercased.contains("精简") || lowercased.contains("shorter") {
-            return String(selected.prefix(max(1, selected.count * 2 / 3)))
-        }
-        return selected
-    }
 }

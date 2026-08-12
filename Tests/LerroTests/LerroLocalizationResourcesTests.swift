@@ -128,9 +128,9 @@ struct LerroLocalizationResourcesTests {
         )
         let localeInjection = ".environment(\\.locale, LerroInterfaceLocalization.locale(for: preferences.appLanguage))"
 
-        #expect(source.components(separatedBy: localeInjection).count - 1 >= 2)
+        #expect(source.components(separatedBy: localeInjection).count - 1 >= 1)
         #expect(source.contains("CaptureHUDView(session: self)"))
-        #expect(source.contains("AskAnswerCardView(session: self)"))
+        #expect(!source.contains("AskAnswerCardView(session: self)"))
     }
 
     @Test("Common Core, Mac, and Intelligence error details have English coverage")

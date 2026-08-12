@@ -16,7 +16,7 @@ public actor AppleSpeechService: SpeechTranscribing {
     )
     private var audioEngine: AVAudioEngine?
     private var analyzer: SpeechAnalyzer?
-    private var transcriber: SpeechTranscriber?
+    private var transcriber: DictationTranscriber?
     private var speechDetector: SpeechDetector?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
     private var eventContinuation: AsyncThrowingStream<SpeechEvent, any Error>.Continuation?
@@ -50,25 +50,21 @@ public actor AppleSpeechService: SpeechTranscribing {
         microphoneDeviceUID: String?,
         muteOtherAudio: Bool,
         saveAudio: Bool,
+        vocabulary: [SpeechVocabularyTerm],
         detectSpeechEndpoint: Bool
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error> {
         await cancel()
         let generation = UUID()
         sessionGeneration = generation
 
-        guard SpeechTranscriber.isAvailable else {
-            sessionGeneration = nil
-            throw LerroError.speechUnavailable("SpeechTranscriber 在当前系统上不可用")
-        }
-
         let requestedLocale = Locale(identifier: localeIdentifier)
-        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
+        guard let locale = await DictationTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
             if sessionGeneration == generation { sessionGeneration = nil }
             throw LerroError.speechUnavailable("不支持语言 \(localeIdentifier)")
         }
         try requireCurrent(generation)
 
-        let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+        let transcriber = DictationTranscriber(locale: locale, preset: .progressiveLongDictation)
         switch await AssetInventory.status(forModules: [transcriber]) {
         case .installed:
             _ = try? await AssetInventory.reserve(locale: locale)
@@ -116,6 +112,12 @@ public actor AppleSpeechService: SpeechTranscribing {
             modules: modules,
             options: .init(priority: .userInitiated, modelRetention: .lingering)
         )
+        let analysisContext = AnalysisContext()
+        let contextualStrings = speechContextualStrings(from: vocabulary)
+        if !contextualStrings.isEmpty {
+            analysisContext.contextualStrings[.general] = contextualStrings
+        }
+        try await analyzer.setContext(analysisContext)
         try await analyzer.prepareToAnalyze(in: analysisFormat)
         try requireCurrent(generation)
 
@@ -338,7 +340,7 @@ public actor AppleSpeechService: SpeechTranscribing {
         await analyzerToCancel?.cancelAndFinishNow()
     }
 
-    private func ensureAssets(for transcriber: SpeechTranscriber, locale: Locale) async throws {
+    private func ensureAssets(for transcriber: DictationTranscriber, locale: Locale) async throws {
         let modules: [any SpeechModule] = [transcriber]
         let status = await AssetInventory.status(forModules: modules)
         switch status {
@@ -357,22 +359,15 @@ public actor AppleSpeechService: SpeechTranscribing {
     }
 
     public func resourceStatus(localeIdentifier: String) async -> LanguageResourceStatus {
-        guard SpeechTranscriber.isAvailable else {
-            return LanguageResourceStatus(
-                state: .unsupported,
-                sourceLanguageIdentifier: localeIdentifier,
-                message: "SpeechTranscriber 在当前系统上不可用"
-            )
-        }
         let requestedLocale = Locale(identifier: localeIdentifier)
-        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
+        guard let locale = await DictationTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
             return LanguageResourceStatus(
                 state: .unsupported,
                 sourceLanguageIdentifier: localeIdentifier,
                 message: "此听写语言暂不支持"
             )
         }
-        let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+        let transcriber = DictationTranscriber(locale: locale, preset: .progressiveLongDictation)
         switch await AssetInventory.status(forModules: [transcriber]) {
         case .installed:
             return LanguageResourceStatus(
@@ -408,19 +403,16 @@ public actor AppleSpeechService: SpeechTranscribing {
     }
 
     public func prepareResources(localeIdentifier: String) async throws -> LanguageResourceStatus {
-        guard SpeechTranscriber.isAvailable else {
-            throw LerroError.speechUnavailable("SpeechTranscriber 在当前系统上不可用")
-        }
         let requestedLocale = Locale(identifier: localeIdentifier)
-        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
+        guard let locale = await DictationTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
             throw LerroError.speechUnavailable("不支持语言 \(localeIdentifier)")
         }
-        let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+        let transcriber = DictationTranscriber(locale: locale, preset: .progressiveLongDictation)
         try await ensureAssets(for: transcriber, locale: locale)
         return await resourceStatus(localeIdentifier: locale.identifier)
     }
 
-    private func receive(result: SpeechTranscriber.Result, generation: UUID) {
+    private func receive(result: DictationTranscriber.Result, generation: UUID) {
         guard sessionGeneration == generation else { return }
         let text = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
         transcriptLedger.apply(
@@ -643,6 +635,33 @@ private func formatsMatch(_ lhs: AVAudioFormat, _ rhs: AVAudioFormat) -> Bool {
         && lhs.channelCount == rhs.channelCount
         && lhs.commonFormat == rhs.commonFormat
         && lhs.isInterleaved == rhs.isInterleaved
+}
+
+func speechContextualStrings(
+    from vocabulary: [SpeechVocabularyTerm],
+    limit: Int = 100
+) -> [String] {
+    guard limit > 0 else { return [] }
+    let ordered = vocabulary.enumerated().sorted { lhs, rhs in
+        if lhs.element.priority == rhs.element.priority {
+            return lhs.offset < rhs.offset
+        }
+        return lhs.element.priority > rhs.element.priority
+    }
+    var seen: Set<String> = []
+    var strings: [String] = []
+    strings.reserveCapacity(min(limit, vocabulary.count))
+    for (_, term) in ordered {
+        let replacement = term.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phrase = term.phrase.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = replacement.isEmpty ? phrase : replacement
+        guard !value.isEmpty else { continue }
+        let key = value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        guard seen.insert(key).inserted else { continue }
+        strings.append(value)
+        if strings.count == limit { break }
+    }
+    return strings
 }
 
 private extension Duration {

@@ -1,109 +1,108 @@
 # Intelligence modes and model providers
 
-Lerro always uses Apple Speech for transcription. Dictate, Command, and Rewrite can
-then route the raw transcript through one of three user-selected modes:
+Apple Speech is the only transcription engine. Lerro then selects one of three modes in this fixed product order:
 
-- `raw`: direct Dictate output with no language-model call.
-- `local`: Qwen through MLX on the current Mac.
-- `remote`: a user-configured OpenAI-compatible API.
+1. `raw`: Apple transcript goes directly to delivery.
+2. `remote`: a user-configured OpenAI-compatible API refines or transforms text.
+3. `local`: Qwen through MLX on the current Mac refines or transforms text.
 
-Translate uses Apple Translation directly and does not depend on the selected
-intelligence mode. Command and Rewrite require `local` or `remote`. A capture freezes
-the selected mode, Provider configuration, API key, context options, and target
-language when recording starts. It also freezes the matching app-style instruction
-and whether the target app already has permission to perform a voice finish action.
+New installations start in `raw`. Remote or local AI enables Dictate refinement,
+Translate, automatic correction learning, and per-app tone. Apple-only mode keeps
+transcription, live preview, strict delivery, recovery, manual dictionary management,
+and Apple Speech dictionary context.
 
-## Live transcription and finish actions
+A capture freezes the selected mode, Provider configuration, API key, context
+options, target language, and matching app tone when recording starts. Partial
+transcripts remain presentation-only. The final Apple Speech result enters the
+selected intelligence route.
 
-Apple Speech partial and final events remain the source of the live HUD transcript.
-Quick Dictate adds `SpeechDetector` only to endpoint-enabled Dictate sessions. Its
-speech/silence results control capture completion and never become model input.
-Voice follow-up semantic edits use `rewriteSelection`: the prior delivered version
-is the selected text and the new spoken instruction is the transcript. AppSession
-freezes local/BYOK configuration at follow-up capture start. Raw mode supports the
-deterministic editor only and returns an explicit model-required error for semantic
-requests.
-Partial text is presentation-only: Lerro never runs it through a language model,
-persists it, or writes it into the target application. Only the final event enters
-the selected intelligence route.
+## Apple Speech and personal vocabulary
 
-Hands-free Dictate recognizes an exact trailing `send it` or `发送` command after
-the final transcript arrives. The suffix is removed before local or remote processing.
-The target app is submitted only after the text has been inserted, the post-delivery
-receipt still matches the focused element and its complete value, and the app has
-been approved. First use in each app requires an explicit confirmation; successful
-confirmation stores the app name and bundle identifier in `preferences.json`.
+[`AppleSpeechService.swift`](../Sources/LerroMac/Speech/AppleSpeechService.swift)
+uses `DictationTranscriber(locale:preset:.progressiveLongDictation)`. Before the
+capture begins, AppSession selects relevant non-snippet dictionary entries for the
+target application. Application-scoped entries rank ahead of global entries, followed
+by priority, use count, and recency.
 
-## Default model
+`SpeechVocabularyTerm` carries phrase, replacement, application scope, and priority.
+Apple Speech receives at most 100 unique strings through
+`AnalysisContext.contextualStrings[.general]`; replacement is preferred, with phrase
+used when replacement is empty. Case and diacritic folding removes duplicates.
 
-The current default is:
+Quick Dictate installs `SpeechDetector` only for explicitly enabled Dictate sessions.
+It starts disabled. Once enabled, detected first speech followed by about 1.2 seconds
+of continuous silence requests capture completion. Detector results never enter AI.
+
+## AI tasks
+
+`IntelligenceTask` exposes two production transformations:
+
+- `polish`: refine a Dictate transcript using enabled context, dictionary, and app tone.
+- `translate`: translate to the selected target language.
+
+Automatic dictionary learning uses a separate structured classification method on
+`IntelligenceProcessing`. It receives a `DictionaryLearningRequest` with the smallest
+original/corrected spans, bounded nearby context, app name, and optional Bundle ID.
+The local or remote runtime must return exactly one JSON object containing zero to
+three candidates. Extra fields, code fences, invalid source spans, or invalid
+confidence values reject the full result.
+
+AI Dictate generation failure falls back to the Apple Speech transcript. Translate
+and tone preview report an explicit failure. A new capture or cancellation prevents
+an old model result from committing.
+
+## Default local model
 
 ```text
 mlx-community/Qwen3.5-4B-MLX-4bit
 ```
 
-The repository and model page declare Apache-2.0. The expected download is
-approximately 3.03 GB; the model page and actual download metadata remain the
-source of truth for a release. Lerro asks for explicit consent before starting
-the first download.
+The repository and model page declare Apache-2.0. The expected download is about
+3.03 GB; release evidence and current host metadata remain authoritative. Lerro asks
+for explicit consent before the first download.
 
-Onboarding reads the current Mac's chip class, Metal availability, physical
-memory, and free storage locally. Apple silicon with Metal, at least 16 GiB of
-memory, and at least 10 GiB of free storage receives the local-AI recommendation.
-Constrained memory or storage receives the API recommendation. The user can
-still choose local AI when the platform supports it.
+Onboarding reads chip class, Metal availability, physical memory, and free storage
+locally. Apple silicon with Metal, at least 16 GiB memory, and at least 10 GiB free
+storage receives the local-AI recommendation. Constrained devices receive the API
+recommendation. The user can select any supported path.
 
 ## Download and cache boundary
 
 - The public Hugging Face client uses `bearerToken: nil`.
 - Model files stay under `~/Library/Application Support/app.lerro.mac/Models/`.
-- Download progress is monotonic and includes transferred bytes, total bytes,
-  and an estimated transfer rate when available.
-- Pause cancels the active request after persisting URLSession resume data and
-  a small model checkpoint. Closing Onboarding or the main window leaves the
-  AppSession-owned task running; quitting preserves the checkpoint for the next
-  launch.
-- Stop removes only incomplete files, resume data, and the Lerro download
-  checkpoint. Completed blobs remain available for reuse.
-- Complete blobs are staged in the cache directory and published atomically.
-- Snapshot or ref failures preserve a complete source for a retry.
-- Existing cache data is validated before reuse.
-- A legacy migration reuses or moves an existing model on the same volume so an
-  upgrade does not create a second multi-gigabyte copy.
+- Progress is monotonic and reports transferred bytes, total bytes, and estimated rate when available.
+- Pause persists URLSession resume data and a small checkpoint before cancelling the active request.
+- Closing Onboarding or the main window leaves the AppSession-owned download running.
+- Relaunch restores the checkpoint and can continue from resume data.
+- Stop removes incomplete files, resume data, and the Lerro checkpoint; complete blobs remain.
+- Complete blobs are staged and atomically published; cache content is validated before reuse.
+- Identity migration moves or reuses an existing model on the same volume to avoid another 3 GB copy.
+
+The vendored download implementation and provenance live under [`Vendor/`](../Vendor/).
+[ADR 0001](decisions/0001-vendored-hugging-face-download-stack.md) records the patch boundary.
 
 ### Remove the local cache
 
-Quit Lerro before changing its model cache. In Finder, open
-`~/Library/Application Support/app.lerro.mac/Models/`, preserve any desired
-backup, and remove only the directory for the model being retired. Keep the
-parent Application Support directory and its preferences, history, dictionary,
-migration receipt, and audio data intact. The next model-backed action will
-show the download-consent and preparation flow again.
-
-The vendored download implementation and upstream provenance live under
-[`Vendor/`](../Vendor/). Architecture decision
-[`0001`](decisions/0001-vendored-hugging-face-download-stack.md) records the
-patch boundary and upgrade procedure.
+Quit Lerro. In Finder open
+`~/Library/Application Support/app.lerro.mac/Models/`, preserve any desired backup,
+and remove only the retired model directory. Keep the parent Application Support
+directory, preferences, history, dictionary, migration receipt, and audio. The next
+local action returns to download consent.
 
 ## Runtime behavior
 
 [`MLXLanguageModelRuntime.swift`](../Sources/LerroIntelligence/MLXLanguageModelRuntime.swift)
-owns model loading, generation, cancellation, and idle unloading. Shared load
-tasks are committed only after a final cancellation check. Session generation
-IDs prevent results from an earlier capture from updating the current capture.
+owns loading, generation, cancellation, and idle unloading. A shared load commits its
+container only after a final cancellation check. Capture generation IDs keep an old
+result from updating a new session.
 
-While an approved local model is downloading or paused, Quick Dictate keeps the
-selected local preference and delivers the final Apple Speech transcript through
-the raw route. Model-backed Dictate, Command, and semantic edits become available
-as soon as the runtime reports ready.
-
-Lerro keeps prompts, transcripts, selected text, answers, API keys and
-Authorization headers out of logs. Local generation keeps generation content on
-the current Mac.
+While a selected local model is downloading or paused, current Dictate uses Apple
+raw and preserves the local preference. Local refinement, translation, automatic
+learning, and tone preview become available when the runtime reports ready. Local
+generation content remains on the Mac. Logs exclude prompts, transcript text,
+changed spans, output, API keys, and Authorization headers.
 
 ## BYOK remote providers
-
-The settings UI includes these presets:
 
 | Provider | API base | Default model |
 | --- | --- | --- |
@@ -112,50 +111,44 @@ The settings UI includes these presets:
 | Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | entered by the user |
 | Custom | entered by the user | entered by the user |
 
-All four paths use Chat Completions messages through
+All paths use Chat Completions through
 [`OpenAICompatibleRemoteLanguageModelRuntime.swift`](../Sources/LerroIntelligence/OpenAICompatibleRemoteLanguageModelRuntime.swift).
-DeepSeek requests set temperature to zero and explicitly disable thinking. The
-client uses an ephemeral URLSession, accepts HTTPS and loopback HTTP, blocks
-cross-origin redirects, caps response bodies, and returns sanitized errors.
+DeepSeek uses temperature zero with thinking disabled. The ephemeral URLSession
+accepts HTTPS and loopback HTTP, blocks cross-origin redirects, caps response bodies,
+and sanitizes user-facing errors.
 
-The connection test sends one fixed synthetic message and no captured app
-context. A normal request always includes the raw transcript. Users can
-independently enable application identity, window title, 80/40 cursor context,
-selected text, up to 12 matching glossary entries, and the app tone. Selection
-context is capped at 4,096 characters; API Rewrite also requires selected-text
-sharing and stops before generation when the captured selection exceeds that cap.
+The connection test sends one fixed synthetic message with zero capture context.
+Normal refinement and translation always include the raw transcript. Optional
+categories are application identity, window title, 80/40 caret context, required
+selected text, up to 12 dictionary matches, and app tone. Selected text is capped at
+4,096 characters.
 
-Dictate uses [`CloudPromptComposer.swift`](../Sources/LerroCore/Services/CloudPromptComposer.swift)
-and prompt version `M_balanced_seven_shot`. The user message is a sorted JSON
-payload with raw data, normalization rules, workspace context and
-personalization. Local and remote model calls both receive the original Apple
-Speech transcript without `TextPipeline` preprocessing.
+Correction learning uses a smaller payload: original/corrected spans, up to 80 UTF-16
+units before, up to 40 after, app name, and optional Bundle ID. The system prompt
+accepts lexical recognition corrections and rejects meaning, fact, date/time, tone,
+structure, addition, deletion, and broad rewrite changes.
 
-Provider settings and the API key are stored in plaintext in
-`~/Library/Application Support/app.lerro.mac/preferences.json`. The containing
-directory is `0700` and the preferences file is `0600`. Clearing the saved key
-from the settings page also switches the app to raw Dictate.
+Provider settings and API key are plaintext fields in
+`~/Library/Application Support/app.lerro.mac/preferences.json`. The directory is
+`0700`, the file is `0600`, and clearing the key switches to Apple raw.
 
 ### Remote runtime verification
 
-Deterministic tests use a URLProtocol fixture. The explicit DeepSeek smoke uses
-the product runtime and only runs when both the environment flag and key exist:
+Deterministic tests use a URLProtocol fixture. The explicit DeepSeek smoke uses the
+product runtime only when the environment flag and key are available:
 
 ```zsh
 ./script/test_live_remote.sh
 ```
 
-The script reads `.env.deepseek.local` when present, requires mode `0600`, and
-also accepts an already exported `DEEPSEEK_API_KEY`. The env file is ignored and
-must stay outside public exports. The smoke calls the fixed connection probe, generates an
-English self-correction sample, then runs the production seven-shot prompt on a noisy Chinese
-Apple Speech sample. It prints only latency and pass markers.
+The script reads an ignored mode-`0600` `.env.deepseek.local` or exported
+`DEEPSEEK_API_KEY`. It prints latency and pass markers without request or response
+content.
 
 ## Verification
 
-Normal tests and CI exercise deterministic adapters and keep the real model
-smoke disabled. After a maintainer confirms the cache, model ID, network state,
-memory budget, and permission to use the local model, run:
+Normal tests and CI use deterministic adapters. After recording model ID, cache,
+network state, hardware, and authorization, run the real local smoke:
 
 ```zsh
 LERRO_LIVE_MODEL_CACHE="$HOME/Library/Application Support/app.lerro.mac/Models" \
@@ -164,13 +157,10 @@ LERRO_LIVE_MODEL_OFFLINE=1 \
 ./script/test_live_model.sh
 ```
 
-The release matrix records first download, progress, cancellation, cache hit,
-offline load, real generation, idle unload, interrupted download behavior, and
-the absence of duplicate model copies after migration. This command is
-resource-intensive. With `LERRO_LIVE_MODEL_OFFLINE=1`, a missing cache fails
-inside a kernel network-denied sandbox. Omitting the flag permits recovery of
-missing cache files from the configured public model host.
+The Release matrix records first download, background progress, pause, resume, stop,
+restart continuation, cache hit, offline load, generation, idle unload, and duplicate
+model-copy checks. With `LERRO_LIVE_MODEL_OFFLINE=1`, missing cache data fails inside
+a network-denied sandbox.
 
-Model changes require the model ID, immutable source revision when available,
-expected size, license, conversion source, prompt-format compatibility, quality
-checks, privacy review, and release-note update.
+Model changes require source revision, expected size, license, conversion source,
+prompt compatibility, quality checks, privacy review, and release-note updates.

@@ -86,16 +86,9 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         )
 
         do {
-            // Plain insertion deliberately targets the keyboard focus that
-            // exists when Command-V is posted. AX context remains useful for
-            // capture and selection-aware rewrite, while a normal insert has
-            // no focused-element, secure-state, selection, PID, or bundle
-            // prerequisite.
-            if !replacingSelection {
+            if !replacingSelection, targetPolicy == .reactivateCaptured {
                 stage = "paste"
-                if targetPolicy == .reactivateCaptured {
-                    try await reactivateCapturedApplicationForPlainInsertion(context)
-                }
+                try await reactivateCapturedApplicationForPlainInsertion(context)
                 if let pasteOverride {
                     try await pasteOverride(text, context, false)
                     await onCommit()
@@ -123,6 +116,11 @@ public actor AccessibilityTextDeliverer: TextDelivering {
 
             stage = "paste"
             if let pasteOverride {
+                try requireExpectedFocus(
+                    focusSnapshot(),
+                    context: context,
+                    replacingSelection: replacingSelection
+                )
                 try await pasteOverride(text, context, replacingSelection)
                 await onCommit()
                 return makeDeliveryReceipt(fallback: context)
@@ -218,18 +216,6 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         )
     }
 
-    public func submit(_ receipt: TextDeliveryReceipt) async throws {
-        guard VoiceFinishActionResolver.permitsSubmit(in: receipt.context) else {
-            throw LerroError.insertionFailed("当前输入框不支持语音发送")
-        }
-        try await performReceiptAction(
-            receipt,
-            action: .submit,
-            keyCode: CGKeyCode(kVK_Return),
-            flags: []
-        )
-    }
-
     private func reactivateCapturedApplicationForPlainInsertion(
         _ context: CapturedContext
     ) async throws {
@@ -313,9 +299,7 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         Self.logger.info(
             "delivery-target match pid=\(pidMatches, privacy: .public) bundle=\(bundleMatches, privacy: .public)"
         )
-        if focusMatchesTarget(snapshot, context: context),
-           snapshot.focusedElementAvailable,
-           snapshot.selectionState != .unavailable {
+        if focusMatchesTarget(snapshot, context: context) {
             try requireExpectedFocus(snapshot, context: context, replacingSelection: replacingSelection)
             Self.logger.debug("delivery-target already-current")
             return try resolveDeliveryTarget(snapshot, context: context)
@@ -338,9 +322,15 @@ public actor AccessibilityTextDeliverer: TextDelivering {
             }
             snapshot = focusSnapshot()
             guard focusMatchesTarget(snapshot, context: context) else { continue }
-            guard snapshot.focusedElementAvailable,
-                  snapshot.selectionState != .unavailable else { continue }
-            try requireExpectedFocus(snapshot, context: context, replacingSelection: replacingSelection)
+            do {
+                try requireExpectedFocus(
+                    snapshot,
+                    context: context,
+                    replacingSelection: replacingSelection
+                )
+            } catch {
+                continue
+            }
             Self.logger.debug("delivery-target activation-settled attempt=\(attempt, privacy: .public)")
             return try resolveDeliveryTarget(snapshot, context: context)
         }
@@ -413,8 +403,7 @@ public actor AccessibilityTextDeliverer: TextDelivering {
                 && snapshot.focusedElementFingerprint
                     == previousReceipt.focusedElementFingerprint
         } else {
-            identityMatches = snapshot.processIdentifier != nil
-                && snapshot.bundleIdentifier != nil
+            identityMatches = focusMatchesTarget(snapshot, context: fallback)
         }
         let context = if previousReceipt != nil && !identityMatches {
             fallback
@@ -427,7 +416,11 @@ public actor AccessibilityTextDeliverer: TextDelivering {
                 selectionState: snapshot.selectionState,
                 role: snapshot.role ?? fallback.role,
                 subrole: snapshot.subrole ?? fallback.subrole,
-                isSecureField: snapshot.safety == .secure
+                isSecureField: snapshot.safety == .secure,
+                focusedElementAvailable: snapshot.focusedElementAvailable,
+                focusedElementFingerprint: snapshot.focusedElementFingerprint,
+                focusedValueFingerprint: snapshot.focusedValueFingerprint,
+                selectedRange: snapshot.selectedRange
             )
         }
         return TextDeliveryReceipt(
@@ -570,7 +563,6 @@ func finalizeCommittedPasteDelivery(
 enum ReceiptAction: Equatable, Sendable {
     case undo
     case correct(String)
-    case submit
 }
 
 struct ResolvedDeliveryTarget: Equatable, Sendable {
@@ -595,6 +587,7 @@ struct DeliveryFocusSnapshot: Equatable, Sendable {
     var selectedTextFingerprint: Int?
     var focusedValueFingerprint: Int?
     var focusedElementFingerprint: Int?
+    var selectedRange: UTF16TextRange?
     var role: String?
     var subrole: String?
 
@@ -609,6 +602,7 @@ struct DeliveryFocusSnapshot: Equatable, Sendable {
         selectedTextFingerprint: Int? = nil,
         focusedValueFingerprint: Int? = nil,
         focusedElementFingerprint: Int? = nil,
+        selectedRange: UTF16TextRange? = nil,
         role: String? = nil,
         subrole: String? = nil
     ) {
@@ -623,6 +617,7 @@ struct DeliveryFocusSnapshot: Equatable, Sendable {
         self.selectedTextFingerprint = selectedTextFingerprint
         self.focusedValueFingerprint = focusedValueFingerprint
         self.focusedElementFingerprint = focusedElementFingerprint
+        self.selectedRange = selectedRange
         self.role = role
         self.subrole = subrole
     }
@@ -686,11 +681,24 @@ private func validateExpectedFocus(
     guard hasExpectedIdentity else {
         throw LerroError.insertionFailed("捕获上下文缺少输入应用身份")
     }
-    guard snapshot.focusedElementAvailable else {
-        throw LerroError.insertionFailed("无法确认当前输入框的焦点状态")
-    }
-    guard snapshot.selectionState != .unavailable else {
-        throw LerroError.insertionFailed("无法安全读取当前选区，结果已保留在历史记录中")
+    if context.focusedElementAvailable {
+        guard snapshot.focusedElementAvailable else {
+            throw LerroError.insertionFailed("无法确认当前输入框的焦点状态")
+        }
+        guard let expectedElement = context.focusedElementFingerprint,
+              snapshot.focusedElementFingerprint == expectedElement else {
+            throw LerroError.insertionFailed("当前输入框已变化，结果已保留在历史记录中")
+        }
+        if let expectedValue = context.focusedValueFingerprint {
+            guard snapshot.focusedValueFingerprint == expectedValue else {
+                throw LerroError.insertionFailed("当前输入内容已变化，结果已保留在历史记录中")
+            }
+        }
+        if let expectedRange = context.selectedRange {
+            guard snapshot.selectedRange == expectedRange else {
+                throw LerroError.insertionFailed("当前光标或选区已变化，结果已保留在历史记录中")
+            }
+        }
     }
 
     if replacingSelection {
@@ -708,6 +716,18 @@ private func validateExpectedFocus(
             throw LerroError.insertionFailed("原选区已变化，结果已保留在历史记录中")
         }
     }
+}
+
+func validateExpectedFocusForTesting(
+    _ snapshot: DeliveryFocusSnapshot,
+    context: CapturedContext,
+    replacingSelection: Bool = false
+) throws {
+    try validateExpectedFocus(
+        snapshot,
+        context: context,
+        replacingSelection: replacingSelection
+    )
 }
 
 private func resolveDeliveryTarget(
@@ -762,10 +782,12 @@ private func validateSystemDeliveryFocus(
         context: context,
         replacingSelection: replacingSelection
     )
-    _ = try validatedFocusedElement(
-        context: context,
-        replacingSelection: replacingSelection
-    )
+    if context.focusedElementAvailable {
+        _ = try validatedFocusedElement(
+            context: context,
+            replacingSelection: replacingSelection
+        )
+    }
 }
 
 private func axElement(from element: AXUIElement, attribute: CFString) -> AXUIElement? {
@@ -838,6 +860,9 @@ private func currentDeliveryFocusSnapshot() -> DeliveryFocusSnapshot {
             : nil,
         focusedValueFingerprint: focusedValue?.hashValue,
         focusedElementFingerprint: Int(CFHash(focusedElement)),
+        selectedRange: selection.range.map {
+            UTF16TextRange(location: $0.location, length: $0.length)
+        },
         role: role,
         subrole: subrole
     )
@@ -845,7 +870,7 @@ private func currentDeliveryFocusSnapshot() -> DeliveryFocusSnapshot {
 
 private func deliverySelectionObservation(
     from element: AXUIElement
-) -> (state: TextSelectionState, text: String?) {
+) -> (state: TextSelectionState, text: String?, range: CFRange?) {
     let selectedText = axString(
         from: element,
         attribute: kAXSelectedTextAttribute as CFString
@@ -873,7 +898,8 @@ private func deliverySelectionObservation(
             selectedText: selectedText,
             selectedRange: selectedRange
         ),
-        selectedText
+        selectedText,
+        selectedRange
     )
 }
 
@@ -980,10 +1006,12 @@ private func submitPasteEvent(
         context: context,
         replacingSelection: replacingSelection
     )
-    let focusedElement = try validatedFocusedElement(
-        context: context,
-        replacingSelection: replacingSelection
-    )
+    let focusedElement = context.focusedElementAvailable
+        ? try validatedFocusedElement(
+            context: context,
+            replacingSelection: replacingSelection
+        )
+        : nil
 
     let (keyDown, keyUp) = try makeLerroPasteKeyEvents()
     try Task.checkCancellation()
@@ -1011,12 +1039,14 @@ private func submitPasteEvent(
         context: context,
         replacingSelection: replacingSelection
     )
-    let currentFocusedElement = try validatedFocusedElement(
-        context: context,
-        replacingSelection: replacingSelection
-    )
-    guard CFEqual(currentFocusedElement, focusedElement) else {
-        throw LerroError.insertionFailed("当前输入框已变化，结果已保留在历史记录中")
+    if let focusedElement {
+        let currentFocusedElement = try validatedFocusedElement(
+            context: context,
+            replacingSelection: replacingSelection
+        )
+        guard CFEqual(currentFocusedElement, focusedElement) else {
+            throw LerroError.insertionFailed("当前输入框已变化，结果已保留在历史记录中")
+        }
     }
     guard transaction.isOwned() else {
         throw LerroError.insertionFailed("临时剪贴板已被其他应用更新")

@@ -38,7 +38,7 @@ licenses, and deterministic validation assets.
 | --- | --- |
 | [`handoff/`](handoff/README.md) | Fresh-agent bootstrap, current release state, maintainer readiness, full-chain workflow, and evidence template |
 | [`architecture.md`](architecture.md) | Targets, dependencies, composition, concurrency, storage, and build shape |
-| [`core-flow.md`](core-flow.md) | Dictate, Translate, Ask, Rewrite, Hands-free, failure, cancellation, and cleanup |
+| [`core-flow.md`](core-flow.md) | Dictate, Translate, strict delivery, failure recovery, automatic dictionary learning, cancellation, and cleanup |
 | [`permissions.md`](permissions.md) | Microphone, Accessibility, TCC, and manual checks |
 | [`models.md`](models.md) | Consent, model source, download, cache, runtime, offline behavior, and smoke test |
 | [`privacy-security.md`](privacy-security.md) | Data map, secure input, clipboard, audio, network, logs, and deletion |
@@ -48,6 +48,10 @@ licenses, and deterministic validation assets.
 | [`identity.md`](identity.md) | Product, targets, Bundle ID, storage root, compatibility, and migration |
 | [`open-source/`](open-source/README.md) | Licenses, allowlist export, secret and history scans, and publication steps |
 | [`troubleshooting.md`](troubleshooting.md) | Build, resource, permission, Speech, hotkey, delivery, model, and signing diagnosis |
+
+V1.6 当前主路径为快捷键启动、居中实时预览、同一快捷键结束、严格写入和 HUD 消失。
+写入失败进入剪贴板恢复卡；AI Dictate 成功后可以在原字段观察修正并经 AI 分类写入标准词典。
+生产入口包含 Dictate 与 Translate，主导航包含首页、历史、词典和个性化。
 
 ## Sources of truth
 

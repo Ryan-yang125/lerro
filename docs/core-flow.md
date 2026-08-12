@@ -1,413 +1,268 @@
 # 核心链路与状态机
 
-本文件描述真实产品从快捷键或菜单命令到文本交付、回答展示和本地持久化的完整路径。权威实现位于
-[`AppSession.swift`](../Sources/Lerro/App/AppSession.swift)，领域状态位于
-[`CaptureModels.swift`](../Sources/LerroCore/Models/CaptureModels.swift)。
+Lerro 1.6 的生产主路径固定为：
+
+```text
+按快捷键 → 居中实时预览 → 再按一次 → 严格写入目标 → HUD 消失
+```
+
+成功写入结束当前交互。HUD 后处理只承担写入失败恢复和自动词典学习提示。
+长期决策见 [ADR 0012](decisions/0012-strict-delivery-ai-dictionary-learning.md)。
 
 ## 参与组件
 
-| 阶段 | 协议或服务 | 生产实现 |
-| --- | --- | --- |
-| 命令输入 | `HotkeyMonitoring` | [`GlobalHotkeyMonitor`](../Sources/LerroMac/Hotkeys/GlobalHotkeyMonitor.swift) |
-| 权限 | `PermissionChecking` | [`MacPermissionService`](../Sources/LerroMac/System/MacPermissionService.swift) |
-| 上下文 | `ContextCapturing` | [`AccessibilityContextService`](../Sources/LerroMac/Accessibility/AccessibilityContextService.swift) |
-| 收音与转写 | `SpeechTranscribing` | [`AppleSpeechService`](../Sources/LerroMac/Speech/AppleSpeechService.swift) |
-| 智能路由与提示词 | `IntelligenceProcessing` | [`PipelineIntelligenceService`](../Sources/LerroCore/Services/PipelineIntelligenceService.swift) + local/remote runtime |
-| 文本交付 | `TextDelivering` | [`AccessibilityTextDeliverer`](../Sources/LerroMac/Accessibility/AccessibilityTextDeliverer.swift) |
-| 历史与词典 | Repository protocols | [`Sources/LerroCore/Stores`](../Sources/LerroCore/Stores) |
-| 浮层 | `FloatingPanelController` | [`FloatingPanelController.swift`](../Sources/LerroMac/Panels/FloatingPanelController.swift) |
+| 组件 | 职责 |
+| --- | --- |
+| [`AppSession.swift`](../Sources/Lerro/App/AppSession.swift) | 会话 generation、状态机、Speech/AI/交付编排、恢复与自动学习 |
+| [`CaptureModels.swift`](../Sources/LerroCore/Models/CaptureModels.swift) | `CapturePhase`、模式、上下文、历史模型 |
+| [`GlobalHotkeyMonitor.swift`](../Sources/LerroMac/Hotkeys/GlobalHotkeyMonitor.swift) | 全局手势、吞键、前缀升级与 physical drain |
+| [`AppleSpeechService.swift`](../Sources/LerroMac/Speech/AppleSpeechService.swift) | Apple Speech 实时转写、词典上下文与可选静音结束 |
+| [`AccessibilityContextService.swift`](../Sources/LerroMac/Accessibility/AccessibilityContextService.swift) | capture 开始时的目标与安全指纹 |
+| [`AccessibilityTextDeliverer.swift`](../Sources/LerroMac/Accessibility/AccessibilityTextDeliverer.swift) | 写入前严格校验与 Command-V 事务 |
+| [`PasteboardRecoveryTextCopier.swift`](../Sources/LerroMac/Accessibility/PasteboardRecoveryTextCopier.swift) | 写入失败文本的剪贴板恢复 |
+| [`AccessibilityDeliveredTextObserver.swift`](../Sources/LerroMac/Accessibility/AccessibilityDeliveredTextObserver.swift) | 同目标 60 秒修正观察与最小差异提取 |
+| [`PipelineIntelligenceService.swift`](../Sources/LerroCore/Services/PipelineIntelligenceService.swift) | 润色、翻译与结构化修正分类 |
 
 ## 快捷键手势
 
-[`HotkeyDefinition`](../Sources/LerroCore/Models/CaptureModels.swift) 保存物理按键、精确
-modifier 集合和触发方式。捕获动作支持两种明确语义：
+公开捕获手势只有 `hold` 与 `toggle`：
 
-- `hold`：按下产生 `HotkeyTrigger.began`，松开同一 binding 产生 `ended`。
-- `toggle`：每次完整点按产生一次 `began`；第一次启动锁定录音，同一 action 的任一
-  toggle binding 再次点按均可完成。
+- `toggle`：第一次 began 启动，第二次 began 完成；ended 只释放物理按键所有权。
+- `hold`：began 启动，同一 definition ID 的 ended 完成。
+- `transcribing`、`enhancing`、`inserting` 期间忽略重复开始或停止。
+- 单修饰键由 `flagsChanged` 识别；普通组合键吞掉匹配的 down、repeat 与 up。
+- Fn 前缀升级为更具体 chord 时，FIFO consumer 依次取消旧动作、转交物理按键所有权并启动新动作。
+- 设置与 Onboarding 录制快捷键时暂停生产 dispatch；页面内测试不会启动麦克风、HUD、历史或写入。
 
-`HotkeyTrigger.definitionID` 将松开事件绑定到启动本次捕获的定义。另一个快捷键的
-松开无权完成当前 session。旧设置中的 Fn `press` 迁移为 `hold`，普通组合键
-`press` 与 `doublePress` 迁移为 `toggle`；旧 hands-free action 迁移为对应基础 action
-的 toggle binding。
-
-`HotkeySignature` 先把 Fn 标记与 legacy modifier keyCode 规范化，再执行冲突检测和
-迁移去重。左右 Command/Control/Option/Shift 在当前产品语义中等价。
-
-[`GlobalHotkeyMonitor`](../Sources/LerroMac/Hotkeys/GlobalHotkeyMonitor.swift) 使用 active
-HID event tap 在 head insert 位置监听 `flagsChanged`、`keyDown` 与 `keyUp`，事件 mask
-固定为 `0x1C00`。Fn 63、Globe 179、Control、Option、Shift、Command 等实体 modifier
-keyCode 分别进入按下集合，语义匹配使用规范化 flags；aggregate flags 未变化的重复事件
-仍进入所有权判断。120 ms 意图确认窗口保护常用系统 chord。候选或已激活的 Fn 前缀
-遇到已配置的 Fn+Shift/Fn+Space 时，状态机依次取消前缀 capture、转交物理所有权并启动
-更具体 action。命中的普通键 down、repeat 和 up，以及已接管 Fn/Globe 的全部事件，
-会持续吞到明确的实体 release；鼠标、滚动、系统媒体键及未命中 chord 继续传给前台应用。
-
-event tap 安装保持幂等。timeout 或 user-input disable 会先取消活动手势并进入 physical
-drain，再在 main queue 禁用并 invalidate 旧 tap、移除 run-loop source、创建新 active HID
-tap；排队重建受 generation 保护，显式 stop 后不会复活。逻辑 reset 已经吞掉的按键持续
-由 Lerro 持有至明确的 key-up 或 modifier release。Secure Input watchdog 在事件流暂停时取消活动
-hold，并在安全输入结束后对账物理键状态。文本交付产生的 Command-V 带固定 source
-marker，shortcut filter 识别后直接透传。Secure Input 结束后的首个非 repeat key-down
-会淘汰同键 stale claim 并重新匹配，旧 repeat 继续完成 drain。watchdog 先观察到退出时，
-recovery generation 会保留到旧 claim 释放或新物理 down 得到确认；左右同类 modifier 的
-方向由具体 keyCode 的物理状态判定，局部 release 不会生成候选。
-
-`AppSession` 使用带 dispatch epoch 的单一 FIFO consumer 保持 began/ended 顺序，停止
-monitor 后的旧队列事件无法跨越配置窗口，消费前还会确认 definition 仍存在于当前设置。
-toggle 在 Speech 启动期间收到同 action 的第二次点按会取消当前 generation；HUD 将 hold
-capture 锁定后忽略原 release，同 action 的下一次按下或 HUD 完成按钮结束录音。取消清理
-期间的 hold 使用 FIFO 配对，toggle 使用奇偶归并；显式 cancel 会清空全部待重放触发。
-菜单与 HUD 的程序化启动共享同一 generation guard，启动期快捷键无法创建第二个 session。
-
-设置和 Onboarding 的录制器进入独占配置状态时暂停生产 monitor，并在界面出现后自动开始
-检测。本录制窗口通过 AppKit local event monitor 读取 `flagsChanged`、`keyDown` 与
-`keyUp`，因此按钮、sheet 或其他控件持有 first responder 时仍能实时显示 peak chord、
-按下和松开；停止检测后 Tab/Return 恢复标准键盘导航。已验证候选与当前按键状态分离，
-无效 chord 无法覆盖或保存旧的半成品。快捷键变更按候选 binding 确认写入本地
-preferences 后页面才继续，并允许无关设置在同一保存队列中继续更新。活动 capture 期间
-禁用 binding 增删改。检测期间麦克风、Speech、HUD、历史与文本交付保持关闭。
+HUD 始终读取用户实际配置的 shortcut label。默认产品路径采用手动结束。Quick Dictate
+由独立开关控制，默认关闭；开启后只有 Dictate toggle session 安装 `SpeechDetector`，在检测到
+首声后约 1.2 秒连续静音时完成一次。
 
 ## CapturePhase
 
-| Phase | 含义 | 可接受的主要动作 |
-| --- | --- | --- |
-| `idle` | 无活动捕获 | 开始任意模式 |
-| `listening` | Speech 已成功启动 | hold 的匹配 release 或 toggle 的第二次点按结束；Escape 取消；HUD 可锁定 |
-| `transcribing` | 停止收音并等待最终转写 | Escape 取消；重复 toggle 被忽略 |
-| `enhancing` | 规则或模型处理 | Escape 取消；重复 toggle 被忽略 |
-| `inserting` | clipboard transaction + Command-V 交付 | Command-V 提交前允许 Escape 取消；提交后完成恢复并忽略取消；重复 toggle 始终忽略 |
-| `success` | 兼容完成状态，HUD 保持隐藏 | 新捕获可启动 |
-| `failed` | 短暂失败反馈并显示可读错误 | 新捕获可启动 |
-| `cancelled` | 短暂取消反馈 | 新捕获可启动 |
-
-捕获开始还有 `isStartingCapture` 状态，用于覆盖权限、上下文和 Speech 启动期间。快捷键
-被接受的同一轮 MainActor 事件会同步展开 HUD。hold 使用 waiting 声线；toggle 直接展开最终
-116×34 hands-free 外壳，麦克风准备留在内部状态，Speech 就绪时只激活同一个波形实例，
-外壳尺寸全程保持稳定。此时再次 toggle 会执行取消，防止延迟启动形成幽灵录音。
-`CaptureSession.startedAt` 在 Speech 和麦克风就绪后创建，录音计时不包含资源准备耗时。
-波形以 50 ms cadence 消费真实音量，使用独立柱状态、脉冲游走、邻柱扩散和非同步衰减；
-Apple Speech 的 progressive 与 final 事件同时更新两行实时转写，HUD 显示当前目标应用，
-progressive 文本使用较低强调，final 文本进入稳定强调；目标输入框在 Command-V commit 前
-保持不变。
-开始、完成和失败均保持静音，状态反馈由 HUD 与 VoiceOver 公告提供。
-结束收音后，`transcribing`、`enhancing` 和提交前的 `inserting` 共用同一个三点 processing
-指示。指示首帧已有完整静态轮廓，并以 30 Hz 上限驱动 opacity/scale，快速模型结果不会
-等待动画结束；Reduce Motion 使用中央点高亮的静态三点状态。
-
-## 共用启动序列
-
 ```text
-用户命令
-  -> intelligenceMode 与对应配置授权检查
-  -> 创建 capture generation
-  -> HUD 同步展开（hold: waiting；toggle: hands-free 最终外壳）
-  -> 请求麦克风、Accessibility
-  -> 捕获目标 app、PID/bundle、选区、焦点文本、role、安全状态
-  -> 安全输入框 fail closed
-  -> AppleSpeechService.start
-  -> 验证 generation 仍有效
-  -> 创建 CaptureSession UUID
-  -> listening waveform + 计时器 + partial stream
+idle
+  -> requestingPermissions
+  -> listening
+  -> transcribing
+  -> enhancing
+  -> inserting
+  -> idle
+
+任意未提交阶段 -> cancelled -> idle
+任意错误出口   -> failed
 ```
 
-关键实现：
+`CaptureSession` 冻结以下事实：
 
-- `AppSession.startCapture(_:handsFree:)`
-- `AppSession.beginCapture(_:generation:)`
-- `AppSession.ensureCapturePermissions()`
-- `CapturePrivacyPolicy.permitsCapture(in:)`
+- session ID、capture generation、模式与开始时间；
+- Apple raw / remote / local 路由；
+- Provider、Base URL、Model ID、API Key 与上下文开关；
+- 目标应用、输入元素、完整值、选区和安全状态指纹；
+- 语言、应用语气和目标语言。
 
-capture 需要麦克风与 Accessibility 全部可用。Accessibility 可用后幂等安装 global
-event tap；麦克风缺失会阻止 capture，同时保留快捷键监听以便后续重试。活动 capture
-期间撤销任一权限会先取消 capture；Accessibility 撤销后停止 event tap。相同 definitions
-的刷新保留当前按键手势。最长录音时间为九分钟，计时器到点后自动完成。
+旧异步任务返回前必须重新确认 generation 与 session ID。新 capture 会取消修正观察、旧 Speech、
+模型任务和等待中的 completion task。
 
-## 原始听写
+## 启动序列
 
-前提：`preferences.intelligenceMode == .raw`。
+1. 拒绝设置/Onboarding 快捷键录制期间的生产触发。
+2. 拒绝已有活动 capture、过渡阶段重复触发和受限旧模式。
+3. 停止上一条自动词典观察，清除恢复卡。
+4. 检查启动错误、麦克风、辅助功能和安全输入框。
+5. 通过 `ContextCapturing` 冻结目标应用、元素、文本、选区和安全指纹。
+6. 冻结智能模式与 Provider 配置；本地模型未就绪时当前 Dictate 使用 Apple raw。
+7. 从词典选择当前应用相关条目：应用级优先，其次全局，再按优先级、使用次数和最近使用排序。
+8. 映射为 `SpeechVocabularyTerm`，单次最多 100 条。
+9. 启动 Apple Speech，显示居中波形 HUD，并流式更新 partial transcript。
+
+`DictationTranscriber` 使用 `.progressiveLongDictation`。词典 replacement 优先作为
+`AnalysisContext.contextualStrings[.general]`；空 replacement 使用 phrase。大小写与音标折叠后去重。
+
+## HUD 实时预览
+
+- 初始宽度约 120 pt，应用名称、实时文本、波形和按钮保持视觉居中。
+- 同一 session 只增宽，最大 420 pt，避免 partial 反复修订造成左右抖动。
+- 达到最大宽度后显示最多两行，并保留最新内容。
+- 左右按钮占对称固定槽位，波形中心不随按钮变化。
+- listening 到 processing 复用当前宽度，以 spring/crossfade 过渡。
+- Reduce Motion 使用即时尺寸与淡入淡出；VoiceOver partial 播报节流。
+- 写入成功立即关闭 HUD；失败进入恢复卡；学习成功显示轻量提示。
+
+## Apple raw Dictate
+
+1. 第二次快捷键或 Quick Dictate endpoint 请求停止 Speech。
+2. Speech 完成 remaining analysis，返回最终 raw transcript。
+3. 空白结果走失败出口。
+4. snippet 可在当前应用范围内解析为手动短语替换。
+5. 普通 raw transcript 直接进入严格交付。
+
+Apple-only 用户仍可使用实时预览、手动词典、Apple Speech 词典上下文、写入恢复、历史和 CSV。
+
+## AI Dictate
+
+remote 或 local 模式下，Apple Speech 先产生原始 transcript，再由
+`PipelineIntelligenceService` 执行润色。capture 时冻结的应用语气、最小上下文和匹配词典进入
+当前请求。AI 成功结果写入目标；Dictate 模型失败时交付原始 transcript 并在历史中保存 raw 路由。
+
+成功写入且自动学习偏好启用时，启动词典学习观察。AI 关闭或本地模型当前不可用时，观察不会启动。
+
+## Translate
+
+Translate 始终需要当前选择的 remote 或 local AI：
+
+1. Apple Speech 产生 raw transcript。
+2. Intelligence request 携带目标语言和已授权上下文。
+3. AI 输出翻译文本。
+4. 严格交付到 capture 目标。
+
+AI 缺失、取消或生成失败会显示明确错误并保留失败历史。生产链路不调用 Apple Translation。
+
+## 应用语气
+
+个性化页面通过 `ApplicationCataloging` 读取已安装与正在运行的应用、Bundle ID 和真实图标。
+用户为一个应用输入 tone instruction，选择的 remote/local AI 使用真实示例运行预览；预览成功后
+保存 `AppToneProfile`。后续 AI Dictate 和 Translate 只使用当前应用命中的 profile。
+
+## 严格写入事务
+
+写入前 `AccessibilityTextDeliverer` 依次确认：
+
+1. secure input 仍关闭；
+2. 前台应用与 capture PID/bundle 一致；
+3. focused application 与 focused element 一致；
+4. 元素 role/subrole、完整 AX value 与 selection fingerprint 一致；
+5. 剪贴板快照与 Command-V 事件可以创建。
+
+随后事务：
+
+1. 保存 pasteboard 全部可读取 item/type 数据。
+2. 写入 session marker、transient type 和最终文本。
+3. 提交合成 Command-V down/up；该事件对成为 commit point。
+4. 等待目标消费。
+5. session 仍拥有临时内容时恢复快照；用户或其他应用已经更新剪贴板时保留新内容。
+
+commit point 前取消会阻止粘贴并释放已按下按键。commit point 后完成剪贴板清理与历史收尾。
+
+## 成功结束
+
+写入成功后：
+
+1. 保存 completed history，或按 `historyRetention == .never` 删除本次音频。
+2. 更新 usage 和历史列表。
+3. 符合 AI 自动学习条件时启动观察任务。
+4. 清空 active session、partial transcript 和 capture 状态。
+5. phase 回到 `idle`，HUD 立即消失。
+
+成功路径没有写入回执、撤回、重新听写、语音修改、语音发送或版本恢复。
+
+## 写入失败恢复
+
+应用、元素、值、选区、安全状态漂移，或剪贴板/事件提交失败时：
+
+1. 保存最终文本为 `lastResult`。
+2. 将 history 标记为 failed，记录最终文本和阶段耗时。
+3. `RecoveryTextCopying.copyForRecovery` 把最终文本写入系统剪贴板。
+4. HUD 显示：
 
 ```text
-SpeechTranscription
-  -> 保留 Apple Speech 原始 transcript
-  -> IntelligenceResult(disposition: .insert, source: raw)
-  -> AccessibilityTextDeliverer
-  -> completed HistoryEntry
-  -> retention / audio reconciliation
+未能写入 <目标应用>
+内容已复制到剪贴板
+
+[再次复制] [关闭]
 ```
 
-原始听写不加载 Qwen，也不调用远程 API。普通听写使用系统 Command-V 的标准语义：文本写入提交瞬间的当前键盘焦点，当前选区存在时由目标控件完成替换。
+“再次复制”重复写入同一最终文本。恢复卡不抢键盘焦点。用户关闭后回到 idle。
 
-只有全空白 transcript 会触发 `LerroError.emptyTranscription` 并进入失败清理。口头填充词、
-重复、错别字和首尾空白都按 Apple Speech 原值交付。该模式不运行词典替换或自动学习。
+## 自动词典学习
 
-自动化入口：
+学习只在以下条件同时成立时启动：
 
-- [`AppSessionCoreFlowTests.swift`](../Tests/LerroTests/AppSessionCoreFlowTests.swift) 的基础听写、选区语义和取消测试。
-- [`PipelineIntelligenceServiceTests.swift`](../Tests/LerroCoreTests/PipelineIntelligenceServiceTests.swift) 的 raw byte-preservation 测试。
+- Dictate 使用 remote 或 local AI；
+- `automaticDictionaryLearningEnabled` 开启；
+- 写入成功并取得严格目标 receipt；
+- Accessibility 可持续读取同一 app 与 input element；
+- 当前字段不属于 secure input。
 
-## 智能听写
+流程：
 
-前提：`intelligenceMode` 为 `.local` 或 `.remote`。capture 启动时冻结模式、Provider、
-Model ID、API Key 与上下文开关，本次会话不受随后设置变化影响。
+1. `DeliveredTextObserving.observe` 绑定刚写入文本和 receipt，观察最多 60 秒。
+2. 每 100 ms 读取字段；变化持续稳定 800 ms 后进入差异定位。
+3. 原写入文本在字段内必须唯一；差异必须与该范围相交。
+4. 本地 UTF-16 差异算法产出 original span、corrected span、前 80/后 40 上下文。
+5. 当前 remote/local AI 使用严格 JSON schema 分类，返回 0–3 个候选。
+6. phrase 必须来自 original span，replacement 必须来自 corrected span，confidence 范围为 0–1。
+7. confidence ≥ 0.7、映射非空且未重复的候选保存为当前应用 scope 的 learned entry。
+8. HUD 显示六秒轻量提示 `已学会：A → B · App`，用户可撤销本批词条。
 
-```text
-SpeechTranscription
-  -> 原始 transcript 直接进入 IntelligenceRequest
-  -> local: PromptComposer + MLX runtime
-     remote: CloudPromptComposer + OpenAI-compatible runtime
-  -> sanitize
-  -> disposition .insert
-  -> text delivery
-```
+应学习人名、品牌、术语、拼写、同音词、音译和中英文专名。语义变化、事实或日期变化、增删句、
+语气修改、结构调整和大段改写返回零候选。AI 输出包含额外字段、代码围栏、超过三条或来源不匹配时
+整体拒绝。
 
-本地 AI 需要用户确认约 3.03 GB 下载。API 模型需要完整 Base URL、Model ID 和 API Key；
-用户可分别控制应用、窗口标题、光标附近文字、选中文字、词典和语气六类上下文。
+同一词典数据进入 Apple Speech 最多 100 条上下文、remote/local AI prompt、词典页编辑与删除、
+CSV、应用筛选和全局提升。新 capture、离开 app/field、secure input、AX 失败、编辑器不支持、
+文本过大、超时和任务取消都会安静结束观察。
 
-Onboarding 先在本机评估芯片、Metal、物理内存和可用空间，再推荐本地 AI 或 API 模型。
-用户可以直接配置并测试 API，也可以启动本地模型后台下载。已批准的本地模型处于
-downloading、loading 或 paused 时，Quick Dictate 本次 capture 冻结为 raw 路由并直接交付
-Apple Speech transcript；偏好继续保持 local，模型 ready 后的新 capture 自动进入本地增强。
+## Onboarding
 
-Dictate 的模型调用异常或空结果会回退到 Apple Speech 原始 transcript，并把历史标记为
-未增强。任务取消继续作为取消传播。Command 与 Rewrite 保留明确失败，避免把原文当作对应任务
-的有效结果。
+Onboarding 由八个操作步骤构成：
 
-Dictate 在模型路由前检查本机手动词典。完整 transcript 与快捷语触发词精确匹配时，直接展开
-replacement 并交付；应用级快捷语优先于全局快捷语。该路径不调用 MLX 或远程 Provider。
+1. 选择历史和录音保存策略并确认。
+2. 完成麦克风、Speech 权限、语言资源检查和麦克风测试。
+3. 按 Apple 听写、远端 AI、本地 AI 的固定顺序选择能力；API 必须真实连接测试；本地路径展示芯片、内存、磁盘、约 3.03 GB 和下载控制。
+4. 录制快捷键并完成页面内开始/结束测试。
+5. 在内置编辑器完成一次真实听写、预览和写入。
+6. 模拟焦点丢失，点击“再次复制”并验证剪贴板。
+7. AI 用户修正预置专名，等待自动学习条目，再次听写验证。
+8. AI 用户选择真实应用，运行 tone 预览并保存。
 
-远程 Dictate 使用版本化的七个 few-shot 提示词和结构化 JSON payload。payload 包含原始
-transcript、规范化规则、用户允许的工作区上下文、应用语气与最多 12 个命中词典条目。
-光标上下文上限为前 80、后 40 个字符单元。
-
-## 翻译
-
-翻译使用偏好数组中的第一个目标语言，最多三个语言选项由 `UserPreferences` 限制。
-
-```text
-SpeechTranscription
-  -> freeze transcription locale + targetLanguage
-  -> AppleTranslationService
-  -> installed Apple Translation resource
-  -> disposition .insert
-  -> text delivery
-  -> translation HistoryEntry
-```
-
-Apple Translation 资源通过 SwiftUI `translationTask` 与
-`prepareTranslation()` 在引导或设置中准备。快捷键运行时只使用
-`TranslationSession(installedSource:target:)`，缺少资源时显示错误并停止交付。
-翻译全程不调用 MLX、BYOK 或网络 provider，也不使用原 transcript 充当翻译结果。
-
-## Command
-
-Command 根据捕获选区选择任务：
-
-- 选区存在：`.rewriteSelection`，完整 transcript 作为指令。
-- 无选区：`.answer`。
-
-### 回答
-
-```text
-context + transcript
-  -> selected prompt composer
-  -> local MLX 或 remote API stream
-  -> progressive IntelligenceResult(.showAnswer)
-  -> Command panel 更新
-  -> final answer 保存到 HistoryEntry.answerText
-```
-
-回答阶段不自动写入原应用。Command panel 会成为可交互的 key window，同时保持非 main window，
-避免夺取 SwiftUI 主窗口的 Scene 所有权。用户执行插入时，`reactivateCaptured` 先恢复捕获应用，
-再向恢复后的当前键盘焦点发送 Command-V。该路径不依赖 AX 文本元素或选区。
-
-### 选区改写
-
-```text
-captured selectedText + spoken instruction
-  -> PromptComposer.rewriteSelection
-  -> MLX generate
-  -> disposition .replaceSelection
-  -> 确认原 app 仍是当前键盘目标
-  -> 验证 PID/bundle、当前安全状态、原选区文本
-  -> clipboard transaction + synthetic Command-V
-```
-
-原应用关闭、焦点切换、选区变化或安全状态无法确认时，交付失败。生成结果保存在失败历史和 `lastResult`，便于用户恢复。
-
-## 完成与交付
-
-`AppSession.complete(session:transcription:)` 先构造结果与 HistoryEntry，再执行 disposition：
-
-- `.showAnswer`：展示 Ask panel。
-- `.insert`：向提交瞬间的当前键盘焦点发送 Command-V。
-- `.replaceSelection`：替换经过二次确认的原选区。
-- `.openURL`：交给 `NSWorkspace`。
-
-交付成功后：
-
-1. Command-V down/up 到达 commit point 后立即收起 HUD 并恢复面板点击透传；剪贴板等待与恢复继续完成。
-2. 按 history retention 保存历史或删除录音。
-3. 本地模型结果学习符合边界的词典替换；remote/raw 结果跳过自动学习。
-4. 普通文本交付返回仅存在于进程内的 `TextDeliveryReceipt`，绑定实际提交目标的 PID、
-   bundle、AX focused element fingerprint 和完整 AX value fingerprint。
-5. AppSession 显示六秒写入回执，并在进程内保留最多 60 秒的最近语音编辑目标。Undo、
-   即时修正、语音跟进编辑和语音发送会重新确认相同目标、输入框、内容、安全输入状态与
-   Accessibility；任一变化都会停用动作。
-6. 即时修正在同一次 adapter 事务内重新校验 receipt，并连续提交带 source marker 的
-   Command-Z 与 Command-V；History 保留 raw、processed 与 corrected 沿袭，用户填写的
-   误识别映射继续进入应用级学习词典。
-7. 每次语音或手动修改生成新 receipt 与 `DeliveryEditLineage` 版本；恢复上一版移动当前
-   版本指针，历史保留完整分支，精确替换继续进入可复核的应用级学习词典。
-8. 应用 retention 并删除过期音频。
-9. 更新 `lastResult`、历史第一页、词典和统计；历史页按当前查询继续分页加载。
-10. 清除 active session/generation 并回到 idle。
-
-## 交付事务
-
-[`AccessibilityTextDeliverer.swift`](../Sources/LerroMac/Accessibility/AccessibilityTextDeliverer.swift) 按 disposition 使用两条原生路径：
-
-1. `.insert` 以 best-effort 方式归档 general pasteboard 当前可读取的 item/type，使用 `currentHostOnly` 写入文本与 transient type，随后向提交瞬间的当前键盘焦点发送 Command-V。
-2. Dictate、Translate 与“粘贴上次结果”的普通插入不读取 AX focused element、选区、PID 或 bundle，也不激活捕获时的应用。处理期间发生的焦点变化会自然决定最终落点。
-3. Ask card 的显式插入先有界恢复捕获应用，只等待应用身份成为前台键盘目标，不要求 AX 文本元素或选区。
-4. `.replaceSelection` 继续绑定捕获时的 PID/bundle，验证当前安全状态、AX focused element、原选区文本与 fingerprint，再发送 Command-V。
-5. V keyDown/keyUp 使用当前键盘布局解析出的键码，通过 `CGEvent.post(tap: .cghidEventTap)` 连续提交，并携带 Lerro source marker 供全局快捷键过滤器透传。
-6. `inserting` 从剪贴板准备开始；Command-V down/up 构成交付 commit point，并同步触发 `TextDeliveryCommitHandler`。提交前允许取消，提交后完成 500ms 消费等待。
-7. 普通插入在等待结束后恢复归档剪贴板；严格 Rewrite 仅在 change count、唯一临时 item、marker、transient type 与文本仍属于当前 session 时恢复，期间产生的新剪贴板内容会保留。
-8. 同一 deliverer 同时只允许一个事务，避免两个异步交付互相覆盖临时剪贴板。
-
-## 免手完成动作
-
-默认 Fn toggle 听写使用 Quick Dictate。`AppleSpeechService` 仅为这一类 session 把
-`SpeechDetector` 加入 `SpeechAnalyzer`：首个 speech result 之后开始端点判断，语音恢复会
-取消等待，连续静音约 1.2 秒后发出一次 `silenceElapsed`，AppSession 立即进入转写完成。
-hold、Translate、Ask 和从 HUD 进入的锁定录音继续只使用 `SpeechTranscriber`。
-
-普通 Dictate 完成后的 60 秒内，新的 Dictate 会暂存最近安全回执。只有
-`VoiceEditCommandResolver` 命中明确修改意图时才进入跟进编辑；普通新句继续创建新听写。
-确定性撤销、删除第 N 句、精确替换和重新听写在 Core 执行；精简、扩写、语气、翻译与一般
-改写使用 capture 开始时冻结的 local/BYOK 配置。每次写回都通过当前 receipt 的
-`correct` 事务，新回执成为下一版唯一有效目标。
-
-免按住 Dictate 在最终转写末尾识别“发送”或“send it”。resolver 只接受完整末尾命令，
-先移除命令和相邻标点，再把正文交给冻结的 raw/local/remote 路由。空正文保持普通听写。
-
-提交要求：
-
-- post-delivery receipt 仍可用，且 role 为 `AXTextArea` 或 `AXTextField`。
-- secure、search、address、unknown target 直接拒绝。
-- Terminal、iTerm、Warp、Alacritty 与 WezTerm bundle 直接拒绝。
-- 每个 app 首次使用由非激活 HUD 明确确认；成功提交后才把 app name 与 bundle 写入
-  `voiceFinishApplications`。
-- 已批准 app 在同一回执上自动提交 Return；失败保留已写入正文并显示可重试回执。
-
-用户可在个性化设置删除 app 批准。真实验收只使用用户明确指定的无害测试目标，禁止向
-真实联系人或外部系统发送未获授权的内容。
-
-捕获时已标记为安全输入的上下文不会进入交付。剪贴板准备、事件创建或严格选区改写检查失败时，最终文本保留在失败历史中。
+Apple-only 用户完成第 6 步后进入首页。本地模型下载可在后台继续，模型可用后完成 AI 步骤。
 
 ## 失败与取消
 
 ### 取消
 
-`AppSession.cancelCapture()`：
+取消信号贯穿 capture 启动、Speech、local/remote generation 和 Command-V 前校验。统一清理：
 
-- 只处理真实活动捕获；idle 取消无副作用。
-- 立即使 generation 和 active session 失效。
-- 取消 completion task。
-- `inserting` 在 Command-V 提交前继续执行上述取消；提交回调触发后保持会话，等待剪贴板恢复与历史落盘完成。
-- 重置热键瞬态状态。
-- 调用 `speech.cancel()`。
-- 取消 event/timer tasks。
-- 清理孤儿录音并短暂显示 cancelled。
+- 停止 Speech 与音频输入，释放 tap 和 Core Audio mute snapshot；
+- 取消 generation、completion、model status 与自动学习任务；
+- 删除未持久化录音；
+- 清除 active session 与临时 HUD 文本；
+- reset 热键 transient state，同时保留已吞按键直到 physical release。
 
-`AppleSpeechService.cancel()` 负责移除 audio tap、停止 engine、结束 analyzer、恢复输出静音、删除当前录音并清空内部 session。
+### 识别与模型失败
 
-### 失败
+- 空白 Speech 结果、权限丢失、资源缺失和音频错误进入 failed HUD。
+- AI Dictate 生成失败交付 raw transcript。
+- Translate 生成失败进入 failed HUD。
+- 所有错误都避免主窗口 alert、Dock attention 和 transcript 日志。
 
-`AppSession.fail(_:)`：
+### 过期结果
 
-- 隐藏 Ask、清除回答上下文。
-- 将具体原因写入 `captureError`，只驱动 HUD 与辅助功能公告；不创建主窗口 alert、不请求 Dock attention。
-- 清除 generation、active session 和 hands-free。
-- 取消 event/timer tasks 并重置热键状态。
-- 调用 speech cancel 和录音对账。
-- 显示短暂 failed 状态，再回到 idle。
-
-空白转写属于这一失败出口。它发生在结果构造、交付和 completed history 写入之前，因此不会产生空文本交付或成功历史。
-
-### 交付失败
-
-模型已经生成结果、交付阶段失败时：
-
-- `lastResult` 保留最终文本。
-- HistoryEntry 的 `status` 设为 `.failed`。
-- 音频/历史继续遵循 retention。
-- UI 进入 failed，禁止显示成功。
-
-### 过期异步结果
-
-开始阶段检查 generation；Speech stream 和完成阶段检查 session ID。过期任务终止后不得交付、写历史或覆盖当前 UI。
+Speech event、model result、delivery callback 和 observer event 返回 UI 前校验 generation/session。
+失配结果只能执行资源清理，无权写入文本、保存完成历史、展示 HUD 或保存词典。
 
 ## 音频与历史生命周期
 
-原始音频的写入条件：
+- `saveAudio` 默认 `false`。
+- 每次录音创建独立 CAF 相对路径。
+- `historyRetention == .never` 时禁止写入新历史和录音。
+- 成功历史保存失败时删除未被索引拥有的音频。
+- 删除历史先删除音频，再删除索引；音频删除失败时保留历史。
+- 启动时只有成功读取历史索引后才清理孤儿 CAF。
+- failed delivery history 保留最终恢复文本，不保存 AX fingerprint 或自动学习 spans。
 
-```text
-preferences.saveAudio == true
-&& historyRetention != .never
-```
+## 模型与下载生命周期
 
-[`AppleSpeechService.swift`](../Sources/LerroMac/Speech/AppleSpeechService.swift) 使用 UUID 文件名写 CAF。完成后只把相对文件名写入历史。
+capture 开始时冻结 intelligence route。本地下载由 AppSession 持有，支持后台继续、暂停、恢复、
+停止与重启续传。停止只清理未完成文件、resume data 和 checkpoint，完整 blob 保留。下载完成后
+下一个 local action 加载模型；闲置 runtime 可以释放容器，缓存继续存在。
 
-清理规则：
+## 证明边界
 
-- Speech 启动失败、取消、空转写、analyzer 错误：删除当前录音。
-- session 过期：删除未持久化录音。
-- 交付/持久化错误：先读取历史确认是否已索引，再决定删除。
-- 读取历史索引失败：保留文件等待下次对账。
-- 删除历史和 retention：先删除录音，随后更新历史索引。
-- 启动时只有成功读取历史索引后才清理未引用 CAF。
-- `.forever` 与 `.never` 不执行 retention 文件重写；定时策略只有发现过期记录时才提交更新。
-- 录音删除与目录对账在独立 actor 上执行，AppSession 等待结果后再推进索引变化。
-- 历史查询每页最多 50 条；搜索或模式变化会更换 generation，过期页面无权写回当前列表。
+自动测试应覆盖 raw/remote/local 路由、词典注入上限、Quick Dictate、严格目标漂移、恢复剪贴板、
+AI 分类结构、修正观察、HUD 单调增宽、Onboarding 三条路径、下载状态机和旧异步结果隔离。
 
-## 模型生命周期
-
-[`MLXLanguageModelRuntime.swift`](../Sources/LerroIntelligence/MLXLanguageModelRuntime.swift) 负责：
-
-- 使用无 bearer token 的 HubClient。
-- 从应用 Models 目录检查缓存 marker。
-- 合并同模型并发加载。
-- 报告 downloading/loading/loaded/failed 状态。
-- 报告 paused 状态、传输字节、总字节与可用的速度估算。
-- 暂停时持久化 URLSession resume data 与模型 checkpoint；下一次启动可继续。
-- 停止时清理未完成下载、resume data 与 checkpoint，保留完整 blob。
-- 流式生成并在终止时取消底层任务。
-- 生成结束后延迟卸载内存中的模型，保留磁盘缓存。
-
-用户授权边界与数据网络边界见 [`privacy-security.md`](privacy-security.md)。
-
-[`OpenAICompatibleRemoteLanguageModelRuntime.swift`](../Sources/LerroIntelligence/OpenAICompatibleRemoteLanguageModelRuntime.swift)
-负责 BYOK API：每次使用当前 capture 快照创建或复用 ephemeral URLSession client，禁用
-cookie、URL cache 和 credential store，限制响应体大小，只允许 HTTPS 与 loopback HTTP，
-并将连接、流式生成、取消和脱敏错误映射到 Core 协议。连接测试只发送固定合成消息。
-
-## 自动化证明与实机证明
-
-自动化已覆盖 AppSession 的原始听写、local/remote 路由、Dictate 失败原文回退、翻译、Ask 流、目标策略、secure-field 启动拦截、交付失败、取消、启动竞态、模型取消和重复 toggle；文本交付测试还覆盖普通 current-focus paste、AX element/selection unavailable 兼容、严格 Rewrite、clipboard transaction、多 item/type 精确恢复、外部剪贴板所有权、并发事务、选区变化和应用切换。当前列表以
-[`Tests`](../Tests) 实际内容为准。
-
-以下行为依赖目标 Mac：
-
-- 真实麦克风和 Speech 语言资源。
-- 默认输出设备静音与恢复。
-- TCC 首次授权与撤销。
-- CGEventTap 的真实单修饰键、组合键、hold/toggle、吞键与 tap-reset 时序。
-- AX 在 TextEdit、浏览器和第三方编辑器中的行为。
-- 完整 pasteboard 多类型恢复。
-- Qwen 真实下载、加载、生成、内存和离线缓存。
-- 用户 Provider 的真实认证、配额、模型可用性、延迟和输出质量。
-- HUD/Ask panel 的焦点、多 Space、多显示器行为。
-
-完整命令与 Release 人工矩阵见 [`testing.md`](testing.md)。
+最终 Release app 仍需在 TextEdit、Notes、浏览器/ChatGPT 与 Electron 编辑器完成真实麦克风、
+Speech、全局快捷键、AX、剪贴板、多显示器/Space 和失败恢复验证。测试层级与完整矩阵见
+[`testing.md`](testing.md)。

@@ -5,6 +5,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
     private let remoteRuntime: (any RemoteLanguageModelRuntime)?
     private let composer: PromptComposer
     private let cloudComposer: CloudPromptComposer
+    private let dictionaryLearningComposer: DictionaryLearningPromptComposer
     private var modelIdentifier: String
 
     public init(
@@ -13,13 +14,15 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         modelIdentifier: String,
         pipeline: TextPipeline = TextPipeline(),
         composer: PromptComposer = PromptComposer(),
-        cloudComposer: CloudPromptComposer = CloudPromptComposer()
+        cloudComposer: CloudPromptComposer = CloudPromptComposer(),
+        dictionaryLearningComposer: DictionaryLearningPromptComposer = DictionaryLearningPromptComposer()
     ) {
         self.runtime = runtime
         self.remoteRuntime = remoteRuntime
         self.modelIdentifier = modelIdentifier
         self.composer = composer
         self.cloudComposer = cloudComposer
+        self.dictionaryLearningComposer = dictionaryLearningComposer
         _ = pipeline
     }
 
@@ -44,6 +47,9 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         let disposition = Self.disposition(for: request.task)
 
         if request.mode == .raw {
+            guard request.task == .polish else {
+                throw LerroError.modelUnavailable("翻译需要启用 AI")
+            }
             return IntelligenceResult(
                 text: rawTranscript,
                 disposition: disposition,
@@ -97,6 +103,9 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         let disposition = Self.disposition(for: request.task)
 
         if request.mode == .raw {
+            guard request.task == .polish else {
+                throw LerroError.modelUnavailable("翻译需要启用 AI")
+            }
             let result = IntelligenceResult(
                 text: rawTranscript,
                 disposition: disposition,
@@ -174,6 +183,54 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         }
     }
 
+    public func classifyCorrection(
+        _ request: DictionaryLearningRequest
+    ) async throws -> DictionaryLearningDecision {
+        guard request.mode != .raw else {
+            throw LerroError.modelUnavailable("自动词典学习需要启用 AI")
+        }
+        let original = request.originalSpan.trimmingCharacters(in: .whitespacesAndNewlines)
+        let corrected = request.correctedSpan.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty, !corrected.isEmpty, original != corrected else {
+            return .noLearning
+        }
+
+        let prompts = try dictionaryLearningComposer.prompts(for: request)
+        let generated: String
+        switch request.mode {
+        case .raw:
+            preconditionFailure("Raw correction requests are rejected before runtime routing")
+        case .local:
+            try await runtime.load(modelIdentifier: modelIdentifier)
+            generated = try await runtime.generate(
+                systemPrompt: prompts.system,
+                userPrompt: prompts.user,
+                maxTokens: DictionaryLearningPromptComposer.maximumOutputTokens
+            )
+        case .remote:
+            guard let configuration = request.remoteProvider else {
+                throw LerroError.remoteUnavailable("远程模型配置缺失")
+            }
+            guard let remoteRuntime else {
+                throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
+            }
+            generated = try await remoteRuntime.generate(
+                configuration: configuration,
+                systemPrompt: prompts.system,
+                userPrompt: prompts.user,
+                maxTokens: DictionaryLearningPromptComposer.maximumOutputTokens
+            )
+        }
+        let decision = try DictionaryLearningDecision.decodeStrictJSON(generated)
+        guard decision.candidates.allSatisfy({ candidate in
+            original.localizedCaseInsensitiveContains(candidate.phrase)
+                && corrected.localizedCaseInsensitiveContains(candidate.replacement)
+        }) else {
+            throw DictionaryLearningValidationError.invalidCandidate
+        }
+        return decision
+    }
+
     public func modelStatus() async -> LocalModelStatus {
         await runtime.status()
     }
@@ -188,7 +245,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
     }
 
     private func invocation(for request: IntelligenceRequest) throws -> Invocation {
-        let maxTokens = request.task == .answer ? 1_024 : 768
+        let maxTokens = 768
         switch request.mode {
         case .raw:
             preconditionFailure("Raw requests are resolved before runtime routing")
@@ -224,8 +281,6 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
     private nonisolated static func disposition(for task: IntelligenceTask) -> IntelligenceDisposition {
         switch task {
         case .polish, .translate: .insert
-        case .rewriteSelection: .replaceSelection
-        case .answer: .showAnswer
         }
     }
 

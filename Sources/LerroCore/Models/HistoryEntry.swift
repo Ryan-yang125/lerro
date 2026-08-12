@@ -15,11 +15,6 @@ public enum HistoryProcessingRoute: String, Codable, Sendable {
     case localSnippet
 }
 
-public enum HistoryFinishAction: String, Codable, Sendable {
-    case requested
-    case submitted
-}
-
 public enum HistoryContextCategory: String, Codable, CaseIterable, Hashable, Sendable {
     case application
     case windowTitle
@@ -86,8 +81,6 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
     public var modelIdentifier: String?
     public var contextReceipt: HistoryContextReceipt?
     public var phaseTimings: HistoryPhaseTimings?
-    public var finishAction: HistoryFinishAction?
-    public var editLineage: DeliveryEditLineage?
 
     public init(
         id: UUID = UUID(),
@@ -109,9 +102,7 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
         processingRoute: HistoryProcessingRoute? = nil,
         modelIdentifier: String? = nil,
         contextReceipt: HistoryContextReceipt? = nil,
-        phaseTimings: HistoryPhaseTimings? = nil,
-        finishAction: HistoryFinishAction? = nil,
-        editLineage: DeliveryEditLineage? = nil
+        phaseTimings: HistoryPhaseTimings? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -133,8 +124,6 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
         self.modelIdentifier = modelIdentifier
         self.contextReceipt = contextReceipt
         self.phaseTimings = phaseTimings
-        self.finishAction = finishAction
-        self.editLineage = editLineage
     }
 
     public var wordCount: Int {

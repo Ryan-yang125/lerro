@@ -63,6 +63,9 @@ public protocol IntelligenceProcessing: Sendable {
     func processStream(
         _ request: IntelligenceRequest
     ) async throws -> AsyncThrowingStream<IntelligenceResult, any Error>
+    func classifyCorrection(
+        _ request: DictionaryLearningRequest
+    ) async throws -> DictionaryLearningDecision
     func modelStatus() async -> LocalModelStatus
     func testRemoteConnection(
         configuration: RemoteProviderConfiguration
@@ -98,6 +101,15 @@ public protocol RemoteLanguageModelRuntime: Sendable {
     func testConnection(
         configuration: RemoteProviderConfiguration
     ) async throws -> RemoteConnectionTestOutcome
+}
+
+public extension IntelligenceProcessing {
+    func classifyCorrection(
+        _ request: DictionaryLearningRequest
+    ) async throws -> DictionaryLearningDecision {
+        _ = request
+        throw LerroError.modelUnavailable("当前智能服务不支持自动词典学习")
+    }
 }
 
 public extension IntelligenceProcessing {

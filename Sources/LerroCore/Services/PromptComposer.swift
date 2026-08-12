@@ -48,34 +48,6 @@ public struct PromptComposer: Sendable {
                 \(cleanedTranscript)
                 """
             )
-        case .answer:
-            return (
-                """
-                You are a concise local desktop assistant. Answer the user's spoken request using the supplied on-screen context. Give the useful result directly. Use plain text unless a short list materially improves clarity.
-                """,
-                """
-                Context:
-                \(context)
-                Selected text:
-                \(request.selectedText ?? "")
-
-                Request:
-                \(cleanedTranscript)
-                """
-            )
-        case .rewriteSelection:
-            return (
-                sharedRules + " Apply the spoken editing instruction to the selected text and return the complete replacement text.",
-                """
-                Context:
-                \(context)
-                Selected text:
-                \(request.selectedText ?? "")
-
-                Editing instruction:
-                \(cleanedTranscript)
-                """
-            )
         }
     }
 }

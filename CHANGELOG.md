@@ -6,6 +6,38 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-13
+
+### Added
+
+- AI-assisted automatic dictionary learning observes a user's focused correction,
+  classifies proper-name or terminology fixes, and saves up to three app-scoped
+  terms with an immediate Undo action.
+- Apple Dictation receives up to 100 relevant personal-dictionary terms through
+  the progressive DictationTranscriber context.
+- A first-level Personalization page presents app tones in an icon grid with
+  installed-app search and real AI previews.
+- An eight-step, action-gated onboarding covers privacy, Apple Speech resources,
+  AI setup, shortcuts, real dictation, insertion recovery, dictionary learning,
+  and app tones.
+
+### Changed
+
+- The live transcript HUD now grows smoothly from a centered compact capsule to
+  a two-line 420-point card while preserving the current waveform transition.
+- Successful insertion ends immediately. Focus drift or insertion failure copies
+  the final text and presents a recovery card with Copy Again and Close actions.
+- New installs begin with Apple Dictation. Remote AI follows it in setup order,
+  with local AI last and guided by device capability checks.
+- Translate uses the selected remote or local AI runtime. Quick Dictate remains
+  optional and is disabled by default.
+
+### Removed
+
+- Ask and Rewrite production entry points, shortcuts, cards, and onboarding pages.
+- The six-second success receipt, post-delivery Undo and correction controls,
+  spoken follow-up editing, redictation, version restore, and voice send.
+
 ## [1.5.1] - 2026-08-11
 
 ### Added

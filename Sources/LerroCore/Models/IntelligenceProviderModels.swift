@@ -2,8 +2,8 @@ import Foundation
 
 public enum IntelligenceMode: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
     case raw
-    case local
     case remote
+    case local
 
     public var id: String { rawValue }
 }

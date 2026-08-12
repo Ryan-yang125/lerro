@@ -10,13 +10,14 @@ ADR 用于记录会长期影响模块、数据、系统权限、模型、发布�
 | [0002](0002-lerro-product-identity.md) | accepted | Lerro 产品、target、Bundle ID、数据与发布身份 |
 | [0003](0003-explicit-hotkey-gesture-semantics.md) | accepted | 单修饰键录制、hold/toggle、active event tap 与 binding-bound release |
 | [0004](0004-transactional-command-v-delivery.md) | accepted | AX 安全验证、事务化 Command-V 文本交付与显式 commit 边界 |
-| [0005](0005-current-focus-command-v-insertion.md) | accepted | 普通插入使用当前键盘焦点，Rewrite 保留严格目标与选区验证 |
+| [0005](0005-current-focus-command-v-insertion.md) | superseded | 普通插入 current-focus 方案；由 0012 的 capture-bound 严格写入取代 |
 | [0006](0006-byok-openai-compatible-providers.md) | accepted | BYOK Provider 路由、OpenAI-compatible runtime、JSON API Key 与远程上下文边界 |
 | [0007](0007-cloudflare-distribution-and-sparkle-updates.md) | accepted | Cloudflare Worker/R2/D1 公开分发与 Sparkle 应用内更新 |
 | [0008](0008-accessibility-owned-fn-shortcuts.md) | accepted | 两项系统权限、HID Fn 物理所有权与空闲 HUD 隐藏 |
-| [0009](0009-bound-delivery-receipts.md) | accepted | 实际交付目标绑定的一次性回执、安全撤回、即时修正与受控语音发送 |
-| [0010](0010-quick-dictate-and-spoken-delivery-edits.md) | accepted | 可选 SpeechDetector 端点、显式语音编辑意图、连续安全回执与历史版本链 |
+| [0009](0009-bound-delivery-receipts.md) | superseded | 写入后回执、撤回、即时修正与发送；由 0012 的成功即结束方案取代 |
+| [0010](0010-quick-dictate-and-spoken-delivery-edits.md) | superseded | 语音跟进编辑与版本链由 0012 移除；可选 SpeechDetector 收敛为默认关闭的 Quick Dictate |
 | [0011](0011-device-aware-ai-onboarding-and-resumable-model-downloads.md) | accepted | 设备感知 AI 分流、Onboarding 内配置、后台可恢复模型下载与 Quick Dictate 降级 |
+| [0012](0012-strict-delivery-ai-dictionary-learning.md) | accepted | 居中实时预览、capture-bound 严格写入、失败恢复、AI 自动词典与操作型 Onboarding |
 
 ## 需要 ADR 的变化
 

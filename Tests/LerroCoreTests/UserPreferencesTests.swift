@@ -19,29 +19,18 @@ struct UserPreferencesTests {
         #expect(preferences.showInDock)
         #expect(!preferences.saveAudio)
         #expect(preferences.historyRetention == .forever)
-        #expect(preferences.enhancementEnabled)
-        #expect(preferences.intelligenceMode == .local)
+        #expect(!preferences.enhancementEnabled)
+        #expect(preferences.intelligenceMode == .raw)
         #expect(preferences.localModelIdentifier == "mlx-community/Qwen3.5-4B-MLX-4bit")
         #expect(preferences.remoteProvider == RemoteProviderConfiguration())
         #expect(preferences.appToneProfiles.isEmpty)
-        #expect(preferences.voiceFinishApplications.isEmpty)
+        #expect(preferences.automaticDictionaryLearningEnabled)
+        #expect(!preferences.isAutomaticDictionaryLearningActive)
+        #expect(!preferences.quickDictateEnabled)
         #expect(!preferences.hasApprovedModelDownload)
         #expect(!preferences.hasCompletedOnboarding)
         #expect(preferences.onboardingStepIndex == nil)
-    }
-
-    @Test("Voice finish application approvals persist locally")
-    func persistsVoiceFinishApplications() throws {
-        let preferences = UserPreferences(voiceFinishApplications: [
-            VoiceFinishApplication(
-                bundleIdentifier: "com.apple.MobileSMS",
-                applicationName: "Messages"
-            )
-        ])
-
-        let data = try JSONEncoder().encode(preferences)
-        let decoded = try JSONDecoder().decode(UserPreferences.self, from: data)
-        #expect(decoded.voiceFinishApplications == preferences.voiceFinishApplications)
+        #expect(IntelligenceMode.allCases == [.raw, .remote, .local])
     }
 
     @Test("Audio capture requires explicit opt in and enabled history")
@@ -66,8 +55,8 @@ struct UserPreferencesTests {
     func validatesDefaultHotkeys() throws {
         let hotkeys = UserPreferences().hotkeys
 
-        #expect(hotkeys.count == 4)
-        #expect(Set(hotkeys.map(\.action)) == [.dictate, .translate, .ask, .pasteLastResult])
+        #expect(hotkeys.count == 3)
+        #expect(Set(hotkeys.map(\.action)) == [.dictate, .translate, .pasteLastResult])
 
         let dictate = try #require(hotkeys.first { $0.action == .dictate })
         #expect(dictate.usesFunctionKey)
@@ -82,13 +71,6 @@ struct UserPreferencesTests {
         #expect(translate.keyCode == nil)
         #expect(translate.modifiers == (1 << 23) | (1 << 17))
         #expect(translate.displayName == "Fn ⇧")
-
-        let command = try #require(hotkeys.first { $0.action == .ask })
-        #expect(command.usesFunctionKey)
-        #expect(command.activation == .toggle)
-        #expect(command.keyCode == 49)
-        #expect(command.modifiers == 1 << 23)
-        #expect(command.displayName == "Fn Space")
 
         let paste = try #require(hotkeys.first { $0.action == .pasteLastResult })
         #expect(paste.keyCode == 9)
@@ -112,7 +94,6 @@ struct UserPreferencesTests {
         let preferences = try JSONDecoder().decode(UserPreferences.self, from: legacy)
         let dictate = try #require(preferences.hotkeys.first { $0.action == .dictate })
         let translate = try #require(preferences.hotkeys.first { $0.action == .translate })
-        let ask = try #require(preferences.hotkeys.first { $0.action == .ask })
         let paste = try #require(preferences.hotkeys.first { $0.action == .pasteLastResult })
 
         #expect(dictate.activation == .hold)
@@ -120,7 +101,7 @@ struct UserPreferencesTests {
         #expect(translate.activation == .hold)
         #expect(translate.keyCode == nil)
         #expect(translate.modifiers == (1 << 23) | (1 << 17))
-        #expect(ask.activation == .toggle)
+        #expect(!preferences.hotkeys.contains { $0.action == .ask })
         #expect(paste.activation == .toggle)
     }
 
@@ -138,7 +119,7 @@ struct UserPreferencesTests {
 
         let preferences = try JSONDecoder().decode(UserPreferences.self, from: legacy)
 
-        #expect(preferences.hotkeys.map(\.action) == [.dictate, .translate, .ask])
+        #expect(preferences.hotkeys.map(\.action) == [.dictate, .translate])
         #expect(preferences.hotkeys.allSatisfy { $0.activation == .toggle })
     }
 
@@ -167,13 +148,11 @@ struct UserPreferencesTests {
 
         let preferences = try JSONDecoder().decode(UserPreferences.self, from: legacy)
 
-        #expect(preferences.hotkeys.count == 2)
+        #expect(preferences.hotkeys.count == 1)
         #expect(preferences.hotkeys[0].signature == HotkeySignature(
             keyCode: nil,
             modifiers: 1 << 23
         ))
-        #expect(preferences.hotkeys[1].action == .ask)
-        #expect(preferences.hotkeys[1].displayName == "Fn Space")
     }
 
     @Test("Translation language choices are limited to three")
@@ -223,6 +202,9 @@ struct UserPreferencesTests {
         #expect(decoded.hasApprovedModelDownload)
         #expect(decoded.onboardingStepIndex == 17)
         #expect(decoded.appLanguage == .english)
+        #expect(decoded.automaticDictionaryLearningEnabled)
+        #expect(decoded.isAutomaticDictionaryLearningActive)
+        #expect(!decoded.quickDictateEnabled)
     }
 
     @Test("Older preference documents keep their saved values and default model consent to off")
@@ -241,6 +223,8 @@ struct UserPreferencesTests {
         #expect(decoded.localInvitationCode.isEmpty)
         #expect(decoded.translationLanguageIdentifiers == ["en_US"])
         #expect(decoded.appLanguage == .system)
+        #expect(decoded.automaticDictionaryLearningEnabled)
+        #expect(!decoded.quickDictateEnabled)
         #expect(!reencoded.contains("interactionSoundsEnabled"))
     }
 
@@ -259,6 +243,39 @@ struct UserPreferencesTests {
 
         preferences.intelligenceMode = .raw
         #expect(!preferences.enhancementEnabled)
+    }
+
+    @Test("Automatic dictionary learning requires an active AI mode")
+    func gatesAutomaticDictionaryLearning() {
+        var preferences = UserPreferences()
+        #expect(!preferences.isAutomaticDictionaryLearningActive)
+
+        preferences.intelligenceMode = .remote
+        #expect(preferences.isAutomaticDictionaryLearningActive)
+
+        preferences.automaticDictionaryLearningEnabled = false
+        #expect(!preferences.isAutomaticDictionaryLearningActive)
+    }
+
+    @Test("Dictionary entries become application-scoped Speech vocabulary terms")
+    func mapsDictionaryToSpeechVocabulary() throws {
+        let entry = DictionaryEntry(
+            phrase: "乐若",
+            replacement: "Lerro",
+            source: .learned,
+            applicationBundleIdentifier: "com.openai.chat",
+            useCount: 8
+        )
+        let term = SpeechVocabularyTerm(dictionaryEntry: entry)
+
+        #expect(term.phrase == "乐若")
+        #expect(term.replacement == "Lerro")
+        #expect(term.applicationBundleIdentifier == "com.openai.chat")
+        #expect(term.priority == 8)
+        #expect(try JSONDecoder().decode(
+            SpeechVocabularyTerm.self,
+            from: JSONEncoder().encode(term)
+        ) == term)
     }
 
     @Test("Local model policy gates enhanced dictation, translation, and Ask")
@@ -281,7 +298,11 @@ struct UserPreferencesTests {
         let current = CapturedContext(
             applicationName: "Editor",
             processIdentifier: 42,
-            selectionState: .knownEmpty
+            selectionState: .knownEmpty,
+            focusedElementAvailable: true,
+            focusedElementFingerprint: 123,
+            focusedValueFingerprint: 456,
+            selectedRange: UTF16TextRange(location: 7, length: 2)
         )
         let roundTripped = try JSONDecoder().decode(
             CapturedContext.self,
@@ -290,6 +311,10 @@ struct UserPreferencesTests {
         #expect(roundTripped == current)
         #expect(roundTripped.cursorBefore == nil)
         #expect(roundTripped.cursorAfter == nil)
+        #expect(roundTripped.focusedElementAvailable)
+        #expect(roundTripped.focusedElementFingerprint == 123)
+        #expect(roundTripped.focusedValueFingerprint == 456)
+        #expect(roundTripped.selectedRange == UTF16TextRange(location: 7, length: 2))
 
         let legacyEmpty = Data(
             #"{"applicationName":"Legacy","isSecureField":false}"#.utf8
@@ -297,6 +322,7 @@ struct UserPreferencesTests {
         let decodedEmpty = try JSONDecoder().decode(CapturedContext.self, from: legacyEmpty)
         #expect(decodedEmpty.selectionState == .unavailable)
         #expect(!decodedEmpty.selectedTextWasTruncated)
+        #expect(!decodedEmpty.focusedElementAvailable)
 
         let legacySelection = Data(
             #"{"applicationName":"Legacy","selectedText":"selected","isSecureField":false}"#.utf8

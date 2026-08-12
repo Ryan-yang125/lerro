@@ -37,12 +37,13 @@ test("server-renders the complete Lerro landing page", async () => {
   assert.match(html, /Your Mac writes\./);
   assert.match(html, /Download for macOS/);
   assert.match(html, />Dictate</);
+  assert.match(html, />Polish</);
   assert.match(html, />Translate</);
-  assert.match(html, />Command</);
-  assert.match(html, /softwareVersion(?:&quot;|\"):\s*(?:&quot;|\")1\.5\.0/);
+  assert.match(html, /softwareVersion(?:&quot;|\"):\s*(?:&quot;|\")1\.6\.0/);
   assert.match(html, /Apple Speech/);
   assert.match(html, /No telemetry/);
-  assert.match(html, /does not request Input Monitoring/);
+  assert.match(html, /automatic dictionary learning/i);
+  assert.match(html, /recovery card/i);
   assert.match(html, /Signed, notarized/);
   assert.match(html, /hero-hud--listening/);
   assert.equal((html.match(/hero-hud__bar/g) ?? []).length, 10);
@@ -57,6 +58,7 @@ test("server-renders the complete Lerro landing page", async () => {
   assert.match(html, /href="\/zh"/);
   assert.match(html, /https:\/\/lerroapp\.com/);
   assert.doesNotMatch(html, /releases\/latest|codex-preview|SkeletonPreview|react-loading-skeleton/i);
+  assert.doesNotMatch(html, /Apple Translation|>Command<|delivery receipt|keep speaking after Lerro writes/i);
 });
 
 test("server-renders the Simplified Chinese landing page with localized metadata and assets", async () => {
@@ -79,6 +81,7 @@ test("server-renders the Simplified Chinese landing page with localized metadata
   assert.match(html, /rel="canonical" href="https:\/\/lerroapp\.com\/zh"/i);
   assert.match(html, /hreflang="en"/i);
   assert.match(html, /hreflang="zh-CN"/i);
+  assert.doesNotMatch(html, /Apple Translation|>指令<|写入回执|继续说一句完成修改/);
 });
 
 test("server-renders the changelog with permanent release downloads", async () => {
@@ -89,6 +92,10 @@ test("server-renders the changelog with permanent release downloads", async () =
   const html = await response.text();
   assert.match(html, /<title>Changelog — Lerro<\/title>/i);
   assert.match(html, /What(?:&#x27;|&apos;|’)s new in Lerro\./);
+  assert.match(html, /Version(?:\s|<[^>]+>)*1\.6\.0/);
+  assert.match(html, /Build(?:\s|<[^>]+>)*13/);
+  assert.match(html, /August 13, 2026/);
+  assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.6\.0\/13\/Lerro-macOS-arm64\.zip/);
   assert.match(html, /Version(?:\s|<[^>]+>)*1\.5\.0/);
   assert.match(html, /Build(?:\s|<[^>]+>)*11/);
   assert.match(html, /August 10, 2026/);
@@ -120,6 +127,10 @@ test("server-renders the Simplified Chinese changelog with permanent downloads",
   assert.match(html, /<title>更新日志 — Lerro<\/title>/);
   assert.match(html, /<html[^>]+lang="zh-Hans"/i);
   assert.match(html, /Lerro 的最新变化。/);
+  assert.match(html, /版本(?:\s|<[^>]+>)*1\.6\.0/);
+  assert.match(html, /构建(?:\s|<[^>]+>)*13/);
+  assert.match(html, /2026 年 8 月 13 日/);
+  assert.match(html, /https:\/\/updates\.lerroapp\.com\/releases\/1\.6\.0\/13\/Lerro-macOS-arm64\.zip/);
   assert.match(html, /版本(?:\s|<[^>]+>)*1\.5\.0/);
   assert.match(html, /构建(?:\s|<[^>]+>)*11/);
   assert.match(html, /2026 年 8 月 10 日/);
@@ -158,16 +169,22 @@ test("publishes crawler metadata for the custom domain", async () => {
 });
 
 test("keeps the public site free of starter surfaces", async () => {
-  const [page, layout, packageJson] = await Promise.all([
+  const [page, layout, packageJson, heroHud, globalStyles] = await Promise.all([
     readFile(new URL("app/page.tsx", projectRoot), "utf8"),
     readFile(new URL("app/layout.tsx", projectRoot), "utf8"),
     readFile(new URL("package.json", projectRoot), "utf8"),
+    readFile(new URL("app/components/HeroHud.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/globals.css", projectRoot), "utf8"),
   ]);
 
   assert.match(page, /Lerro/);
   assert.match(layout, /https:\/\/lerroapp\.com/);
   assert.match(packageJson, /"name": "lerro-site"/);
   assert.match(packageJson, /"deploy": "npm run build && wrangler deploy"/);
+  assert.match(heroHud, /"listening" \| "processing" \| "delivered"/);
+  assert.doesNotMatch(heroHud, /receipt|editing|Fn to edit|Undo|Correct/i);
+  assert.match(globalStyles, /width: var\(--hero-hud-width/);
+  assert.match(globalStyles, /text-align: center/);
   assert.doesNotMatch(
     `${page}\n${layout}\n${packageJson}`,
     /site-creator|Starter Project|SkeletonPreview|react-loading-skeleton|drizzle|tailwind/i,

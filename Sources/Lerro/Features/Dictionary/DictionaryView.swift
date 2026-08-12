@@ -4,8 +4,9 @@ import LerroCore
 
 private enum DictionaryTab: String, CaseIterable, Identifiable {
     case all = "全部"
-    case learned = "自动添加"
-    case manual = "手动添加"
+    case learned = "自动学习"
+    case manual = "手动词条"
+    case snippets = "快捷语"
     var id: Self { self }
 
     init(source: DictionaryEntrySource?) {
@@ -20,7 +21,7 @@ private enum DictionaryTab: String, CaseIterable, Identifiable {
         switch self {
         case .all: nil
         case .learned: .learned
-        case .manual: .manual
+        case .manual, .snippets: .manual
         }
     }
 }
@@ -33,6 +34,7 @@ struct DictionaryView: View {
     @State private var isSearchExpanded: Bool
     @State private var editingEntry: DictionaryEntry?
     @State private var isEditorPresented = false
+    @State private var applicationScope = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.locale) private var locale
 
@@ -45,7 +47,8 @@ struct DictionaryView: View {
         _displayedEntries = State(initialValue: Self.filtered(
             session.dictionaryEntries,
             searchText: initialSearch,
-            source: initialTab.source
+            source: initialTab.source,
+            tab: initialTab
         ))
         _isSearchExpanded = State(initialValue: !initialSearch.isEmpty)
     }
@@ -71,13 +74,22 @@ struct DictionaryView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 300)
+                .frame(width: 380)
                 .onChange(of: tab) { _, item in
                     session.dictionarySourceFilter = item.source
                     updateDisplayedEntries()
                 }
 
                 Spacer()
+
+                Picker("应用范围", selection: $applicationScope) {
+                    Text("所有应用").tag("")
+                    ForEach(applicationScopes, id: \.self) { bundleIdentifier in
+                        Text(verbatim: bundleIdentifier).tag(bundleIdentifier)
+                    }
+                }
+                .frame(width: 180)
+                .onChange(of: applicationScope) { _, _ in updateDisplayedEntries() }
 
                 if isSearchExpanded {
                     LerroSearchField(placeholder: "搜索词典", text: $searchText)
@@ -113,6 +125,10 @@ struct DictionaryView: View {
                                 isEditorPresented = true
                             } delete: {
                                 session.deleteDictionaryEntry(entry)
+                            } promoteGlobal: {
+                                var updated = entry
+                                updated.applicationBundleIdentifier = nil
+                                Task { _ = await session.saveDictionaryEntry(updated) }
                             }
                             if entry.id != displayedEntries.last?.id {
                                 Divider().overlay(LerroTheme.thinBorder)
@@ -146,11 +162,12 @@ struct DictionaryView: View {
             updateDisplayedEntries()
         }
         .sheet(isPresented: $isEditorPresented, onDismiss: { editingEntry = nil }) {
-            DictionaryEditorView(entry: editingEntry) { phrase, replacement in
+            DictionaryEditorView(entry: editingEntry) { phrase, replacement, bundleIdentifier in
                 var entry = editingEntry ?? DictionaryEntry(phrase: phrase, replacement: replacement)
                 entry.phrase = phrase
                 entry.replacement = replacement
-                entry.source = .manual
+                if editingEntry == nil { entry.source = .manual }
+                entry.applicationBundleIdentifier = bundleIdentifier
                 return await session.saveDictionaryEntry(entry)
             } importCSV: {
                 await importCSV()
@@ -175,23 +192,38 @@ struct DictionaryView: View {
         displayedEntries = Self.filtered(
             session.dictionaryEntries,
             searchText: searchText,
-            source: tab.source
+            source: tab.source,
+            tab: tab,
+            applicationScope: applicationScope
         )
     }
 
     private static func filtered(
         _ entries: [DictionaryEntry],
         searchText: String,
-        source: DictionaryEntrySource?
+        source: DictionaryEntrySource?,
+        tab: DictionaryTab = .all,
+        applicationScope: String = ""
     ) -> [DictionaryEntry] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         return entries.filter { entry in
             let sourceMatches = source.map { entry.source == $0 } ?? true
+            let kindMatches = switch tab {
+            case .snippets: entry.isSnippet
+            case .manual: entry.source == .manual && !entry.isSnippet
+            case .all, .learned: true
+            }
+            let applicationMatches = applicationScope.isEmpty
+                || entry.applicationBundleIdentifier == applicationScope
             let searchMatches = query.isEmpty
                 || entry.phrase.localizedCaseInsensitiveContains(query)
                 || entry.replacement.localizedCaseInsensitiveContains(query)
-            return sourceMatches && searchMatches
+            return sourceMatches && kindMatches && applicationMatches && searchMatches
         }
+    }
+
+    private var applicationScopes: [String] {
+        Array(Set(session.dictionaryEntries.compactMap(\.applicationBundleIdentifier))).sorted()
     }
 
     private func closeEditor() {
@@ -233,6 +265,7 @@ private struct DictionaryListRow: View {
     let entry: DictionaryEntry
     let edit: () -> Void
     let delete: () -> Void
+    let promoteGlobal: () -> Void
     @State private var hovering = false
     @State private var showDeleteConfirmation = false
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -246,11 +279,13 @@ private struct DictionaryListRow: View {
                     .foregroundStyle(LerroTheme.text)
                     .lineLimit(1)
                 HStack(spacing: 6) {
-                    Text(LocalizedStringKey(entry.source == .learned ? "自动添加" : entry.isSnippet ? "快捷语" : "手动添加"))
+                    Text(LocalizedStringKey(entry.source == .learned ? "自动学习" : entry.isSnippet ? "快捷语" : "手动词条"))
                     if entry.replacement != entry.phrase {
                         Text("·")
                         Text(verbatim: entry.replacement)
                     }
+                    Text("·")
+                    Text(verbatim: entry.applicationBundleIdentifier ?? "全局")
                 }
                 .lerroTypography(.caption)
                 .foregroundStyle(LerroTheme.metadataText)
@@ -294,6 +329,9 @@ private struct DictionaryListRow: View {
         }
         .contextMenu {
             Button("编辑", action: edit)
+            if entry.applicationBundleIdentifier != nil {
+                Button("提升为全局词条", action: promoteGlobal)
+            }
             Button("删除", role: .destructive) { showDeleteConfirmation = true }
         }
         .alert("删除这个词语？", isPresented: $showDeleteConfirmation) {
@@ -312,18 +350,19 @@ private struct DictionaryEditorView: View {
     }
 
     let existingEntry: DictionaryEntry?
-    let save: (String, String) async -> Bool
+    let save: (String, String, String?) async -> Bool
     let importCSV: () async -> Bool
     let cancel: () -> Void
     @State private var phrase: String
     @State private var replacement: String
     @State private var kind: EntryKind
+    @State private var applicationBundleIdentifier: String
     @State private var isWorking = false
     @FocusState private var focused: Bool
 
     init(
         entry: DictionaryEntry?,
-        save: @escaping (String, String) async -> Bool,
+        save: @escaping (String, String, String?) async -> Bool,
         importCSV: @escaping () async -> Bool,
         cancel: @escaping () -> Void
     ) {
@@ -336,6 +375,7 @@ private struct DictionaryEditorView: View {
         _kind = State(initialValue: entry?.isSnippet == true
             ? .snippet
             : .term)
+        _applicationBundleIdentifier = State(initialValue: entry?.applicationBundleIdentifier ?? "")
     }
 
     var body: some View {
@@ -382,6 +422,19 @@ private struct DictionaryEditorView: View {
                     .padding(.top, 12)
             }
 
+            TextField("应用 Bundle ID（留空为全局）", text: $applicationBundleIdentifier)
+                .textFieldStyle(.plain)
+                .lerroTypography(.body)
+                .padding(.horizontal, 10)
+                .frame(height: 41)
+                .background(LerroTheme.main)
+                .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                        .stroke(LerroTheme.thinBorder, lineWidth: 1)
+                }
+                .padding(.top, 12)
+
             HStack(spacing: 8) {
                 Button("导入 CSV") { perform(importCSV) }
                     .buttonStyle(LerroPillButtonStyle())
@@ -399,7 +452,7 @@ private struct DictionaryEditorView: View {
             .padding(.top, 24)
         }
         .padding(24)
-        .frame(width: 448, height: kind == .snippet ? 360 : 242, alignment: .topLeading)
+        .frame(width: 448, height: kind == .snippet ? 420 : 306, alignment: .topLeading)
         .background(LerroTheme.main)
         .onAppear { focused = true }
         .onChange(of: phrase) {
@@ -420,7 +473,15 @@ private struct DictionaryEditorView: View {
 
     private func savePhrase() {
         guard !trimmedPhrase.isEmpty else { return }
-        perform { await save(trimmedPhrase, kind == .snippet ? trimmedReplacement : trimmedPhrase) }
+        let bundleIdentifier = applicationBundleIdentifier
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        perform {
+            await save(
+                trimmedPhrase,
+                kind == .snippet ? trimmedReplacement : trimmedPhrase,
+                bundleIdentifier.isEmpty ? nil : bundleIdentifier
+            )
+        }
     }
 
     private func perform(_ operation: @escaping () async -> Bool) {

@@ -126,7 +126,6 @@ struct HomeView: View {
                 VStack(spacing: 2) {
                     shortcutRow(.dictation, title: "听写", detail: "Fn")
                     shortcutRow(.translation, title: "翻译", detail: "Fn Left Shift")
-                    shortcutRow(.ask, title: "指令", detail: "Fn Space")
                 }
             }
 

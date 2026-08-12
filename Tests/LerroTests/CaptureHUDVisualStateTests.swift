@@ -69,21 +69,42 @@ struct CaptureHUDVisualStateTests {
         ) == .idleHidden)
     }
 
-    @Test("Delivery receipt replaces the idle shell with an interactive card")
-    func deliveryReceiptIsVisible() {
+    @Test("Recovery replaces the idle shell with an interactive card")
+    func recoveryIsVisible() {
         #expect(CaptureHUDVisualState.resolve(
             phase: .idle,
             isStartingCapture: false,
             isHandsFreeCapture: false,
-            hasDeliveryReceipt: true
-        ) == .receipt)
-        #expect(CaptureHUDVisualState.receipt.size == CGSize(width: 430, height: 68))
+            hasRecoveryPresentation: true
+        ) == .recovery)
+        #expect(CaptureHUDVisualState.recovery.size == CGSize(width: 420, height: 92))
         #expect(CaptureHUDAnnouncement.message(
             from: .processing,
-            to: .receipt,
+            to: .recovery,
             phase: .idle,
             mode: .dictation
-        ) == "文本已写入，可以撤回、修正或继续说一句修改")
+        ) == "写入失败，内容已复制到剪贴板")
+    }
+
+    @Test("Successful delivery has no follow-up presentation")
+    func successfulDeliveryHasNoReceipt() {
+        #expect(CaptureHUDVisualState.resolve(
+            phase: .success,
+            isStartingCapture: false,
+            isHandsFreeCapture: false
+        ) == .idleHidden)
+    }
+
+    @Test("Transcript width grows from a compact center pill to the maximum")
+    func transcriptWidthIsContentDriven() {
+        #expect(HUDTranscriptLayout.requiredWidth(
+            applicationName: "Mail",
+            transcript: "你好"
+        ) == HUDTranscriptLayout.minimumWidth)
+        #expect(HUDTranscriptLayout.requiredWidth(
+            applicationName: "Messages",
+            transcript: String(repeating: "很长的实时转写", count: 20)
+        ) == HUDTranscriptLayout.maximumWidth)
     }
 
     @Test("Interaction bounds preserve the minimum discoverability target")
@@ -91,14 +112,14 @@ struct CaptureHUDVisualStateTests {
         #expect(CaptureHUDVisualState.idleHidden.interactionSize(countdownVisible: false)
             == CGSize(width: 70, height: 34))
         #expect(CaptureHUDVisualState.listening.interactionSize(countdownVisible: false)
-            == CGSize(width: 70, height: 34))
-        #expect(CaptureHUDVisualState.processing.size == CGSize(width: 70, height: 34))
+            == CGSize(width: 120, height: 34))
+        #expect(CaptureHUDVisualState.processing.size == CGSize(width: 120, height: 34))
         #expect(CaptureHUDVisualState.processing.interactionSize(countdownVisible: false)
-            == CGSize(width: 70, height: 34))
+            == CGSize(width: 120, height: 34))
         #expect(CaptureHUDVisualState.handsFree.interactionSize(countdownVisible: false)
-            == CGSize(width: 116, height: 34))
+            == CGSize(width: 120, height: 34))
         #expect(CaptureHUDVisualState.handsFree.interactionSize(countdownVisible: true)
-            == CGSize(width: 156, height: 34))
+            == CGSize(width: 160, height: 34))
     }
 
     @Test("Cancelling during processing announces cancellation")

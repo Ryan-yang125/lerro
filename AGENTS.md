@@ -86,7 +86,7 @@ Lerro -> LerroIntelligence -> LerroCore
 
 ## 核心链路不变量
 
-- 捕获流程由 `CapturePhase` 和 `AppSession` 驱动：授权与权限 → 上下文 → 收音 → 转写 → raw/local/remote 处理 → 交付或回答卡 → 持久化 → 完成。
+- 捕获流程由 `CapturePhase` 和 `AppSession` 驱动：授权与权限 → 上下文 → 收音 → 转写 → raw/remote/local 处理 → 严格目标交付 → 持久化 → 完成。
 - `transcribing`、`enhancing`、`inserting` 阶段忽略重复开始或停止快捷键。
 - 捕获快捷键只有 `hold` 与 `toggle` 两种公开模式；hold 的 release 必须匹配启动时的 definition ID，toggle 的第二次点按完成锁定录音。
 - 单修饰键通过 `flagsChanged` 识别；命中普通键时吞掉 down、repeat 与 up，未命中的系统 chord 保持透传。
@@ -96,15 +96,14 @@ Lerro -> LerroIntelligence -> LerroCore
 - 正常逻辑 reset 保留已吞键直到对应 key-up 与 modifier release；Lerro 合成的交付按键带 source marker 并始终透传。
 - Onboarding 与设置录制快捷键时暂停生产 hotkey dispatch，测试状态禁止启动麦克风、HUD、历史或文本交付。
 - 开始录音前检查安全输入框。
-- 自动 `.insert` 使用提交瞬间的当前键盘焦点，不依赖 AX focused element、选区、PID 或 bundle；Ask card 显式插入先恢复捕获应用，再走相同 current-focus paste。
-- `.replaceSelection` 绑定原进程或原 bundle，并确认安全状态、focused element 与原选区保持不变。
-- 文本通过剪贴板和合成 Command-V 交付；普通插入在 500ms 后恢复 best-effort 归档，Rewrite 只在本 session 仍持有 marker 时恢复严格归档。
+- `.insert` 绑定捕获时的进程、bundle、focused element、完整文本值、选区与安全状态；任一指纹漂移都会停止写入并把最终文本保留到剪贴板。
+- 文本通过剪贴板和合成 Command-V 交付；提交后在 500ms 后恢复 best-effort 归档。
 - 取消信号贯穿激活、Command-V 提交前检查、Speech 和模型任务；`inserting` 在提交前继续接受取消，Command-V down/up 提交是文本交付 commit point，提交后会完成剪贴板等待与恢复并忽略取消；所有退出路径释放已按下按键并恢复输出音频。
 - 取消、失败和过期 session 清理未持久化录音、重置热键临时状态并阻止旧结果提交。
-- 原始 Dictate 直接交付 Apple Speech transcript；Translate、Ask、Rewrite 和智能 Dictate 受当前 local/remote 模式授权策略约束。
-- capture 启动时冻结 intelligence mode、Provider 配置、API Key 与上下文开关；Dictate 的模型失败回退原始 transcript，Translate、Ask 和 Rewrite 保持明确失败。
-- 模型调用前保留原始 transcript；生产链路不运行 `TextPipeline` 预清洗。remote 结果不进入词典自动学习。
-- 普通 Dictate 遵循系统 Command-V 语义；Rewrite 额外执行严格选区一致性验证。
+- 原始 Dictate 直接交付 Apple Speech transcript；Translate 和智能 Dictate 受当前 remote/local 模式授权策略约束。
+- capture 启动时冻结 intelligence mode、Provider 配置、API Key 与上下文开关；Dictate 的模型失败回退原始 transcript，Translate 保持明确失败。
+- 模型调用前保留原始 transcript；生产链路不运行 `TextPipeline` 预清洗。AI Dictate 写入后可观察 60 秒用户修正，800 ms 防抖后由 AI 判断是否加入词典。
+- 普通 Dictate 遵循系统 Command-V 语义，并在提交前执行严格目标一致性验证。
 - 交付失败保存可恢复的失败历史和最终文本，UI 保持失败状态。
 - 捕获、识别、模型和交付错误只进入 HUD 失败态，不触发主窗口 alert、Dock attention 或失败声音；设置、存储、迁移等需要用户处理的错误继续使用 app-level 提示。
 - 删除带录音历史时先删除音频，再移除索引；历史索引读取失败时保留孤儿文件等待恢复。
@@ -142,13 +141,13 @@ Lerro -> LerroIntelligence -> LerroCore
 - 仓库不分发 Apple 字体；App UI 不捆绑第三方字体。
 - 品牌固定色仅用于可导出的品牌资产预览；主 UI 内容层使用 `LerroTheme` 灰阶，
   主要动作与焦点继承系统 Accent Color，success、warning、error 使用系统语义色。
-- App Icon、菜单栏四态、HUD、Ask、窗口和公开截图全部使用 Lerro 品牌资产。
+- App Icon、菜单栏四态、HUD、窗口和公开截图全部使用 Lerro 品牌资产。
 - HUD 外壳、声线、processing 节奏、状态切换、静音反馈与 Reduce Motion 行为继续以
   `CaptureHUDView.swift` 和既有 HUD fixture 为准；processing 三点继承系统 Accent Color。
 - 颜色、尺寸、圆角和字体先更新 `DesignTokens.swift` 或共享组件，再更新页面。
 - 视觉 fixture 只使用 inert adapters，不能触发系统权限、真实录音、真实文本交付或用户数据写入。
 - UI 改动至少验证 1080×750、988×658、浅色、深色、Increase Contrast、
-  Reduce Transparency、Reduce Motion、VoiceOver，以及受影响的 HUD、Ask 和设置状态。
+  Reduce Transparency、Reduce Motion、VoiceOver，以及受影响的 HUD、恢复卡和设置状态。
 
 品牌源稿、使用规则、动效与许可见 [`Brand/`](Brand)。
 
@@ -183,7 +182,7 @@ Lerro -> LerroIntelligence -> LerroCore
 | AX、热键、权限 | 全量测试、安全输入框、TextEdit 交付、剪贴板恢复、真实 TCC |
 | Intelligence、模型、BYOK runtime | 全量测试、授权与上下文边界；真实 local/remote 链路分别需要显式授权的加载或 API 生成证据 |
 | Vendor、Hub 下载 | vendored tests、依赖来源、许可证、真实缓存模型 smoke 或跳过原因 |
-| UI、窗口、HUD、Ask | fixture 截图、可访问性、Release app 真实窗口检查 |
+| UI、窗口、HUD、恢复卡 | fixture 截图、可访问性、Release app 真实窗口检查 |
 | scripts、config、resources | shell/plist 检查、Release package、独立解压复验 |
 | 治理、许可证、公开文档 | public export、allowlist、秘密、旧身份、资产许可和空 Git 历史扫描 |
 

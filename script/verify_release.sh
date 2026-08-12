@@ -14,7 +14,7 @@ application_extract_path="$temporary_directory/Application Archive"
 symbols_extract_path="$temporary_directory/Debug Symbols Archive"
 fixture_home_path="$temporary_directory/Fixture Home"
 fixture_log_path="$temporary_directory/fixture.log"
-ask_fixture_log_path="$temporary_directory/ask-fixture.log"
+recovery_fixture_log_path="$temporary_directory/recovery-fixture.log"
 fixture_pid=""
 
 cleanup() {
@@ -396,7 +396,7 @@ if [[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["signin
     spctl -a -vv "$app_path"
 fi
 
-print "[8/8] Running the inert home and Ask fixtures and cleaning up their exact PIDs"
+print "[8/8] Running the inert home and recovery fixtures and cleaning up their exact PIDs"
 fixture_binary="$app_path/Contents/MacOS/Lerro"
 
 run_fixture_smoke() {
@@ -432,9 +432,9 @@ run_fixture_smoke() {
 }
 
 run_fixture_smoke home "$fixture_log_path"
-run_fixture_smoke ask "$ask_fixture_log_path"
+run_fixture_smoke hud-recovery "$recovery_fixture_log_path"
 fixture_log_bytes=$(stat -f %z "$fixture_log_path")
-ask_fixture_log_bytes=$(stat -f %z "$ask_fixture_log_path")
+recovery_fixture_log_bytes=$(stat -f %z "$recovery_fixture_log_path")
 
 print "Release verification passed"
 print "Archive: $archive_path"
@@ -442,4 +442,4 @@ print "dSYM UUID: $dsym_uuid"
 print "Manifest: $manifest_path"
 print "CycloneDX SBOM: $sbom_path"
 print "Home fixture log bytes: $fixture_log_bytes (no integration errors)"
-print "Ask fixture log bytes: $ask_fixture_log_bytes (panel opened without crash)"
+print "Recovery fixture log bytes: $recovery_fixture_log_bytes (panel opened without crash)"

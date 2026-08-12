@@ -14,6 +14,24 @@ export type Release = {
 // they shipped with, while the homepage always points to the latest release.
 const releases: readonly Release[] = [
   {
+    version: "1.6.0",
+    build: "13",
+    publishedAt: "2026-08-13",
+    publishedLabel: "August 13, 2026",
+    summary: "A focused voice-typing path with live preview, safe delivery, and vocabulary that learns.",
+    highlights: [
+      "Press your shortcut to speak, follow a centered transcript that expands smoothly, then press again to write; the HUD disappears immediately after success.",
+      "Strict app, input field, value, selection, and secure-input checks protect the captured target; failed deliveries remain on the clipboard with a compact recovery card.",
+      "AI classifies useful corrections to recently dictated names and terms, adds them to the app-aware dictionary, and feeds the same vocabulary to Apple Speech and AI prompts.",
+      "Personalization is now a first-level page with an app grid, real icons, per-app tone, enablement, and AI preview.",
+      "The eight-step onboarding verifies real actions for privacy, Apple dictation, AI choice, shortcuts, first dictation, recovery, dictionary learning, and app tone.",
+      "Apple dictation is the default, followed by remote AI and local AI; the 3.03 GB local download supports background progress, pause, resume, stop, and restart recovery.",
+      "Ask, Rewrite, spoken follow-up edits, success receipts, and Apple Translation have left the active product; Translate uses the selected remote or local AI, while Quick Dictate remains optional and off by default.",
+    ],
+    downloadUrl:
+      "https://updates.lerroapp.com/releases/1.6.0/13/Lerro-macOS-arm64.zip",
+  },
+  {
     version: "1.5.1",
     build: "12",
     publishedAt: "2026-08-11",
@@ -136,6 +154,19 @@ const releases: readonly Release[] = [
 ];
 
 const chineseReleaseCopy = [
+  {
+    publishedLabel: "2026 年 8 月 13 日",
+    summary: "专注于实时预览、安全写入和自动学习词汇的完整听写路径。",
+    highlights: [
+      "按下快捷键开始说话，居中转写随内容平滑扩宽，再按一次完成写入；成功后 HUD 立即消失。",
+      "应用、输入框、文本值、选区和安全输入状态都会在写入前严格校验；失败文本保留在剪贴板，并显示紧凑恢复卡。",
+      "AI 会判断用户对刚听写的人名与术语修改是否值得学习，自动加入应用词典，并同时用于 Apple Speech 与 AI 提示词。",
+      "个性化成为一级页面，通过应用 Grid 管理真实图标、应用语气、启用状态和 AI 预览。",
+      "八步操作型引导会真实验证隐私选择、Apple 听写、AI 选择、快捷键、首次听写、失败恢复、词典学习和应用语气。",
+      "默认顺序为 Apple 听写、远端 AI、本地 AI；3.03 GB 本地模型支持后台下载、暂停、继续、停止和重启续传。",
+      "生产入口已移除 Ask、Rewrite、语音跟进修改、成功回执和 Apple Translation；翻译由所选远端或本地 AI 执行，Quick Dictate 保留为默认关闭的可选项。",
+    ],
+  },
   {
     publishedLabel: "2026 年 8 月 11 日",
     summary: "从选择 AI 到完成第一套工作流，一次引导全部学会。",

@@ -148,6 +148,19 @@ struct IntelligenceSettingsPage: View {
                 modePicker
                     .padding(.bottom, 30)
 
+                settingsSection("自动词典学习") {
+                    Toggle(
+                        "修正刚写入的专名后，用 AI 判断并加入词典",
+                        isOn: $session.preferences.automaticDictionaryLearningEnabled
+                    )
+                    .toggleStyle(.switch)
+                    .disabled(session.preferences.intelligenceMode == .raw)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .intelligenceSettingsBlock()
+                }
+                .padding(.bottom, 30)
+
                 settingsSection("本地模型") {
                     localModelCard
                 }
@@ -468,7 +481,7 @@ struct IntelligenceSettingsPage: View {
                     }
                     GridRow {
                         contextToggle("光标附近文字", value: $providerDraft.contextSharing.nearbyText)
-                        contextToggle("选中文字（改写必需）", value: $providerDraft.contextSharing.selectedText)
+                        contextToggle("选中文字", value: $providerDraft.contextSharing.selectedText)
                     }
                     GridRow {
                         contextToggle("个人词典", value: $providerDraft.contextSharing.dictionary)

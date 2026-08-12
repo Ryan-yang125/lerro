@@ -52,9 +52,7 @@ struct PipelineIntelligenceServiceTests {
     func mapsTaskDispositions() async throws {
         let cases: [(IntelligenceTask, IntelligenceDisposition, Int)] = [
             (.polish, .insert, 768),
-            (.translate, .insert, 768),
-            (.answer, .showAnswer, 1_024),
-            (.rewriteSelection, .replaceSelection, 768)
+            (.translate, .insert, 768)
         ]
 
         for (task, expectedDisposition, expectedMaxTokens) in cases {
@@ -90,7 +88,7 @@ struct PipelineIntelligenceServiceTests {
 
     @Test(
         "Rejects empty non-polish generations",
-        arguments: [IntelligenceTask.translate, .answer, .rewriteSelection]
+        arguments: [IntelligenceTask.translate]
     )
     func rejectsEmptyNonPolishGeneration(task: IntelligenceTask) async {
         let runtime = FakeLanguageModelRuntime(output: "  \n  ")
@@ -116,7 +114,7 @@ struct PipelineIntelligenceServiceTests {
         )
         let service = PipelineIntelligenceService(runtime: runtime, modelIdentifier: "stream-model")
 
-        let stream = try await service.processStream(makeRequest(task: .answer))
+        let stream = try await service.processStream(makeRequest(task: .polish))
         var results: [IntelligenceResult] = []
         for try await result in stream {
             results.append(result)
@@ -124,7 +122,7 @@ struct PipelineIntelligenceServiceTests {
 
         #expect(results.map(\.text) == ["Hel", "Hello", "Hello world"])
         #expect(results.last?.text == "Hello world")
-        #expect(results.allSatisfy { $0.disposition == .showAnswer })
+        #expect(results.allSatisfy { $0.disposition == .insert })
         #expect(results.allSatisfy { $0.modelIdentifier == "stream-model" })
         #expect(results.allSatisfy { $0.source == .local })
 
@@ -132,7 +130,7 @@ struct PipelineIntelligenceServiceTests {
         #expect(events.count == 2)
         guard events.count == 2 else { return }
         guard case .load("stream-model") = events[0],
-              case .generateStream(_, _, 1_024) = events[1] else {
+              case .generateStream(_, _, 768) = events[1] else {
             Issue.record("Expected model loading followed by streamed generation")
             return
         }
@@ -159,7 +157,7 @@ struct PipelineIntelligenceServiceTests {
 
     @Test(
         "Rejects empty non-polish streams",
-        arguments: [IntelligenceTask.translate, .answer, .rewriteSelection]
+        arguments: [IntelligenceTask.translate]
     )
     func rejectsEmptyNonPolishStream(task: IntelligenceTask) async throws {
         let runtime = FakeLanguageModelRuntime(
@@ -233,7 +231,7 @@ struct PipelineIntelligenceServiceTests {
         var receivedError: FakeRuntimeError?
 
         do {
-            _ = try await service.process(makeRequest(task: .answer))
+            _ = try await service.process(makeRequest(task: .polish))
             Issue.record("Expected generation to fail")
         } catch let error as FakeRuntimeError {
             receivedError = error
@@ -333,46 +331,144 @@ struct PipelineIntelligenceServiceTests {
         #expect(await remote.recordedEvents() == [.testConnection(configuration)])
     }
 
-    @Test("Remote Rewrite stops before the provider when selected text sharing is disabled")
-    func remoteRewriteRequiresSelectedTextSharing() async {
-        let local = FakeLanguageModelRuntime(output: "unused")
-        let remote = FakeRemoteLanguageModelRuntime(output: "must not be used")
+    @Test("Local AI classifies a bounded correction into a dictionary candidate")
+    func classifiesLocalCorrection() async throws {
+        let runtime = FakeLanguageModelRuntime(
+            output: #"{"candidates":[{"phrase":"乐若","replacement":"Lerro","confidence":0.97}]}"#
+        )
+        let service = PipelineIntelligenceService(runtime: runtime, modelIdentifier: "local-model")
+        let request = DictionaryLearningRequest(
+            mode: .local,
+            originalSpan: "乐若",
+            correctedSpan: "Lerro",
+            contextBefore: String(repeating: "前", count: 200),
+            contextAfter: String(repeating: "后", count: 200),
+            applicationName: "ChatGPT",
+            bundleIdentifier: "com.openai.chat"
+        )
+
+        let decision = try await service.classifyCorrection(request)
+
+        #expect(decision.candidates == [
+            DictionaryLearningCandidate(phrase: "乐若", replacement: "Lerro", confidence: 0.97)
+        ])
+        #expect(request.contextBefore?.count == DictionaryLearningRequest.maximumContextCharacters)
+        #expect(request.contextAfter?.count == DictionaryLearningRequest.maximumContextCharacters)
+        let events = await runtime.recordedEvents()
+        #expect(events.count == 2)
+        guard case .generate(let system, let user, let tokens) = events.last else {
+            Issue.record("Expected correction generation")
+            return
+        }
+        #expect(system.contains("明天 to 昨天"))
+        #expect(system.contains("zero to three candidates"))
+        #expect(user.contains(#""original_span":"乐若""#))
+        #expect(user.contains(#""corrected_span":"Lerro""#))
+        #expect(tokens == DictionaryLearningPromptComposer.maximumOutputTokens)
+    }
+
+    @Test("Remote correction classification sends only the bounded correction payload")
+    func classifiesRemoteCorrection() async throws {
+        let local = FakeLanguageModelRuntime(output: "unused", loadError: .loadFailed)
+        let remote = FakeRemoteLanguageModelRuntime(output: #"{"candidates":[]}"#)
         let service = PipelineIntelligenceService(
             runtime: local,
             remoteRuntime: remote,
             modelIdentifier: "local-model"
         )
-        let configuration = RemoteProviderConfiguration(
-            apiKey: "test-key",
-            contextSharing: RemoteContextSharing(
-                application: true,
-                windowTitle: true,
-                nearbyText: true,
-                selectedText: false,
-                dictionary: true,
-                tone: true
-            )
-        )
-        let request = IntelligenceRequest(
-            task: .rewriteSelection,
+        let configuration = RemoteProviderConfiguration(apiKey: "test-key")
+        let decision = try await service.classifyCorrection(DictionaryLearningRequest(
             mode: .remote,
             remoteProvider: configuration,
-            transcript: "Make this concise",
-            selectedText: "Original selection",
-            context: CapturedContext(applicationName: "Editor")
+            originalSpan: "明天",
+            correctedSpan: "昨天",
+            contextBefore: "我们原来说",
+            contextAfter: "要开会",
+            applicationName: "Notes",
+            bundleIdentifier: "com.apple.Notes"
+        ))
+
+        #expect(decision == .noLearning)
+        #expect(await local.recordedEvents().isEmpty)
+        let events = await remote.recordedEvents()
+        #expect(events.count == 1)
+        guard case .generate(let saved, _, let user, let tokens) = events.first else {
+            Issue.record("Expected one remote correction generation")
+            return
+        }
+        #expect(saved == configuration)
+        #expect(user.contains(#""original_span":"明天""#))
+        #expect(!user.contains("test-key"))
+        #expect(tokens == DictionaryLearningPromptComposer.maximumOutputTokens)
+    }
+
+    @Test("Raw mode rejects automatic dictionary learning without model calls")
+    func rawModeRejectsDictionaryLearning() async {
+        let local = FakeLanguageModelRuntime(output: "unused")
+        let remote = FakeRemoteLanguageModelRuntime(output: "unused")
+        let service = PipelineIntelligenceService(
+            runtime: local,
+            remoteRuntime: remote,
+            modelIdentifier: "local-model"
         )
 
-        do {
-            _ = try await service.process(request)
-            Issue.record("Expected selected-text sharing to be required")
-        } catch let error as LerroError {
-            #expect(error.errorDescription?.contains("需要允许发送选中文字") == true)
-        } catch {
-            Issue.record("Received an unexpected error: \(error)")
+        await #expect(throws: LerroError.self) {
+            try await service.classifyCorrection(DictionaryLearningRequest(
+                mode: .raw,
+                originalSpan: "乐若",
+                correctedSpan: "Lerro",
+                applicationName: "Notes"
+            ))
         }
-
         #expect(await local.recordedEvents().isEmpty)
         #expect(await remote.recordedEvents().isEmpty)
+    }
+
+    @Test("Raw mode keeps translation unavailable")
+    func rawModeRejectsTranslation() async {
+        let service = PipelineIntelligenceService(
+            runtime: FakeLanguageModelRuntime(output: "unused"),
+            modelIdentifier: "local-model"
+        )
+        await #expect(throws: LerroError.self) {
+            try await service.process(IntelligenceRequest(
+                task: .translate,
+                mode: .raw,
+                transcript: "你好",
+                targetLanguage: "en_US",
+                context: CapturedContext(applicationName: "Tests")
+            ))
+        }
+    }
+
+    @Test("Correction classification rejects malformed or hallucinated output")
+    func rejectsInvalidCorrectionOutput() async {
+        let invalidOutputs = [
+            #"```json\n{"candidates":[]}\n```"#,
+            #"{"candidates":[],"explanation":"none"}"#,
+            #"{"candidates":[{"phrase":"same","replacement":"same","confidence":1}]}"#,
+            #"{"candidates":[{"phrase":"a","replacement":"A","confidence":1},{"phrase":"b","replacement":"B","confidence":1},{"phrase":"c","replacement":"C","confidence":1},{"phrase":"d","replacement":"D","confidence":1}]}"#
+        ]
+        for output in invalidOutputs {
+            #expect(throws: DictionaryLearningValidationError.self) {
+                try DictionaryLearningDecision.decodeStrictJSON(output)
+            }
+        }
+
+        let service = PipelineIntelligenceService(
+            runtime: FakeLanguageModelRuntime(
+                output: #"{"candidates":[{"phrase":"invented","replacement":"Lerro","confidence":0.9}]}"#
+            ),
+            modelIdentifier: "local-model"
+        )
+        await #expect(throws: DictionaryLearningValidationError.self) {
+            try await service.classifyCorrection(DictionaryLearningRequest(
+                mode: .local,
+                originalSpan: "乐若",
+                correctedSpan: "Lerro",
+                applicationName: "Notes"
+            ))
+        }
     }
 
     private func makeRequest(
@@ -382,7 +478,6 @@ struct PipelineIntelligenceServiceTests {
         IntelligenceRequest(
             task: task,
             transcript: transcript,
-            selectedText: task == .rewriteSelection ? "Selected text" : nil,
             targetLanguage: task == .translate ? "en_US" : nil,
             context: CapturedContext(applicationName: "Tests")
         )

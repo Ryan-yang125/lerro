@@ -130,6 +130,8 @@ struct RootView: View {
             HistoryView(session: session)
         case .dictionary:
             DictionaryView(session: session)
+        case .personalization:
+            PersonalizationView(session: session)
         }
     }
 
@@ -138,10 +140,7 @@ struct RootView: View {
         ZStack {
             LerroTheme.canvas
             switch session.visualFixturePresentation {
-            case "ask":
-                AskAnswerCardView(session: session)
-                    .frame(width: 800, height: 500)
-            case "hud-waiting", "hud-recording", "hud-profile", "hud-dictating", "hud-hands-free", "hud-processing", "hud-error", "hud-receipt", "hud-send-confirmation":
+            case "hud-waiting", "hud-recording", "hud-profile", "hud-dictating", "hud-hands-free", "hud-processing", "hud-error", "hud-recovery", "hud-dictionary-learned":
                 CaptureHUDView(session: session)
                     .frame(width: 750, height: 500)
             default:

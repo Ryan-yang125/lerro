@@ -2,9 +2,9 @@ import SwiftUI
 import LerroCore
 
 private enum OnboardingAIRoute: String, CaseIterable, Identifiable {
-    case local
+    case apple
     case remote
-    case basic
+    case local
 
     var id: String { rawValue }
 }
@@ -22,16 +22,11 @@ struct OnboardingAISetupView: View {
 
     init(session: AppSession) {
         self.session = session
-        let selectedRoute: OnboardingAIRoute = if session.preferences.intelligenceMode == .local,
-                                                  !session.preferences.hasApprovedModelDownload,
-                                                  session.localAIReadiness?.recommendation != .localRecommended {
-            .remote
-        } else {
-            switch session.preferences.intelligenceMode {
-            case .raw: .basic
-            case .local: .local
-            case .remote: .remote
-            }
+        let selectedRoute: OnboardingAIRoute = switch session.preferences.intelligenceMode {
+        case .raw: .apple
+        case .local where !session.preferences.hasApprovedModelDownload: .apple
+        case .local: .local
+        case .remote: .remote
         }
         _selectedRoute = State(initialValue: selectedRoute)
         _providerDraft = State(initialValue: IntelligenceProviderDraft(
@@ -49,8 +44,8 @@ struct OnboardingAISetupView: View {
                 localSetup
             case .remote:
                 remoteSetup
-            case .basic:
-                basicSetup
+            case .apple:
+                appleSetup
             }
         }
         .onChange(of: providerDraft.provider) { previous, updated in
@@ -118,22 +113,22 @@ struct OnboardingAISetupView: View {
     private var routePicker: some View {
         HStack(spacing: 10) {
             routeButton(
-                .local,
-                title: "本地 AI",
-                detail: "隐私优先 · 约 3.03 GB",
-                icon: "cpu"
+                .apple,
+                title: "Apple 听写",
+                detail: "默认 · 立即开始",
+                icon: "waveform"
             )
             routeButton(
                 .remote,
-                title: "API 模型",
+                title: "远端 AI",
                 detail: "快速启用 · 使用自己的 Key",
                 icon: "network"
             )
             routeButton(
-                .basic,
-                title: "基础听写",
-                detail: "立即开始 · 随后启用 AI",
-                icon: "waveform"
+                .local,
+                title: "本地 AI",
+                detail: "设备运行 · 约 3.03 GB",
+                icon: "cpu"
             )
         }
     }
@@ -149,7 +144,7 @@ struct OnboardingAISetupView: View {
             && session.localAIReadiness?.recommendation == .localUnavailable
         return Button {
             selectedRoute = route
-            if route == .basic
+            if route == .apple
                 || (route == .local && !session.preferences.hasApprovedModelDownload)
                 || (route == .remote && !providerDraft.configuration.isReadyForUse) {
                 session.activateIntelligenceMode(.raw)
@@ -235,7 +230,7 @@ struct OnboardingAISetupView: View {
                 .foregroundStyle(LerroTheme.secondaryText)
             }
 
-            Text("下载完成前，基础 Quick Dictate 继续使用 Apple Speech。模型就绪后自动启用增强听写、Ask 和语义改写。")
+            Text("下载期间可以继续使用 Apple 听写。模型就绪后可使用 AI 润色、翻译、自动词典和应用语气。")
                 .font(LerroTheme.font(12))
                 .foregroundStyle(LerroTheme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -350,9 +345,9 @@ struct OnboardingAISetupView: View {
         }
     }
 
-    private var basicSetup: some View {
+    private var appleSetup: some View {
         Label {
-            Text("Apple Speech、Quick Dictate、设备端翻译、回执撤销和精确语音修改都可以先使用。稍后从设置继续准备 AI。")
+            Text("Apple Speech 会完成实时转写和文字写入，并使用个人词典提升专名识别。AI 高级能力可随时从设置启用。")
                 .fixedSize(horizontal: false, vertical: true)
         } icon: {
             Image(systemName: "checkmark.circle.fill")
@@ -409,7 +404,7 @@ struct OnboardingAISetupView: View {
             session.activateIntelligenceMode(.raw)
         case .remote where !providerDraft.configuration.isReadyForUse:
             session.activateIntelligenceMode(.raw)
-        case .basic:
+        case .apple:
             session.activateIntelligenceMode(.raw)
         case .local:
             session.activateIntelligenceMode(.local)

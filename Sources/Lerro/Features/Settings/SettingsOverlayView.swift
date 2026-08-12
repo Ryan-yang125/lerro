@@ -81,7 +81,7 @@ struct SettingsOverlayView: View {
         case .account: AccountSettingsPage(session: session)
         case .settings: MainSettingsPage(session: session)
         case .intelligence: IntelligenceSettingsPage(session: session)
-        case .personal: PersonalSettingsPage(session: session)
+        case .personal: PersonalizationView(session: session)
         case .about: AboutSettingsPage(session: session)
         case .help: HelpSettingsPage()
         case .releaseNotes: ReleaseNotesPage()
@@ -95,7 +95,7 @@ struct SettingsOverlayView: View {
 
                 navigationGroup([.intelligence], title: "智能")
 
-                navigationGroup([.personal, .about])
+                navigationGroup([.about])
 
                 navigationGroup([.help, .releaseNotes])
             }
@@ -160,7 +160,6 @@ struct SettingsOverlayView: View {
             .account,
             .settings,
             .intelligence,
-            .personal,
             .about,
             .help,
             .releaseNotes
@@ -230,7 +229,6 @@ private struct MainSettingsPage: View {
                             primary: "将语音整理后插入当前光标"
                         ))
                         shortcutBlock(.translate, title: "翻译", detail: "说话并输出目标语言")
-                        shortcutBlock(.ask, title: "指令", detail: "处理选中文字或结合当前应用回答")
                     }
                 }
 
@@ -292,13 +290,16 @@ private struct MainSettingsPage: View {
                             status: session.speechResourceStatus,
                             prepare: session.prepareSpeechResources
                         )
-                        Divider().overlay(LerroTheme.thinBorder)
-                        languageResourceRow(
-                            "翻译资源",
-                            status: session.translationResourceStatus,
-                            prepare: session.prepareTranslationResources
-                        )
                     }
+                    .settingsBlock()
+                }
+
+                settingsGroup("听写") {
+                    settingsToggle(
+                        "Quick Dictate",
+                        detail: "连续静音约 1.2 秒后自动结束，默认关闭",
+                        value: $session.preferences.quickDictateEnabled
+                    )
                     .settingsBlock()
                 }
 
@@ -746,7 +747,7 @@ private struct AccountSettingsPage: View {
                 }
 
                 VStack(spacing: 0) {
-                    settingsRow("运行方式", detail: "增强听写、指令、改写与个性化") { Text("本地优先").foregroundStyle(LerroTheme.secondaryText) }
+                    settingsRow("运行方式", detail: "Apple 听写与可选 AI 能力") { Text("本地优先").foregroundStyle(LerroTheme.secondaryText) }
                     Divider().overlay(LerroTheme.thinBorder)
                     settingsRow("账户", detail: "功能可直接使用") { Text("无需登录").foregroundStyle(LerroTheme.secondaryText) }
                     Divider().overlay(LerroTheme.thinBorder)
@@ -787,11 +788,6 @@ private struct PersonalSettingsPage: View {
                     reportLine(
                         "应用语气",
                         value: "\(session.preferences.appToneProfiles.filter(\.enabled).count)"
-                    )
-                    Divider().overlay(LerroTheme.thinBorder)
-                    reportLine(
-                        "语音发送",
-                        value: "\(session.preferences.voiceFinishApplications.count)"
                     )
                 }
                 .settingsBlock()
@@ -853,47 +849,6 @@ private struct PersonalSettingsPage: View {
                 .background(LerroTheme.fillContainerThin)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                if !session.preferences.voiceFinishApplications.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("语音发送")
-                            .font(LerroTheme.font(14, weight: .medium))
-                        VStack(spacing: 0) {
-                            ForEach(session.preferences.voiceFinishApplications) { application in
-                                HStack(spacing: 12) {
-                                    Image(systemName: "paperplane")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .frame(width: 28, height: 28)
-                                    Text(verbatim: application.applicationName)
-                                        .font(LerroTheme.font(14, weight: .medium))
-                                    Spacer()
-                                    Button {
-                                        session.forgetVoiceFinishApplication(application)
-                                    } label: {
-                                        Image(systemName: "xmark.circle")
-                                            .frame(width: 28, height: 28)
-                                    }
-                                    .buttonStyle(LerroPressButtonStyle())
-                                    .accessibilityLabel("停用语音发送")
-                                }
-                                .padding(.horizontal, 12)
-                                .frame(minHeight: 50)
-                                if application.id
-                                    != session.preferences.voiceFinishApplications.last?.id {
-                                    Divider().overlay(LerroTheme.thinBorder)
-                                }
-                            }
-                        }
-                        .background(LerroTheme.topLayer)
-                        .clipShape(RoundedRectangle(
-                            cornerRadius: LerroTheme.navigationRadius,
-                            style: .continuous
-                        ))
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .background(LerroTheme.fillContainerThin)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                }
             }
         }
         .sheet(isPresented: $isCreatingProfile) {
@@ -1067,9 +1022,7 @@ private struct HelpSettingsPage: View {
                 Divider().overlay(LerroTheme.thinBorder)
                 helpRow("翻译", detail: "使用翻译快捷键说出内容，并输出首选目标语言。", icon: "character.bubble")
                 Divider().overlay(LerroTheme.thinBorder)
-                helpRow("指令", detail: "使用指令快捷键处理选中文字或当前上下文。", icon: "sparkles")
-                Divider().overlay(LerroTheme.thinBorder)
-                helpRow("免手发送", detail: "免按住听写末尾说“发送”或“send it”；首次使用会确认当前应用。", icon: "paperplane")
+                helpRow("写入恢复", detail: "目标发生变化时，最终文字会自动保留到剪贴板。", icon: "doc.on.clipboard")
             }
             .settingsBlock()
         }
@@ -1088,7 +1041,7 @@ private struct ReleaseNotesPage: View {
                     arguments: AppMetadata.version, AppMetadata.build
                 ))
                     .font(LerroTheme.font(14, weight: .medium))
-                Text("实时显示转写与目标应用；写入后可安全撤回或立即修正；明确确认后可通过语音发送。")
+                Text("实时转写会随内容居中展开；正常写入后立即结束；焦点变化时自动复制；AI 从用户修正中学习词典。")
                     .font(LerroTheme.font(14))
                     .foregroundStyle(LerroTheme.secondaryText)
                     .lineSpacing(5)

@@ -95,7 +95,17 @@ public struct AccessibilityContextService: ContextCapturing {
                 cursorAfter: cursorNeighborhood?.after,
                 role: role,
                 subrole: subrole,
-                isSecureField: isSecureField
+                isSecureField: isSecureField,
+                focusedElementAvailable: focusedElement != nil,
+                focusedElementFingerprint: isSecureField
+                    ? nil
+                    : focusedElement.map { Int(CFHash($0)) },
+                focusedValueFingerprint: isSecureField
+                    ? nil
+                    : completeFocusedText?.hashValue,
+                selectedRange: selectedRange.map {
+                    UTF16TextRange(location: $0.location, length: $0.length)
+                }
             )
         }
     }

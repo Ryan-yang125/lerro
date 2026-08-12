@@ -9,19 +9,20 @@ enum CaptureHUDVisualState: Equatable {
     case handsFree
     case processing
     case error
-    case receipt
+    case recovery
+    case dictionaryLearned
 
     var size: CGSize {
         switch self {
         case .idleHidden: CGSize(width: 40, height: 6)
-        case .waiting, .listening, .processing:
-            CGSize(width: 70, height: 34)
+        case .waiting, .listening, .processing, .handsFree:
+            CGSize(width: HUDTranscriptLayout.minimumWidth, height: 34)
         case .error:
-            CGSize(width: 210, height: 44)
-        case .handsFree:
-            CGSize(width: 116, height: 34)
-        case .receipt:
-            CGSize(width: 430, height: 68)
+            CGSize(width: 260, height: 54)
+        case .recovery:
+            CGSize(width: 420, height: 92)
+        case .dictionaryLearned:
+            CGSize(width: 380, height: 72)
         }
     }
 
@@ -39,10 +40,12 @@ enum CaptureHUDVisualState: Equatable {
         phase: CapturePhase,
         isStartingCapture: Bool,
         isHandsFreeCapture: Bool,
-        hasDeliveryReceipt: Bool = false,
+        hasRecoveryPresentation: Bool = false,
+        hasDictionaryLearningToast: Bool = false,
         isSuppressed: Bool = false
     ) -> Self {
-        if hasDeliveryReceipt { return .receipt }
+        if hasRecoveryPresentation { return .recovery }
+        if hasDictionaryLearningToast { return .dictionaryLearned }
         if isSuppressed { return .idleHidden }
         if isStartingCapture {
             return isHandsFreeCapture ? .handsFree : .waiting
@@ -90,7 +93,8 @@ enum CaptureHUDAnnouncement {
             case .ask: "正在处理指令"
             }
         case .error: errorMessage ?? "听写失败，可以重试"
-        case .receipt: "文本已写入，可以撤回、修正或继续说一句修改"
+        case .recovery: "写入失败，内容已复制到剪贴板"
+        case .dictionaryLearned: "已将修正加入词典"
         case .idleHidden where phase == .cancelled: "听写已取消"
         case .idleHidden where previous == .processing: "听写完成"
         case .idleHidden: nil
@@ -104,13 +108,16 @@ struct CaptureHUDView: View {
     @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
     @Environment(\.colorSchemeContrast) private var systemContrast
     @Environment(\.locale) private var locale
+    @State private var expandedTranscriptWidth = HUDTranscriptLayout.minimumWidth
+    @State private var transcriptAnnouncementTask: Task<Void, Never>?
 
     var body: some View {
         hudControl
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .padding(.bottom, LerroTheme.hudContentBottomInset)
             .onTapGesture(count: 2) {
-                guard visualState != .receipt else { return }
+                guard visualState != .recovery,
+                      visualState != .dictionaryLearned else { return }
                 session.enterHandsFreeCapture(session.activeMode)
             }
             .accessibilityElement(children: .contain)
@@ -133,28 +140,41 @@ struct CaptureHUDView: View {
                       session.phase == .listening else { return }
                 announceTransition(from: .handsFree, to: .handsFree)
             }
+            .onChange(of: session.partialTranscript, initial: true) { _, transcript in
+                updateExpandedWidth(for: transcript)
+                scheduleTranscriptAnnouncement(transcript)
+            }
+            .onDisappear { transcriptAnnouncementTask?.cancel() }
+            .onChange(of: session.phase) { _, phase in
+                if phase == .idle || phase == .cancelled || phase == .failed {
+                    expandedTranscriptWidth = HUDTranscriptLayout.minimumWidth
+                }
+            }
     }
 
     private var hudControl: some View {
         Group {
-            if visualState == .receipt {
-                receiptContent
-            } else {
+            switch visualState {
+            case .recovery:
+                recoveryContent
+            case .dictionaryLearned:
+                dictionaryLearningContent
+            case .idleHidden, .waiting, .listening, .handsFree, .processing, .error:
                 captureContent
             }
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, visualState == .receipt ? 10 : 6)
+        .padding(.horizontal, visualState == .recovery || visualState == .dictionaryLearned ? 12 : 6)
         .padding(.vertical, visualState == .idleHidden ? 0 : 4)
         .frame(width: targetSize.width, height: targetSize.height)
         .background(background)
         .clipShape(RoundedRectangle(
-            cornerRadius: showsLiveTranscript || visualState == .receipt ? 16 : targetSize.height / 2,
+            cornerRadius: usesCardShape ? 16 : targetSize.height / 2,
             style: .continuous
         ))
         .overlay {
             RoundedRectangle(
-                cornerRadius: showsLiveTranscript || visualState == .receipt ? 16 : targetSize.height / 2,
+                cornerRadius: usesCardShape ? 16 : targetSize.height / 2,
                 style: .continuous
             )
             .stroke(
@@ -170,7 +190,7 @@ struct CaptureHUDView: View {
     }
 
     private var captureContent: some View {
-        VStack(alignment: .leading, spacing: showsLiveTranscript ? 5 : 0) {
+        VStack(alignment: .center, spacing: showsLiveTranscript ? 5 : 0) {
             if showsLiveTranscript {
                 liveTranscript
                     .transition(.opacity)
@@ -239,12 +259,13 @@ struct CaptureHUDView: View {
             ) {
                 session.toggleCapture(session.activeMode)
             }
-        }
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 
     private var liveTranscript: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .center, spacing: 2) {
             if let applicationName = session.activeCaptureApplicationName {
                 Text(verbatim: applicationName)
                     .font(LerroTheme.font(10, weight: .semibold))
@@ -256,33 +277,67 @@ struct CaptureHUDView: View {
                 .foregroundStyle(.white.opacity(session.partialTranscriptIsStable ? 1 : 0.78))
                 .lineLimit(2)
                 .truncationMode(.head)
+                .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(localized("实时转写"))
         .accessibilityValue(Text(verbatim: session.partialTranscript))
     }
 
     @ViewBuilder
-    private var receiptContent: some View {
-        if let receipt = session.deliveryReceipt {
-            HStack(spacing: 9) {
-                Image(systemName: receiptIcon(receipt.status))
+    private var recoveryContent: some View {
+        if let recovery = session.recoveryPresentation {
+            HStack(spacing: 10) {
+                Image(systemName: "doc.on.clipboard.fill")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(receiptColor(receipt.status))
+                    .foregroundStyle(Color(nsColor: .systemOrange))
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: receiptTitle(receipt))
+                    Text(verbatim: LerroInterfaceLocalization.format(
+                        "未能写入 %@",
+                        locale: locale,
+                        arguments: recovery.applicationName
+                    ))
                         .font(LerroTheme.font(11, weight: .semibold))
                         .lineLimit(1)
-                    Text(verbatim: receiptDetail(receipt))
+                    Text(verbatim: recovery.message)
                         .font(LerroTheme.font(10))
                         .foregroundStyle(.white.opacity(increaseContrast ? 1 : 0.72))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
                 Spacer(minLength: 4)
-                receiptActions(receipt)
+                cardButton("再次复制") { session.recopyRecoveryText() }
+                cardDismissButton(label: "关闭恢复提示") { session.dismissRecovery() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dictionaryLearningContent: some View {
+        if let toast = session.dictionaryLearningToast {
+            HStack(spacing: 10) {
+                Image(systemName: "character.book.closed.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(nsColor: .systemGreen))
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: toast.count > 1
+                        ? "已学会 \(toast.count) 项修正"
+                        : "已学会：\(toast.phrase) → \(toast.replacement)")
+                        .font(LerroTheme.font(11, weight: .semibold))
+                        .lineLimit(1)
+                    Text(verbatim: toast.applicationName)
+                        .font(LerroTheme.font(10))
+                        .foregroundStyle(.white.opacity(increaseContrast ? 1 : 0.72))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                cardButton("撤销") { session.undoDictionaryLearning() }
+                cardDismissButton(label: "关闭词典提示") {
+                    session.dismissDictionaryLearningToast()
+                }
             }
         }
     }
@@ -292,7 +347,7 @@ struct CaptureHUDView: View {
         case .waiting: .waiting
         case .handsFree where session.isStartingCapture: .arming
         case .listening, .handsFree: .listening
-        case .idleHidden, .processing, .error, .receipt: nil
+        case .idleHidden, .processing, .error, .recovery, .dictionaryLearned: nil
         }
     }
 
@@ -357,14 +412,15 @@ struct CaptureHUDView: View {
             phase: session.phase,
             isStartingCapture: session.isStartingCapture,
             isHandsFreeCapture: session.isHandsFreeCapture,
-            hasDeliveryReceipt: session.deliveryReceipt != nil,
+            hasRecoveryPresentation: session.recoveryPresentation != nil,
+            hasDictionaryLearningToast: session.dictionaryLearningToast != nil,
             isSuppressed: session.isHUDSuppressed
         )
     }
 
     private var targetSize: CGSize {
         if showsLiveTranscript {
-            return CGSize(width: 420, height: 84)
+            return CGSize(width: expandedTranscriptWidth, height: 84)
         }
         var size = visualState.size
         if isCountdownVisible { size.width += 40 }
@@ -374,6 +430,18 @@ struct CaptureHUDView: View {
             size.width += 78
         }
         return size
+    }
+
+    private var usesCardShape: Bool {
+        showsLiveTranscript || visualState == .recovery || visualState == .dictionaryLearned
+    }
+
+    private func updateExpandedWidth(for transcript: String) {
+        let measured = HUDTranscriptLayout.requiredWidth(
+            applicationName: session.activeCaptureApplicationName,
+            transcript: transcript
+        )
+        expandedTranscriptWidth = max(expandedTranscriptWidth, measured)
     }
 
     private var showsLiveTranscript: Bool {
@@ -436,49 +504,14 @@ struct CaptureHUDView: View {
             case .ask: "正在处理指令"
             }
         case .error: session.captureError ?? "听写失败，可以重试"
-        case .receipt: session.deliveryReceipt.map(receiptTitle) ?? "文本已写入"
+        case .recovery: session.recoveryPresentation.map {
+            "未能写入 \($0.applicationName)，内容已复制到剪贴板"
+        } ?? "写入失败，内容已复制到剪贴板"
+        case .dictionaryLearned: "已将修正加入词典"
         }
     }
 
-    @ViewBuilder
-    private func receiptActions(_ receipt: AppSession.DeliveryReceiptPresentation) -> some View {
-        switch receipt.status {
-        case .delivered:
-            HStack(spacing: 4) {
-                if receipt.systemReceipt.canUndo {
-                    receiptButton("撤回") { session.undoRecentDelivery() }
-                }
-                if receipt.canCorrect {
-                    receiptButton("修正") { session.beginRecentDeliveryCorrection() }
-                }
-                receiptDismissButton
-            }
-        case .confirmSubmit:
-            HStack(spacing: 4) {
-                receiptButton("保留") { session.dismissDeliveryReceipt() }
-                receiptButton("允许并发送", prominent: true) {
-                    session.submitRecentDelivery()
-                }
-            }
-        case .failed:
-            HStack(spacing: 4) {
-                if receipt.requestedSubmit {
-                    receiptButton("重试") { session.submitRecentDelivery() }
-                }
-                receiptDismissButton
-            }
-        case .working:
-            ProgressView()
-                .controlSize(.small)
-                .tint(.white)
-                .frame(width: 28, height: 28)
-                .accessibilityLabel(localized("正在执行"))
-        case .undone, .submitted:
-            receiptDismissButton
-        }
-    }
-
-    private func receiptButton(
+    private func cardButton(
         _ title: String,
         prominent: Bool = false,
         action: @escaping () -> Void
@@ -492,58 +525,14 @@ struct CaptureHUDView: View {
             .clipShape(Capsule())
     }
 
-    private var receiptDismissButton: some View {
-        Button { session.dismissDeliveryReceipt() } label: {
+    private func cardDismissButton(label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             Image(systemName: "xmark")
                 .font(.system(size: 9, weight: .bold))
                 .frame(width: 24, height: 24)
         }
         .buttonStyle(LerroPressButtonStyle())
-        .accessibilityLabel(localized("关闭回执"))
-    }
-
-    private func receiptTitle(_ receipt: AppSession.DeliveryReceiptPresentation) -> String {
-        switch receipt.status {
-        case .delivered:
-            LerroInterfaceLocalization.format(
-                "已写入 %@ · Fn 修改",
-                locale: locale,
-                arguments: receipt.applicationName
-            )
-        case .confirmSubmit:
-            LerroInterfaceLocalization.format(
-                "在 %@ 发送？",
-                locale: locale,
-                arguments: receipt.applicationName
-            )
-        case .working: localized("正在执行")
-        case .undone: localized("已撤回")
-        case .submitted: localized("已发送")
-        case .failed: localized("操作未完成")
-        }
-    }
-
-    private func receiptDetail(_ receipt: AppSession.DeliveryReceiptPresentation) -> String {
-        if case .failed(let message) = receipt.status { return message }
-        return receipt.text
-    }
-
-    private func receiptIcon(_ status: AppSession.DeliveryReceiptStatus) -> String {
-        switch status {
-        case .delivered, .confirmSubmit: "checkmark.circle.fill"
-        case .working: "ellipsis.circle"
-        case .undone: "arrow.uturn.backward.circle.fill"
-        case .submitted: "paperplane.circle.fill"
-        case .failed: "exclamationmark.triangle.fill"
-        }
-    }
-
-    private func receiptColor(_ status: AppSession.DeliveryReceiptStatus) -> Color {
-        switch status {
-        case .failed: Color(nsColor: .systemRed)
-        case .submitted: Color(nsColor: .systemGreen)
-        case .delivered, .confirmSubmit, .working, .undone: .white
-        }
+        .accessibilityLabel(localized(label))
     }
 
     private var handsFreeAccessibilityLabel: String {
@@ -575,7 +564,7 @@ struct CaptureHUDView: View {
         hudButton(icon, label: label, action: action)
             .opacity(isVisible ? 1 : 0)
             .animation(controlOpacityAnimation, value: isVisible)
-            .frame(width: isVisible ? 24 : 0, height: 24)
+            .frame(width: 28, height: 24)
             .scaleEffect(isVisible ? 1 : 0.01)
             .clipped()
             .allowsHitTesting(isVisible)
@@ -605,8 +594,46 @@ struct CaptureHUDView: View {
         )
     }
 
+    private func scheduleTranscriptAnnouncement(_ transcript: String) {
+        transcriptAnnouncementTask?.cancel()
+        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, showsLiveTranscript else { return }
+        transcriptAnnouncementTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled, showsLiveTranscript else { return }
+            NSAccessibility.post(
+                element: NSApplication.shared,
+                notification: .announcementRequested,
+                userInfo: [
+                    .announcement: trimmed,
+                    .priority: NSAccessibilityPriorityLevel.low.rawValue
+                ]
+            )
+        }
+    }
+
     private func localized(_ key: String) -> String {
         LerroInterfaceLocalization.string(key, locale: locale)
+    }
+}
+
+enum HUDTranscriptLayout {
+    static let minimumWidth: CGFloat = 120
+    static let maximumWidth: CGFloat = 420
+
+    static func requiredWidth(applicationName: String?, transcript: String) -> CGFloat {
+        let applicationWidth = estimatedTextWidth(applicationName ?? "", pointSize: 10)
+        let transcriptWidth = estimatedTextWidth(transcript, pointSize: 12)
+        let contentWidth = max(applicationWidth, transcriptWidth) + 36
+        return min(maximumWidth, max(minimumWidth, ceil(contentWidth)))
+    }
+
+    private static func estimatedTextWidth(_ text: String, pointSize: CGFloat) -> CGFloat {
+        text.reduce(CGFloat.zero) { width, character in
+            let scalar = character.unicodeScalars.first?.value ?? 0
+            let isWide = scalar >= 0x2E80 || character == "Ｍ"
+            return width + (isWide ? pointSize : pointSize * 0.56)
+        }
     }
 }
 

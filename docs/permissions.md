@@ -1,59 +1,78 @@
 # macOS permissions
 
-Lerro requests permissions at the moment a feature needs them and shows the
-current state in onboarding and Settings. The final signed bundle identity is
-`app.lerro.mac`; macOS associates privacy decisions with that identity and its
-code signature.
+Lerro requests permissions when an onboarding task or feature needs them and shows
+their current state in Onboarding and Settings. The signed bundle identity is
+`app.lerro.mac`; macOS binds privacy decisions to this identity and code signature.
 
 ## Permission matrix
 
-| Permission | Product use | Requested by | Behavior when unavailable |
+| Permission | Product use | Framework | Behavior when unavailable |
 | --- | --- | --- | --- |
-| Microphone | Capture speech after a user starts Dictate, Translate, Ask, Rewrite, or Hands-free | AVFoundation | Capture remains unavailable and the app presents the relevant System Settings route |
-| Accessibility | Read limited focused-element context, deliver text, and run the active shortcut filter | ApplicationServices / CGEventTap | Context, direct delivery, and shortcut swallowing fail closed; the answer can remain available for explicit user action |
+| Microphone | Capture speech for Dictate and Translate, run the onboarding microphone test | AVFoundation | Capture stays blocked and Lerro provides the System Settings route |
+| Accessibility | Global shortcut filtering, bounded target context, strict delivery, failure protection, and same-field correction observation | ApplicationServices / CGEventTap | Capture/delivery requiring that boundary fails closed; correction observation ends quietly |
 
-Usage descriptions live in [`config/Info.plist`](../config/Info.plist).
-Entitlements live in [`config/Lerro.entitlements`](../config/Lerro.entitlements).
-Permission checks and prompts are implemented in
-[`MacPermissionService.swift`](../Sources/LerroMac/System/MacPermissionService.swift).
+Usage descriptions live in [`config/Info.plist`](../config/Info.plist), entitlements
+in [`config/Lerro.entitlements`](../config/Lerro.entitlements), and permission checks
+in [`MacPermissionService.swift`](../Sources/LerroMac/System/MacPermissionService.swift).
+
+Apple Speech authorization and language-resource readiness are checked as part of
+the Apple Dictate preparation task. Language assets are managed by macOS.
 
 ## Identity and consent
 
 Entitlements declare capabilities and usage descriptions explain them. The user
-still grants each TCC permission in macOS. A new Bundle ID or signing identity
-can create a new permission record, so release candidates use a stable path,
-Bundle ID, and Apple signing identity before the real-device matrix begins.
+grants each TCC permission in macOS. Release candidates keep a stable app path,
+Bundle ID, and Apple signing identity before real-device validation.
 
-Lerro applies privacy checks according to the delivery mode:
+Lerro applies safety checks at two points:
 
-1. Before recording, to avoid capturing while a secure input field is focused.
-2. Before selection-aware Rewrite delivery, to confirm the original process or
-   bundle, current secure-input state, focused element, and unchanged selection.
+1. Capture start records the target application, focused element, complete value,
+   selection, and secure-input state. Secure input prevents recording.
+2. Immediately before Command-V, strict delivery requires the current application,
+   element, value, selection, and secure-input state to match the captured fingerprint.
 
-Ordinary Dictate and Translate insertion follows the keyboard focus present when
-Command-V is committed. A focus change during model processing changes the final
-destination.
+A focus or value change stops delivery. The final text is copied to the clipboard and
+the HUD shows a recovery card with **Copy again** and **Close**.
+
+After a successful AI-processed Dictate, Accessibility can observe that same app and
+input element for up to 60 seconds. It reads the current value locally, waits 800 ms
+for stable changes, and emits only the smallest diff that intersects the uniquely
+located delivered text. New capture, timeout, app/field change, secure input,
+unsupported editor, unavailable AX value, or revoked permission ends observation.
+
+## Onboarding permission tasks
+
+The user must:
+
+1. confirm the chosen history and audio policy;
+2. grant Microphone and Speech authorization;
+3. prepare the selected Speech language resource;
+4. complete the microphone level test;
+5. grant Accessibility before recording and testing the global shortcut;
+6. complete a real Dictate write and a simulated failure-recovery copy.
+
+The page advances from detected success state. Permission copy alone cannot complete
+the task.
 
 ## Manual verification
 
-Use the final Release app and synthetic text. For every permission:
+Use the final Release app and synthetic text:
 
-1. Start from an undetermined state and verify the explanation and system prompt.
-2. Grant access and verify the intended feature.
-3. Revoke access in System Settings and verify the app refreshes to a blocked
-   state, cancels an active capture, and stops the global event tap.
+1. Start from an undetermined state; verify explanation, system prompt, and blocked state.
+2. Grant access; complete the intended onboarding task and a real capture.
+3. Revoke access; verify state refresh, active capture cancellation, event-tap stop,
+   failed delivery protection, and quiet observer termination.
 4. Grant access again, relaunch from the stable app path, and verify recovery.
 
-The Accessibility matrix includes physical Fn/Control/Option/Shift/Command
-press and release, configured chords, hold and toggle modes, swallowed matched
-keys, Escape cancellation, event-tap timeout recovery, and duplicate event
-suppression. Accessibility validation includes TextEdit plus representative
-third-party editors, focus switching, non-empty selections, secure fields, and
-clipboard restoration with multiple item types.
+The Accessibility matrix includes physical Fn/Control/Option/Shift/Command press and
+release, configured chords, hold/toggle, matched-key swallowing, Escape cancellation,
+event-tap timeout recovery, and duplicate suppression. Delivery validation covers
+TextEdit, Notes, browser/ChatGPT, an Electron editor, focus switching, text edits,
+selection changes, secure fields, and multi-item pasteboard restoration.
 
-The global event tap starts when Accessibility is available. A foreground
-permission refresh cancels an active capture before
-stopping the tap, so a hidden hold release cannot leave the microphone running.
+The global event tap starts when Accessibility is available. A foreground permission
+refresh cancels active capture before stopping the tap, so a hidden hold release
+cannot leave the microphone running.
 
-TCC resets are optional diagnostic operations. Run them only with explicit user
-approval and scope them to `app.lerro.mac` and the single affected service.
+TCC resets are optional diagnostics. Run them only with explicit approval and scope
+them to `app.lerro.mac` and the single affected service.

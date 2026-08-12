@@ -52,8 +52,7 @@ let package = Package(
                 .linkedFramework("Carbon"),
                 .linkedFramework("Metal"),
                 .linkedFramework("ServiceManagement"),
-                .linkedFramework("Speech"),
-                .linkedFramework("Translation")
+                .linkedFramework("Speech")
             ]
         ),
         .executableTarget(

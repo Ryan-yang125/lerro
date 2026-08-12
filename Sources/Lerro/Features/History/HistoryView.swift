@@ -406,7 +406,6 @@ private struct HistoryListRow: View {
     let session: AppSession
     @State private var hovering = false
     @State private var showDeleteConfirmation = false
-    @State private var showCorrection = false
     @State private var showContextReceipt = false
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.locale) private var locale
@@ -439,15 +438,8 @@ private struct HistoryListRow: View {
 
             Spacer(minLength: 8)
 
-            if entry.mode == .ask, entry.answerText?.isEmpty == false {
-                Button("查看回答") { session.showHistoryAnswer(entry) }
-                    .buttonStyle(LerroPillButtonStyle())
-            }
-
             HStack(spacing: 4) {
-                if entry.contextReceipt != nil
-                    || entry.phaseTimings != nil
-                    || (entry.editLineage?.versions.count ?? 0) > 1 {
+                if entry.contextReceipt != nil || entry.phaseTimings != nil {
                     Button { showContextReceipt.toggle() } label: {
                         Image(systemName: "info.circle")
                             .frame(width: 28, height: 28)
@@ -467,9 +459,6 @@ private struct HistoryListRow: View {
                     Button("复制原始转写") { session.copyText(entry.rawText) }
                     if !entry.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Button("重新处理文本") { session.retryHistoryEntry(entry) }
-                    }
-                    if entry.mode == .dictation, entry.status == .completed {
-                        Button("修正并学习") { showCorrection = true }
                     }
                     if entry.audioRelativePath != nil {
                         Button("下载音频") { session.exportAudio(entry) }
@@ -509,9 +498,6 @@ private struct HistoryListRow: View {
             if !entry.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button("重新处理文本") { session.retryHistoryEntry(entry) }
             }
-            if entry.mode == .dictation, entry.status == .completed {
-                Button("修正并学习") { showCorrection = true }
-            }
             if entry.audioRelativePath != nil {
                 Button("导出音频") { session.exportAudio(entry) }
             }
@@ -521,11 +507,6 @@ private struct HistoryListRow: View {
         .alert("删除这条记录？", isPresented: $showDeleteConfirmation) {
             Button("取消", role: .cancel) {}
             Button("删除", role: .destructive) { session.deleteHistoryEntry(entry) }
-        }
-        .sheet(isPresented: $showCorrection) {
-            HistoryCorrectionSheet(entry: entry, session: session) {
-                showCorrection = false
-            }
         }
     }
 
@@ -562,19 +543,6 @@ private struct HistoryListRow: View {
             HStack(spacing: 6) {
                 if let route = entry.processingRoute {
                     receiptChip(routeTitle(route), icon: "cpu")
-                }
-                if entry.finishAction == .submitted {
-                    receiptChip("已发送", icon: "paperplane.fill")
-                }
-                if let lineage = entry.editLineage, lineage.versions.count > 1 {
-                    receiptChip(
-                        LerroInterfaceLocalization.format(
-                            "%lld 个版本",
-                            locale: locale,
-                            arguments: Int64(lineage.versions.count)
-                        ),
-                        icon: "clock.arrow.circlepath"
-                    )
                 }
                 if let receipt = entry.contextReceipt {
                     ForEach(
@@ -658,75 +626,5 @@ private struct HistoryListRow: View {
 
     private func localized(_ key: String) -> String {
         LerroInterfaceLocalization.string(key, locale: locale)
-    }
-}
-
-private struct HistoryCorrectionSheet: View {
-    let entry: HistoryEntry
-    let session: AppSession
-    let close: () -> Void
-    @State private var correctedText: String
-    @State private var phrase = ""
-    @State private var replacement = ""
-    @State private var isSaving = false
-
-    init(entry: HistoryEntry, session: AppSession, close: @escaping () -> Void) {
-        self.entry = entry
-        self.session = session
-        self.close = close
-        _correctedText = State(initialValue: entry.finalText)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("修正并学习")
-                .lerroTypography(.title)
-
-            TextEditor(text: $correctedText)
-                .font(LerroTheme.font(14))
-                .scrollContentBackground(.hidden)
-                .padding(8)
-                .frame(minHeight: 150)
-                .background(LerroTheme.main)
-                .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
-                        .stroke(LerroTheme.focusBorder, lineWidth: 1)
-                }
-
-            HStack(spacing: 10) {
-                TextField("识别成了", text: $phrase)
-                    .textFieldStyle(.roundedBorder)
-                Image(systemName: "arrow.right")
-                    .foregroundStyle(LerroTheme.secondaryText)
-                TextField("以后写成", text: $replacement)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            HStack {
-                Spacer()
-                Button("取消", action: close)
-                    .buttonStyle(LerroPillButtonStyle())
-                    .disabled(isSaving)
-                Button("保存") {
-                    isSaving = true
-                    Task { @MainActor in
-                        let saved = await session.saveHistoryCorrection(
-                            entry,
-                            correctedText: correctedText,
-                            phrase: phrase,
-                            replacement: replacement
-                        )
-                        isSaving = false
-                        if saved { close() }
-                    }
-                }
-                .buttonStyle(LerroPillButtonStyle(prominent: true))
-                .disabled(correctedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
-            }
-        }
-        .padding(24)
-        .frame(width: 560, height: 330)
-        .background(LerroTheme.main)
     }
 }

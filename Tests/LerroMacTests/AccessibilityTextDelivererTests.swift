@@ -61,8 +61,8 @@ struct AccessibilityTextDelivererTests {
         }
     }
 
-    @Test("Plain insertion targets the current keyboard focus")
-    func plainInsertionUsesCurrentKeyboardFocus() async throws {
+    @Test("Plain insertion rejects a different current application")
+    func plainInsertionRejectsDifferentApplication() async {
         let recorder = DeliveryInvocationRecorder()
         let deliverer = AccessibilityTextDeliverer(
             activateTarget: { _ in true },
@@ -72,14 +72,16 @@ struct AccessibilityTextDelivererTests {
             }
         )
 
-        try await deliverer.deliver(
-            "output",
-            to: CapturedContext(applicationName: "Editor", processIdentifier: 42),
-            replacingSelection: false,
-            targetPolicy: .requireCurrent
-        )
+        await #expect(throws: LerroError.self) {
+            try await deliverer.deliver(
+                "output",
+                to: CapturedContext(applicationName: "Editor", processIdentifier: 42),
+                replacingSelection: false,
+                targetPolicy: .requireCurrent
+            )
+        }
 
-        #expect(await recorder.pastedTexts() == ["output"])
+        #expect(await recorder.pastedTexts().isEmpty)
     }
 
     @Test("Explicit plain insertion reactivates the captured application without AX text")
@@ -272,8 +274,8 @@ struct AccessibilityTextDelivererTests {
         #expect(await recorder.pastedTexts() == ["delivered"])
     }
 
-    @Test("Plain insertion does not depend on the AX safety snapshot")
-    func plainInsertionDoesNotRequireAXSafetySnapshot() async throws {
+    @Test("Plain insertion rejects a secure current target")
+    func plainInsertionRejectsSecureTarget() async {
         let recorder = DeliveryInvocationRecorder()
         let deliverer = AccessibilityTextDeliverer(
             activateTarget: { _ in true },
@@ -289,13 +291,15 @@ struct AccessibilityTextDelivererTests {
             }
         )
 
-        try await deliverer.deliver(
-            "delivered",
-            to: CapturedContext(applicationName: "Editor", processIdentifier: 42),
-            replacingSelection: false,
-            targetPolicy: .requireCurrent
-        )
-        #expect(await recorder.pastedTexts() == ["delivered"])
+        await #expect(throws: LerroError.self) {
+            try await deliverer.deliver(
+                "delivered",
+                to: CapturedContext(applicationName: "Editor", processIdentifier: 42),
+                replacingSelection: false,
+                targetPolicy: .requireCurrent
+            )
+        }
+        #expect(await recorder.pastedTexts().isEmpty)
     }
 
     @Test("Plain insertion remains available when capture observed a selection")
@@ -506,8 +510,8 @@ struct AccessibilityTextDelivererTests {
         #expect(await blocker.texts() == ["first"])
     }
 
-    @Test("Plain insertion does not require a captured app identity")
-    func plainInsertionWorksWithoutTargetIdentity() async throws {
+    @Test("Plain insertion requires a captured app identity")
+    func plainInsertionRejectsMissingTargetIdentity() async {
         let recorder = DeliveryInvocationRecorder()
         let deliverer = AccessibilityTextDeliverer(
             activateTarget: { _ in true },
@@ -519,13 +523,15 @@ struct AccessibilityTextDelivererTests {
             }
         )
 
-        try await deliverer.deliver(
-            "output",
-            to: CapturedContext(applicationName: "Editor"),
-            replacingSelection: false,
-            targetPolicy: .requireCurrent
-        )
-        #expect(await recorder.pastedTexts() == ["output"])
+        await #expect(throws: LerroError.self) {
+            try await deliverer.deliver(
+                "output",
+                to: CapturedContext(applicationName: "Editor"),
+                replacingSelection: false,
+                targetPolicy: .requireCurrent
+            )
+        }
+        #expect(await recorder.pastedTexts().isEmpty)
     }
 
     @Test("Selection observations distinguish empty, selected, and unavailable states")

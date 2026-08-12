@@ -355,46 +355,58 @@ swift test --filter LerroTests
 cancel、删除 definition 后的旧队列事件、enhancing 时取消、处理中重复 toggle 和 idle
 cancel。
 
-## Ask 结束录音后立即崩溃
+## HUD 左对齐、突然变宽或抢走输入焦点
 
-先查看崩溃前的 AppKit 统一日志。若出现 `canBecomeKeyWindow`、`canBecomeMainWindow` 或
-`NSInternalInconsistencyException`，检查 [`FloatingPanelController`](../Sources/LerroMac/Panels/FloatingPanelController.swift)：
+V1.6 HUD 应从约 120 pt 的居中波形胶囊平滑增长到最多 420 pt。应用名称、转写、波形和左右
+按钮共享同一视觉中心；同一次 capture 的 shell 宽度只增长，processing 保持当前中心与宽度。
 
-- interactive Ask panel 必须显式允许成为 key window。
-- Ask panel 保持 `canBecomeMain == false`，只调用 `makeKeyAndOrderFront`。
-- 被动 HUD 保持不可成为 key/main window。
-- Timer 回调通过 `Task { @MainActor in ... }` 更新面板，避免使用同步 executor 假设。
+检查 [`CaptureHUDView.swift`](../Sources/Lerro/Features/Ask/CaptureHUDView.swift) 与
+[`FloatingPanelController.swift`](../Sources/LerroMac/Panels/FloatingPanelController.swift)：
 
-最窄自动验证：
+- transcript layout 是否使用当前最大测量宽度，partial revision 不能缩窄 shell；
+- 左右按钮是否占对称固定 slot；
+- max width 后是否最多两行并优先显示最新文本；
+- panel frame 更新是否围绕同一 center，而非固定左边缘；
+- 被动 HUD、recovery 和 learned toast 是否保持 `canBecomeKey/Main == false`；
+- Reduce Motion 是否取消 spring scale 并保留 fade；
+- timer/VoiceOver 更新是否通过 MainActor 且有节流。
+
+最窄验证：
 
 ```zsh
+swift test --filter CaptureHUDVisualStateTests
 swift test --filter FloatingPanelControllerTests
-LERRO_FIXTURE_MODE=1 LERRO_FIXTURE_PRESENTATION=ask \
-  dist/Lerro.app/Contents/MacOS/Lerro
+LERRO_FIXTURE_MODE=1 LERRO_FIXTURE_PRESENTATION=hud-dictating \
+  LERRO_FIXTURE_PANEL_ONLY=1 dist/Lerro.app/Contents/MacOS/Lerro
 ```
 
-最终 Release 门禁会从独立解压的 App 各运行一次 home 与 Ask fixture；两者都必须持续存活，
-保持零 TCP socket，并且日志中没有系统集成错误或崩溃标记。
+继续检查 short/medium/long、processing、recovery、dictionary learned 和 Reduce Motion fixture，
+再用最终 Release app 在真实输入目标验证 panel 不会改变 keyboard focus。
 
-## 文本写入错误应用
+## 文本写入错误应用或输入框
 
-记录 Command-V 提交瞬间的前台 app 与键盘焦点，内容使用合成文本。
+V1.6 写入绑定 capture 开始时的 app、focused element、value、selection 和 secure state。处理期间
+发生任何目标漂移时，Command-V 应停止，final text 应进入 clipboard，HUD 应显示 recovery card。
 
-检查：
+只记录脱敏身份与 stage，检查：
 
-- 处理期间是否主动切换了应用或输入框。
-- HUD 与 Ask panel 是否保持非激活窗口语义。
-- `delivery-complete stage=paste mode=current-focus` 是否出现。
-- 选区改写时 PID/bundle 与 selected text 是否一致。
+- capture 的 PID/bundle 与交付前 frontmost/focused application 是否一致；
+- focused element fingerprint、role/subrole 是否一致；
+- complete AX value 与 selection fingerprint 是否一致；
+- secure input 是否在 capture 后开启；
+- recovery copier 是否成功写入 final text，failed history 是否保留 final；
+- HUD、recovery 与 learned toast 是否保持非激活。
 
 自动测试：
 
 ```zsh
-swift test --filter LerroMacTests
-swift test --filter LerroTests
+swift test --filter AccessibilityTextDelivererTests
+swift test --filter V16SystemAdapterTests
+swift test --filter AppSessionCoreFlowTests
 ```
 
-普通插入遵循当前键盘焦点；选区改写继续使用捕获目标绑定。
+真实复现时使用合成文本，分别切换 app、输入框、选区和目标 value。新目标与原目标都不应收到
+晚到写入；剪贴板应等于 final text，“再次复制”应产生同一内容。
 
 ## 转写成功但当前输入框没有文本
 
@@ -410,25 +422,70 @@ swift test --filter LerroTests
 
 - 没有 `delivery-start`：`AppSession` 尚未调用交付器，先检查 result disposition、session generation 和取消状态。
 - `delivery-failed stage=privacy`：捕获上下文是安全输入。
-- `delivery-failed stage=target`：只属于 `.replaceSelection`，检查 `delivery-target observed`、PID/bundle、focused element 与原选区。
-- 普通 `.insert` 即使 `element=false` 或选区状态为 `unavailable` 也会继续走 current-focus paste。
-- `delivery-failed stage=paste`：普通插入检查 pasteboard 写入与事件创建；Rewrite 还要检查临时内容所有权和条件恢复。
-- `delivery-complete stage=paste mode=current-focus`：普通插入的 Command-V 已提交到当前键盘焦点；目标控件中的固定探针文本提供消费证据。
+- `delivery-failed stage=target`：检查 PID/bundle、focused element、完整 AX value、selection 与 secure state。
+- AX element、value 或 selection unavailable 时严格写入进入 recovery，避免选择未知目标。
+- `delivery-failed stage=paste`：检查 pasteboard snapshot、session marker、事件创建和 source marker。
+- `delivery-complete stage=paste`：Command-V 已提交到 capture-bound target；固定探针文本提供消费证据。
 
 用 [`testing.md`](testing.md#release-文本交付探针) 的固定合成探针分离物理 Fn、麦克风、
 Speech、模型与文本交付。原生 TextEditor 与浏览器 textarea 分别验证 AppKit 和 Chromium 的 clipboard transaction。测试期间只插入固定探针文本，并记录目标应用、签名模式、
 完成阶段与剪贴板指纹。
 
-## 剪贴板未恢复
+## 剪贴板未恢复或失败文本缺失
 
-普通插入在 500ms 后恢复 best-effort 归档，期间产生的新剪贴板内容会被归档覆盖。Rewrite 只在仍拥有 session marker、change count、唯一临时 item、transient type 和文本时恢复；期间发生用户修改会保留新剪贴板。
+严格交付在 500 ms consumption window 后只在仍拥有 session marker、change count、唯一临时
+item、transient type 和 final text 时恢复 snapshot。期间出现用户或其他 app 的新剪贴板内容会保留。
+写入失败则把 final text 作为当前 clipboard 内容供恢复。
 
 若无并发修改仍未恢复：
 
-- 普通插入检查 best-effort archive 与 500ms completion。
-- Rewrite 检查 snapshot 是否保存全部 item/type data，以及 marker 是否写入。
-- 检查 Command-V 失败路径是否执行对应恢复。
-- 使用多 item 和富文本 fixture 复现。
+- 检查 snapshot 是否保存全部 item/type data，以及 marker 是否写入。
+- 检查 Command-V commit 前后的取消分支和 500 ms completion。
+- 检查失败出口是否调用 `RecoveryTextCopying.copyForRecovery`，recovery card 是否持有同一 final text。
+- 使用 plain/rich/image/file URL 多 item fixture 和 concurrent pasteboard mutation 复现。
+
+## 自动词典没有学习或学错内容
+
+自动学习只在 AI Dictate 成功写入、AI mode 为 remote/local、偏好开启且 Accessibility 可读取
+同一 app/element 时启动。观察最多 60 秒，value 稳定 800 ms 后才分类。
+
+检查：
+
+- delivered text 在 baseline 是否只出现一次；重复文本会跳过定位。
+- diff 是否与 delivered range 相交；字段其他位置编辑会忽略。
+- frontmost app、focused element 与 secure state 是否仍匹配 receipt。
+- AX value 是否存在且小于等于 65,536 UTF-16 units。
+- AI 返回是否为单一 JSON object、0–3 candidates、无额外字段/代码围栏。
+- phrase/replacement 是否分别来自 original/corrected span，confidence 是否至少 0.7。
+- candidate 是否与已有相同 app scope entry 重复。
+
+专名、品牌、技术术语、拼写、同音词和音译可以学习。`明天 → 昨天`、事实/日期/时间变化、
+增删句、语气修改和大段重写应返回空 candidates。
+
+最窄验证：
+
+```zsh
+swift test --filter DictionaryLearning
+swift test --filter V16SystemAdapterTests
+swift test --filter AppSessionCoreFlowTests
+```
+
+remote 调试只记录请求类别、Provider、Model ID、latency 和 schema error。correction spans、nearby
+context、prompt 和 Provider output 不进入日志。
+
+## Apple Speech 没有使用新词典词条
+
+检查词条属于 manual/learned 且 `isSnippet == false`，application scope 与 capture bundle 匹配。
+AppSession 先按 app scope、priority、use count 和 recency 排序，再截取最多 100 条。Speech 层优先
+使用 replacement，空 replacement 使用 phrase，并在 case/diacritic folding 后去重。
+
+```zsh
+swift test --filter AppleSpeechServiceTests
+swift test --filter AppSessionCoreFlowTests
+```
+
+Apple contextual strings 提供识别提示，具体提升受 locale、language asset 和系统实现影响。用相同
+设备、locale、麦克风和短句对比词条启用前后，记录 raw Apple transcript。
 
 ## 模型一直下载、加载失败或无输出
 
@@ -443,7 +500,7 @@ Speech、模型与文本交付。原生 TextEditor 与浏览器 textarea 分别�
 
 应用固定无 bearer token，禁止读取或复制用户 Hugging Face 凭据排障。
 
-空输出行为：Dictate 使用 Apple Speech 原始 transcript；translate、rewrite、answer 返回错误。该契约由
+空输出行为：Dictate 使用 Apple Speech 原始 transcript；Translate、应用语气预览和自动词典分类返回明确失败或空学习结果。该契约由
 [`PipelineIntelligenceServiceTests.swift`](../Tests/LerroCoreTests/PipelineIntelligenceServiceTests.swift) 维护。
 
 ## 模型下载进度停滞、回退或临时文件累积
@@ -540,8 +597,8 @@ swift test --filter OpenAICompatibleHTTPClientTests
 和延迟；API Key、Authorization、请求 JSON、转写、工作区和 Provider 原始响应都不进入
 终端、日志、issue 或支持邮件。
 
-Dictate 的 API 错误按产品契约交付 Apple Speech 原文。Translate、Ask 和 Rewrite 显示
-明确失败。若配置页连接成功而捕获仍失败，检查 capture 开始后 Provider 配置是否发生变化；
+Dictate 的 API 错误按产品契约交付 Apple Speech 原文。Translate 与应用语气预览显示
+明确失败；自动词典分类失败会安静结束当前观察。若配置页连接成功而捕获仍失败，检查 capture 开始后 Provider 配置是否发生变化；
 当前 session 使用开始时冻结的快照，新配置从下一次 capture 生效。
 
 ## JSON 数据损坏

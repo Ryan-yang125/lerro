@@ -4,6 +4,7 @@ public enum SidebarDestination: String, CaseIterable, Codable, Sendable {
     case home
     case history
     case dictionary
+    case personalization
 }
 
 public enum SettingsDestination: String, CaseIterable, Codable, Sendable {
@@ -64,6 +65,16 @@ public enum TextSelectionState: String, Codable, Hashable, Sendable {
     case unavailable
 }
 
+public struct UTF16TextRange: Codable, Hashable, Sendable {
+    public var location: Int
+    public var length: Int
+
+    public init(location: Int, length: Int) {
+        self.location = max(0, location)
+        self.length = max(0, length)
+    }
+}
+
 public struct CapturedContext: Codable, Hashable, Sendable {
     public static let maximumSelectedTextCharacters = 4_096
 
@@ -81,6 +92,10 @@ public struct CapturedContext: Codable, Hashable, Sendable {
     public var role: String?
     public var subrole: String?
     public var isSecureField: Bool
+    public var focusedElementAvailable: Bool
+    public var focusedElementFingerprint: Int?
+    public var focusedValueFingerprint: Int?
+    public var selectedRange: UTF16TextRange?
 
     public init(
         applicationName: String = "Unknown",
@@ -96,7 +111,11 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         cursorAfter: String? = nil,
         role: String? = nil,
         subrole: String? = nil,
-        isSecureField: Bool = false
+        isSecureField: Bool = false,
+        focusedElementAvailable: Bool = false,
+        focusedElementFingerprint: Int? = nil,
+        focusedValueFingerprint: Int? = nil,
+        selectedRange: UTF16TextRange? = nil
     ) {
         self.applicationName = applicationName
         self.processIdentifier = processIdentifier
@@ -113,6 +132,10 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         self.role = role
         self.subrole = subrole
         self.isSecureField = isSecureField
+        self.focusedElementAvailable = focusedElementAvailable
+        self.focusedElementFingerprint = focusedElementFingerprint
+        self.focusedValueFingerprint = focusedValueFingerprint
+        self.selectedRange = selectedRange
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -130,6 +153,10 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         case role
         case subrole
         case isSecureField
+        case focusedElementAvailable
+        case focusedElementFingerprint
+        case focusedValueFingerprint
+        case selectedRange
     }
 
     public init(from decoder: any Decoder) throws {
@@ -157,6 +184,19 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         role = try container.decodeIfPresent(String.self, forKey: .role)
         subrole = try container.decodeIfPresent(String.self, forKey: .subrole)
         isSecureField = try container.decode(Bool.self, forKey: .isSecureField)
+        focusedElementAvailable = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .focusedElementAvailable
+        ) ?? false
+        focusedElementFingerprint = try container.decodeIfPresent(
+            Int.self,
+            forKey: .focusedElementFingerprint
+        )
+        focusedValueFingerprint = try container.decodeIfPresent(
+            Int.self,
+            forKey: .focusedValueFingerprint
+        )
+        selectedRange = try container.decodeIfPresent(UTF16TextRange.self, forKey: .selectedRange)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -175,6 +215,10 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         try container.encodeIfPresent(role, forKey: .role)
         try container.encodeIfPresent(subrole, forKey: .subrole)
         try container.encode(isSecureField, forKey: .isSecureField)
+        try container.encode(focusedElementAvailable, forKey: .focusedElementAvailable)
+        try container.encodeIfPresent(focusedElementFingerprint, forKey: .focusedElementFingerprint)
+        try container.encodeIfPresent(focusedValueFingerprint, forKey: .focusedValueFingerprint)
+        try container.encodeIfPresent(selectedRange, forKey: .selectedRange)
     }
 }
 
@@ -188,7 +232,6 @@ public struct CaptureSession: Identifiable, Hashable, Sendable {
     public let remoteProvider: RemoteProviderConfiguration?
     public let toneInstruction: String?
     public let toneProfileApplicationName: String?
-    public let allowsVoiceFinishAction: Bool
 
     public init(
         id: UUID = UUID(),
@@ -199,8 +242,7 @@ public struct CaptureSession: Identifiable, Hashable, Sendable {
         intelligenceMode: IntelligenceMode = .local,
         remoteProvider: RemoteProviderConfiguration? = nil,
         toneInstruction: String? = nil,
-        toneProfileApplicationName: String? = nil,
-        allowsVoiceFinishAction: Bool = false
+        toneProfileApplicationName: String? = nil
     ) {
         self.id = id
         self.mode = mode
@@ -211,7 +253,6 @@ public struct CaptureSession: Identifiable, Hashable, Sendable {
         self.remoteProvider = remoteProvider
         self.toneInstruction = toneInstruction
         self.toneProfileApplicationName = toneProfileApplicationName
-        self.allowsVoiceFinishAction = allowsVoiceFinishAction
     }
 }
 

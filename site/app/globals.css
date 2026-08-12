@@ -482,58 +482,85 @@ dd {
   position: absolute;
   bottom: 22px;
   left: 50%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
   width: 370px;
-  height: 84px;
+  height: 108px;
   transform: translateX(-50%);
 }
 
 .hero-hud {
   position: relative;
   display: flex;
-  align-items: stretch;
-  width: 370px;
-  height: 84px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: var(--hero-hud-width, 132px);
+  min-width: 132px;
+  max-width: 370px;
+  min-height: 78px;
+  padding: 9px 10px 8px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.32);
   border-radius: 16px;
   background: var(--hud-surface);
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.24);
-}
-
-.hero-hud__live,
-.hero-hud__receipt {
-  position: absolute;
-  inset: 0;
-  transition: opacity 120ms ease-out, transform 120ms var(--interior-ease);
-}
-
-.hero-hud__live {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  gap: 2px;
-  padding: 10px 12px 8px;
   color: #fff;
-  text-align: left;
+  text-align: center;
+  transition: width 380ms cubic-bezier(0.22, 0.82, 0.22, 1), opacity 120ms ease-out, transform 180ms var(--interior-ease);
 }
 
-.hero-hud__live strong {
+.hero-hud > strong {
+  width: 100%;
+  overflow: hidden;
   color: rgba(255, 255, 255, 0.72);
   font-size: 10px;
   line-height: 1.1;
-}
-
-.hero-hud__live > span {
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 1.3;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.hero-hud__transcript {
+  display: -webkit-box;
+  width: 100%;
+  min-height: 16px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: center;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.hero-hud__controls {
+  display: grid;
+  grid-template-columns: 26px 44px 26px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+}
+
+.hero-hud__button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+}
+
 .hero-hud__activity {
   position: relative;
-  width: 40px;
-  height: 20px;
+  width: 44px;
+  height: 22px;
 }
 
 .hero-hud__waveform,
@@ -547,6 +574,7 @@ dd {
 }
 
 .hero-hud__waveform {
+  left: 3px;
   width: 38px;
   gap: 2px;
 }
@@ -563,6 +591,7 @@ dd {
 }
 
 .hero-hud__processing {
+  left: 9px;
   width: 26px;
   gap: 3px;
   opacity: 0;
@@ -591,49 +620,9 @@ dd {
   transform: scale(1);
 }
 
-.hero-hud__receipt {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
-  padding: 10px;
-  color: #fff;
+.hero-hud--delivered {
   opacity: 0;
-  transform: scale(0.98);
-}
-
-.hero-hud__receipt > span:nth-child(2) {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.hero-hud__receipt strong,
-.hero-hud__receipt small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hero-hud__receipt strong { font-size: 11px; }
-.hero-hud__receipt small { color: rgba(255, 255, 255, 0.72); font-size: 10px; }
-.hero-hud__check { color: #fff; font-size: 14px; }
-
-.hero-hud__receipt b {
-  padding: 6px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.13);
-  font-size: 10px;
-}
-
-.hero-hud--receipt .hero-hud__live {
-  opacity: 0;
-  transform: scale(0.98);
-}
-
-.hero-hud--receipt .hero-hud__receipt {
-  opacity: 1;
-  transform: scale(1);
+  transform: scale(0.96);
 }
 
 .principle-strip {

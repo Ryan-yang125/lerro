@@ -11,6 +11,9 @@ struct AppDependencies: Sendable {
     let microphoneTest: any MicrophoneLevelTesting
     let context: any ContextCapturing
     let textDelivery: any TextDelivering
+    let recoveryText: any RecoveryTextCopying
+    let deliveredTextObserver: any DeliveredTextObserving
+    let applicationCatalog: any ApplicationCataloging
     let hotkeys: any HotkeyMonitoring
     let permissions: any PermissionChecking
     let loginItem: any LoginItemManaging
@@ -19,7 +22,6 @@ struct AppDependencies: Sendable {
     let dictionary: any DictionaryRepository
     let preferences: any PreferencesRepository
     let intelligence: any IntelligenceProcessing
-    let translation: any TranslationServicing
     let deviceCapabilities: any DeviceCapabilityAssessing
 
     static func live() -> AppDependencies {
@@ -62,6 +64,9 @@ struct AppDependencies: Sendable {
             microphoneTest: MicrophoneLevelTester(),
             context: AccessibilityContextService(),
             textDelivery: AccessibilityTextDeliverer(),
+            recoveryText: PasteboardRecoveryTextCopier(),
+            deliveredTextObserver: AccessibilityDeliveredTextObserver(),
+            applicationCatalog: MacApplicationCatalog(),
             hotkeys: GlobalHotkeyMonitor(),
             permissions: MacPermissionService(),
             loginItem: MacLoginItemManager(),
@@ -74,25 +79,12 @@ struct AppDependencies: Sendable {
                 remoteRuntime: remoteModelRuntime,
                 modelIdentifier: defaultPreferences.localModelIdentifier
             ),
-            translation: AppleTranslationService(),
             deviceCapabilities: MacDeviceCapabilityAssessor(storageURL: paths.rootDirectory)
         )
     }
 
     private static func fixture(startupStorageError: String? = nil) -> AppDependencies {
         let now = Date(timeIntervalSince1970: 1_785_283_200)
-        let editedLineage: DeliveryEditLineage? = {
-            guard var lineage = try? DeliveryEditLineage(
-                originalText: "这是一段用于视觉回归的口述。",
-                createdAt: now.addingTimeInterval(-12)
-            ) else { return nil }
-            _ = try? lineage.append(
-                text: "这是一段用于视觉回归的合成口述。",
-                origin: .deterministic,
-                instruction: "加上合成"
-            )
-            return lineage
-        }()
         let history = [
             HistoryEntry(
                 createdAt: now,
@@ -101,8 +93,7 @@ struct AppDependencies: Sendable {
                 finalText: "这是一段用于视觉回归的合成口述。",
                 duration: 18,
                 applicationName: "Notes",
-                wasEnhanced: true,
-                editLineage: editedLineage
+                wasEnhanced: true
             ),
             HistoryEntry(
                 createdAt: now.addingTimeInterval(-3_600),
@@ -112,16 +103,6 @@ struct AppDependencies: Sendable {
                 targetLanguage: "en_US",
                 duration: 11,
                 applicationName: "Mail",
-                wasEnhanced: true
-            ),
-            HistoryEntry(
-                createdAt: now.addingTimeInterval(-7_200),
-                mode: .ask,
-                rawText: "总结这段合成上下文。",
-                finalText: "这是一条完全由测试夹具生成的摘要。",
-                answerText: "这是一条完全由测试夹具生成的摘要。",
-                duration: 9,
-                applicationName: "Safari",
                 wasEnhanced: true
             )
         ]
@@ -137,14 +118,13 @@ struct AppDependencies: Sendable {
         let onboardingRequested = ProcessInfo.processInfo.environment["LERRO_FIXTURE_ONBOARDING"] == "1"
         let onboardingStepIndex: Int? = switch ProcessInfo.processInfo.environment["LERRO_FIXTURE_ONBOARDING_STEP"] {
         case "privacy": 0
-        case "ai": 1
-        case "permissions": 2
-        case "shortcuts": 3
-        case "practice": 4
-        case "receipt": 5
-        case "voice-edit": 6
-        case "toolkit": 7
-        case "ready": 8
+        case "speech": 1
+        case "ai": 2
+        case "shortcut": 3
+        case "dictation": 4
+        case "recovery": 5
+        case "dictionary": 6
+        case "tone": 7
         default: nil
         }
         let preferences = UserPreferences(
@@ -167,6 +147,9 @@ struct AppDependencies: Sendable {
             microphoneTest: FixtureMicrophoneLevelTester(),
             context: FixtureContextCapture(),
             textDelivery: FixtureTextDeliverer(),
+            recoveryText: FixtureRecoveryTextCopier(),
+            deliveredTextObserver: FixtureDeliveredTextObserver(),
+            applicationCatalog: FixtureApplicationCatalog(),
             hotkeys: FixtureHotkeyMonitor(),
             permissions: FixturePermissionChecker(),
             loginItem: FixtureLoginItemManager(),
@@ -175,7 +158,6 @@ struct AppDependencies: Sendable {
             dictionary: InMemoryDictionaryRepository(entries: dictionary),
             preferences: InMemoryPreferencesRepository(value: preferences),
             intelligence: RuleBasedIntelligenceService(),
-            translation: FixtureTranslationService(),
             deviceCapabilities: FixtureDeviceCapabilityAssessor()
         )
     }
@@ -194,6 +176,7 @@ private actor FixtureSpeechTranscriber: SpeechTranscribing {
         microphoneDeviceUID: String?,
         muteOtherAudio: Bool,
         saveAudio: Bool,
+        vocabulary: [SpeechVocabularyTerm],
         detectSpeechEndpoint: Bool
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error> {
         AsyncThrowingStream { continuation in
@@ -210,28 +193,6 @@ private actor FixtureSpeechTranscriber: SpeechTranscribing {
     }
 
     func cancel() async {}
-}
-
-private actor FixtureTranslationService: TranslationServicing {
-    func resourceStatus(
-        sourceLanguageIdentifier: String,
-        targetLanguageIdentifier: String
-    ) -> LanguageResourceStatus {
-        LanguageResourceStatus(
-            state: .ready,
-            sourceLanguageIdentifier: sourceLanguageIdentifier,
-            targetLanguageIdentifier: targetLanguageIdentifier,
-            message: "翻译资源已准备"
-        )
-    }
-
-    func translate(
-        _ text: String,
-        sourceLanguageIdentifier: String,
-        targetLanguageIdentifier: String
-    ) throws -> String {
-        "Please translate this synthetic text into English."
-    }
 }
 
 private struct FixtureMicrophoneLevelTester: MicrophoneLevelTesting {
@@ -278,18 +239,39 @@ private struct FixtureTextDeliverer: TextDelivering {
         )
     }
 
-    func undo(_ receipt: TextDeliveryReceipt) async throws {}
-    func correct(
-        _ text: String,
-        using receipt: TextDeliveryReceipt
-    ) async throws -> TextDeliveryReceipt {
-        TextDeliveryReceipt(
-            context: receipt.context,
-            focusedValueFingerprint: text.hashValue,
-            focusedElementFingerprint: receipt.focusedElementFingerprint
-        )
+}
+
+private actor FixtureRecoveryTextCopier: RecoveryTextCopying {
+    func copyForRecovery(_ text: String) async throws {}
+}
+
+private actor FixtureDeliveredTextObserver: DeliveredTextObserving {
+    func observe(
+        text: String,
+        receipt: TextDeliveryReceipt,
+        timeout: Duration
+    ) async throws -> AsyncThrowingStream<DeliveredTextEdit, any Error> {
+        AsyncThrowingStream { continuation in continuation.finish() }
     }
-    func submit(_ receipt: TextDeliveryReceipt) async throws {}
+
+    func stopObserving() async {}
+}
+
+private struct FixtureApplicationCatalog: ApplicationCataloging {
+    func applications() async -> [ApplicationDescriptor] {
+        [
+            ApplicationDescriptor(
+                bundleIdentifier: "com.apple.mail",
+                name: "Mail",
+                isRunning: true
+            ),
+            ApplicationDescriptor(
+                bundleIdentifier: "com.openai.chat",
+                name: "ChatGPT",
+                isRunning: true
+            ),
+        ]
+    }
 }
 
 private final class FixtureHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {

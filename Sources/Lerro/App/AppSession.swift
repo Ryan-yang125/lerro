@@ -8,25 +8,20 @@ import LerroMac
 @MainActor
 @Observable
 final class AppSession {
-    enum DeliveryReceiptStatus: Equatable {
-        case delivered
-        case confirmSubmit
-        case working
-        case undone
-        case submitted
-        case failed(String)
+    struct RecoveryPresentation: Equatable, Identifiable {
+        var id: UUID
+        var applicationName: String
+        var text: String
+        var message: String
     }
 
-    struct DeliveryReceiptPresentation: Equatable, Identifiable {
-        var id: UUID { historyID }
-        var historyID: UUID
-        var text: String
+    struct DictionaryLearningToast: Equatable, Identifiable {
+        var id: UUID
+        var entryIDs: [UUID]
+        var phrase: String
+        var replacement: String
         var applicationName: String
-        var systemReceipt: TextDeliveryReceipt
-        var status: DeliveryReceiptStatus
-        var canCorrect: Bool
-        var requestedSubmit: Bool
-        var editLineage: DeliveryEditLineage? = nil
+        var count: Int
     }
 
     static let syntheticDeliveryProbeText = "Lerro delivery probe 7F3C2A"
@@ -52,9 +47,9 @@ final class AppSession {
     private(set) var captureError: String?
     var currentError: String?
     var lastResult = ""
-    private(set) var deliveryReceipt: DeliveryReceiptPresentation?
-    var answerText: String?
-    var answerQuestion = ""
+    private(set) var recoveryPresentation: RecoveryPresentation?
+    private(set) var dictionaryLearningToast: DictionaryLearningToast?
+    private(set) var availableApplications: [ApplicationDescriptor] = []
     private(set) var historyEntries: [HistoryEntry] = []
     private(set) var historyTotalCount = 0
     private(set) var historyHasMore = false
@@ -91,15 +86,6 @@ final class AppSession {
         sourceLanguageIdentifier: "zh_CN",
         message: "正在检查语音资源"
     )
-    private(set) var translationResourceStatus = LanguageResourceStatus(
-        state: .available,
-        sourceLanguageIdentifier: "zh_CN",
-        targetLanguageIdentifier: "en_US",
-        message: "正在检查翻译资源"
-    )
-    private(set) var translationPreparationRequestID: UUID?
-    private(set) var translationPreparationSourceLanguageIdentifier = "zh_CN"
-    private(set) var translationPreparationTargetLanguageIdentifier = "en_US"
     var onboardingMicrophoneLevel: Float = 0
     var isOnboardingMicrophoneTestRunning = false
     var onboardingMicrophoneTestPassed = false
@@ -134,15 +120,11 @@ final class AppSession {
     private let presentsFloatingPanels: Bool
     private let audioFileStore: AppSessionAudioFileStore?
     private let hudController = FloatingPanelController(role: .passiveHUD)
-    private let answerController = FloatingPanelController(role: .interactiveCard)
     private var activeSession: CaptureSession?
-    private var answerContext: CapturedContext?
     private var eventTask: Task<Void, Never>?
     private var completionTask: Task<Void, Never>?
-    private var deliveryReceiptTask: Task<Void, Never>?
-    private var recentVoiceEditTarget: DeliveryReceiptPresentation?
-    private var activeVoiceEditTarget: DeliveryReceiptPresentation?
-    private var isVoiceRedictationCapture = false
+    private var deliveredTextObservationTask: Task<Void, Never>?
+    private var dictionaryLearningToastTask: Task<Void, Never>?
     private var captureGeneration: UUID?
     private var committedTextDeliverySessionID: UUID?
     private(set) var isStartingCapture = false
@@ -335,27 +317,17 @@ final class AppSession {
 
     func refreshLanguageResources(invalidatePreparations: Bool = false) async {
         let source = preferences.recognitionLocaleIdentifier
-        let target = preferences.translationLanguageIdentifiers.first ?? "en_US"
         if invalidatePreparations {
             speechPreparationTask?.cancel()
             speechPreparationTask = nil
             speechPreparationRequestID = nil
-            translationPreparationRequestID = nil
         }
         let requestID = UUID()
         languageResourceRefreshRequestID = requestID
-        async let speech = dependencies.speech.resourceStatus(localeIdentifier: source)
-        async let translation = dependencies.translation.resourceStatus(
-            sourceLanguageIdentifier: source,
-            targetLanguageIdentifier: target
-        )
-        let speechStatus = await speech
-        let translationStatus = await translation
+        let speechStatus = await dependencies.speech.resourceStatus(localeIdentifier: source)
         guard languageResourceRefreshRequestID == requestID,
-              preferences.recognitionLocaleIdentifier == source,
-              (preferences.translationLanguageIdentifiers.first ?? "en_US") == target else { return }
+              preferences.recognitionLocaleIdentifier == source else { return }
         speechResourceStatus = speechStatus
-        translationResourceStatus = translationStatus
     }
 
     func prepareSpeechResources() {
@@ -392,43 +364,6 @@ final class AppSession {
                 speechPreparationTask = nil
             }
         }
-    }
-
-    func prepareTranslationResources() {
-        let source = preferences.recognitionLocaleIdentifier
-        let target = preferences.translationLanguageIdentifiers.first ?? "en_US"
-        languageResourceRefreshRequestID = UUID()
-        translationPreparationSourceLanguageIdentifier = source
-        translationPreparationTargetLanguageIdentifier = target
-        translationResourceStatus = LanguageResourceStatus(
-            state: .downloading,
-            sourceLanguageIdentifier: source,
-            targetLanguageIdentifier: target,
-            message: "正在准备翻译资源"
-        )
-        translationPreparationRequestID = UUID()
-    }
-
-    func completeTranslationResourcePreparation(
-        requestID: UUID,
-        errorMessage: String?
-    ) {
-        guard translationPreparationRequestID == requestID else { return }
-        translationPreparationRequestID = nil
-        guard preferences.recognitionLocaleIdentifier
-                == translationPreparationSourceLanguageIdentifier,
-              (preferences.translationLanguageIdentifiers.first ?? "en_US")
-                == translationPreparationTargetLanguageIdentifier else { return }
-        if let errorMessage {
-            translationResourceStatus = LanguageResourceStatus(
-                state: .failed,
-                sourceLanguageIdentifier: translationPreparationSourceLanguageIdentifier,
-                targetLanguageIdentifier: translationPreparationTargetLanguageIdentifier,
-                message: errorMessage
-            )
-            return
-        }
-        Task { await refreshLanguageResources() }
     }
 
     func updateHistoryQuery(searchText: String, mode: CaptureMode?) async {
@@ -808,6 +743,7 @@ final class AppSession {
     }
 
     func toggleQuickDictate() {
+        guard preferences.quickDictateEnabled else { return }
         guard !isCleaningCapture else { return }
         if isStartingCapture {
             guard activeMode == .dictation else { return }
@@ -978,16 +914,7 @@ final class AppSession {
         pendingHotkeysAfterCancellation.removeAll()
         isStartingCapture = false
         isCleaningCapture = true
-        if let activeVoiceEditTarget {
-            recentVoiceEditTarget = activeVoiceEditTarget
-        }
         activeSession = nil
-        activeVoiceEditTarget = nil
-        isVoiceRedictationCapture = false
-        answerController.hide()
-        answerText = nil
-        answerQuestion = ""
-        answerContext = nil
         captureError = nil
         isHUDSuppressed = false
         phase = .cancelled
@@ -999,7 +926,7 @@ final class AppSession {
         completionTask = Task { [weak self] in
             guard let self else { return }
             await dependencies.speech.cancel()
-            await dependencies.translation.cancel()
+            await dependencies.deliveredTextObserver.stopObserving()
             await reconcileOrphanedAudioFiles()
             eventTask?.cancel()
             captureTimerTask?.cancel()
@@ -1053,204 +980,54 @@ final class AppSession {
         }
     }
 
-    func dismissDeliveryReceipt() {
-        deliveryReceiptTask?.cancel()
-        deliveryReceiptTask = nil
-        deliveryReceipt = nil
-        recentVoiceEditTarget = nil
-        updateHUD()
-    }
-
-    func undoRecentDelivery() {
-        guard var receipt = deliveryReceipt,
-              receipt.systemReceipt.canUndo,
-              receipt.status != .working,
-              receipt.status != .undone,
-              receipt.status != .submitted else { return }
-        deliveryReceiptTask?.cancel()
-        receipt.status = .working
-        deliveryReceipt = receipt
-        updateHUD()
+    func recopyRecoveryText() {
+        guard let recoveryPresentation else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await dependencies.textDelivery.undo(receipt.systemReceipt)
-                try await updateHistoryEntry(id: receipt.historyID) { entry in
-                    entry.status = .undone
-                }
-                guard var current = deliveryReceipt, current.id == receipt.id else { return }
-                current.status = .undone
-                deliveryReceipt = current
-                recentVoiceEditTarget = nil
-                scheduleDeliveryReceiptDismissal(after: .seconds(2))
-                updateHUD()
+                try await dependencies.recoveryText.copyForRecovery(recoveryPresentation.text)
             } catch {
-                guard var current = deliveryReceipt, current.id == receipt.id else { return }
-                current.status = .failed(userFacingError(error, context: "撤回失败"))
-                deliveryReceipt = current
-                recentVoiceEditTarget = nil
-                scheduleDeliveryReceiptDismissal()
-                updateHUD()
+                currentError = userFacingError(error, context: "复制失败")
             }
         }
     }
 
-    func submitRecentDelivery(rememberApplication: Bool = true) {
-        guard var receipt = deliveryReceipt,
-              receipt.requestedSubmit,
-              receipt.status != .working,
-              receipt.status != .submitted,
-              receipt.status != .undone else { return }
-        deliveryReceiptTask?.cancel()
-        receipt.status = .working
-        deliveryReceipt = receipt
+    func dismissRecovery() {
+        recoveryPresentation = nil
+        if phase == .failed {
+            phase = .idle
+            captureError = nil
+            partialTranscript = ""
+        }
         updateHUD()
+    }
+
+    func dismissDictionaryLearningToast() {
+        dictionaryLearningToastTask?.cancel()
+        dictionaryLearningToastTask = nil
+        dictionaryLearningToast = nil
+    }
+
+    func undoDictionaryLearning() {
+        guard let toast = dictionaryLearningToast else { return }
+        dismissDictionaryLearningToast()
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await dependencies.textDelivery.submit(receipt.systemReceipt)
-                if rememberApplication,
-                   let bundleIdentifier = receipt.systemReceipt.context.bundleIdentifier,
-                   !preferences.voiceFinishApplications.contains(where: {
-                       $0.bundleIdentifier == bundleIdentifier
-                   }) {
-                    preferences.voiceFinishApplications.append(VoiceFinishApplication(
-                        bundleIdentifier: bundleIdentifier,
-                        applicationName: receipt.applicationName
-                    ))
-                    preferences.voiceFinishApplications.sort {
-                        $0.applicationName.localizedCaseInsensitiveCompare($1.applicationName)
-                            == .orderedAscending
-                    }
-                    savePreferences()
+                for id in toast.entryIDs {
+                    try await dependencies.dictionary.delete(id: id)
                 }
-                try await updateHistoryEntry(id: receipt.historyID) { entry in
-                    entry.finishAction = .submitted
-                }
-                guard var current = deliveryReceipt, current.id == receipt.id else { return }
-                current.status = .submitted
-                deliveryReceipt = current
-                recentVoiceEditTarget = nil
-                scheduleDeliveryReceiptDismissal(after: .seconds(2))
-                updateHUD()
+                await refreshDictionaryAndUsage()
             } catch {
-                guard var current = deliveryReceipt, current.id == receipt.id else { return }
-                current.status = .failed(userFacingError(error, context: "发送失败"))
-                deliveryReceipt = current
-                recentVoiceEditTarget = nil
-                scheduleDeliveryReceiptDismissal()
-                updateHUD()
+                currentError = userFacingError(error, context: "撤销词典学习失败")
             }
         }
     }
 
-    func beginRecentDeliveryCorrection() {
-        guard let receipt = deliveryReceipt,
-              receipt.canCorrect,
-              receipt.status == .delivered || receipt.status == .confirmSubmit else { return }
-        deliveryReceiptTask?.cancel()
-        answerController.show(
-            content: AnyView(
-                RecentDeliveryCorrectionView(session: self, receipt: receipt)
-                    .environment(
-                        \.locale,
-                        LerroInterfaceLocalization.locale(for: preferences.appLanguage)
-                    )
-            ),
-            size: CGSize(width: 800, height: 410)
-        )
-    }
-
-    func cancelRecentDeliveryCorrection() {
-        answerController.hide()
-        scheduleDeliveryReceiptDismissal()
-    }
-
-    @discardableResult
-    func applyRecentDeliveryCorrection(
-        receiptID: UUID,
-        correctedText: String,
-        phrase: String,
-        replacement: String
-    ) async -> Bool {
-        let corrected = correctedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !corrected.isEmpty,
-              let receipt = deliveryReceipt,
-              receipt.id == receiptID,
-              receipt.systemReceipt.canUndo else { return false }
-        do {
-            let entries = try await dependencies.history.entries()
-            guard let entry = entries.first(where: { $0.id == receipt.historyID }) else {
-                throw LerroError.localData("找不到对应的历史记录")
-            }
-            var lineage: DeliveryEditLineage
-            if let existingLineage = receipt.editLineage ?? entry.editLineage {
-                lineage = existingLineage
-            } else {
-                lineage = try DeliveryEditLineage(originalText: receipt.text)
-            }
-            try lineage.append(
-                text: corrected,
-                origin: .manual,
-                instruction: phrase.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
-            let correctedReceipt = try await dependencies.textDelivery.correct(
-                corrected,
-                using: receipt.systemReceipt
-            )
-            guard await saveHistoryCorrection(
-                entry,
-                correctedText: corrected,
-                phrase: phrase,
-                replacement: replacement,
-                editLineage: lineage
-            ) else { return false }
-            answerController.hide()
-            presentDeliveryReceipt(DeliveryReceiptPresentation(
-                historyID: receipt.historyID,
-                text: corrected,
-                applicationName: correctedReceipt.context.applicationName,
-                systemReceipt: correctedReceipt,
-                status: .delivered,
-                canCorrect: true,
-                requestedSubmit: false,
-                editLineage: lineage
-            ))
-            lastResult = corrected
-            updateHUD()
-            return true
-        } catch {
-            currentError = userFacingError(error, context: "修正写入失败")
-            return false
-        }
-    }
-
-    func forgetVoiceFinishApplication(_ application: VoiceFinishApplication) {
-        preferences.voiceFinishApplications.removeAll {
-            $0.bundleIdentifier == application.bundleIdentifier
-        }
-        savePreferences()
-    }
-
-    private func presentDeliveryReceipt(_ receipt: DeliveryReceiptPresentation) {
-        deliveryReceiptTask?.cancel()
-        deliveryReceipt = receipt
-        recentVoiceEditTarget = receipt.canCorrect ? receipt : nil
-        scheduleDeliveryReceiptDismissal()
-    }
-
-    private func scheduleDeliveryReceiptDismissal(after duration: Duration = .seconds(6)) {
-        deliveryReceiptTask?.cancel()
-        guard let receiptID = deliveryReceipt?.id else { return }
-        deliveryReceiptTask = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(for: duration)
-            } catch {
-                return
-            }
-            guard let self, self.deliveryReceipt?.id == receiptID else { return }
-            self.deliveryReceipt = nil
-            self.updateHUD()
+    func refreshAvailableApplications() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            availableApplications = await dependencies.applicationCatalog.applications()
         }
     }
 
@@ -1468,54 +1245,6 @@ final class AppSession {
     }
 
     @discardableResult
-    func saveHistoryCorrection(
-        _ entry: HistoryEntry,
-        correctedText: String,
-        phrase: String,
-        replacement: String,
-        editLineage: DeliveryEditLineage? = nil
-    ) async -> Bool {
-        let corrected = correctedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !corrected.isEmpty else { return false }
-        do {
-            var updated = entry
-            if updated.processedText == nil, updated.finalText != corrected {
-                updated.processedText = updated.finalText
-            }
-            updated.finalText = corrected
-            updated.answerText = entry.mode == .ask ? corrected : entry.answerText
-            if let editLineage {
-                updated.editLineage = editLineage
-            }
-            try await dependencies.history.save(updated)
-
-            let source = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
-            let target = replacement.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !source.isEmpty, !target.isEmpty, source != target {
-                var learned = dictionaryEntries.first {
-                    $0.source == .learned
-                        && $0.phrase.caseInsensitiveCompare(source) == .orderedSame
-                        && $0.applicationBundleIdentifier == entry.bundleIdentifier
-                } ?? DictionaryEntry(
-                    phrase: source,
-                    replacement: target,
-                    source: .learned,
-                    applicationBundleIdentifier: entry.bundleIdentifier
-                )
-                learned.replacement = target
-                learned.updatedAt = .now
-                try await dependencies.dictionary.save(learned)
-            }
-            await refreshHistoryAndUsage()
-            await refreshDictionaryAndUsage()
-            return true
-        } catch {
-            currentError = "修正保存失败：\(error.localizedDescription)"
-            return false
-        }
-    }
-
-    @discardableResult
     func importDictionaryCSV(_ contents: String) async -> Bool {
         do {
             let entries = try DictionaryCSVParser.parse(contents)
@@ -1561,43 +1290,13 @@ final class AppSession {
         savePreferences()
     }
 
-    func showHistoryAnswer(_ entry: HistoryEntry) {
-        guard let answer = entry.answerText, !answer.isEmpty else { return }
-        answerQuestion = entry.rawText
-        answerText = answer
-        answerContext = nil
-        showAnswerPanel()
-    }
-
     func retryHistoryEntry(_ entry: HistoryEntry) {
         guard !entry.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             currentError = "这条记录没有可重试的转写文本"
             return
         }
-        if entry.mode == .translation {
-            guard let targetLanguage = entry.targetLanguage else {
-                currentError = "这条翻译记录缺少目标语言"
-                return
-            }
-            let sourceLanguage = entry.sourceLanguage ?? preferences.recognitionLocaleIdentifier
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                do {
-                    let text = try await dependencies.translation.translate(
-                        entry.rawText,
-                        sourceLanguageIdentifier: sourceLanguage,
-                        targetLanguageIdentifier: targetLanguage
-                    )
-                    var updated = entry
-                    updated.finalText = text
-                    updated.status = .completed
-                    updated.wasEnhanced = false
-                    try await dependencies.history.save(updated)
-                    await refreshHistoryAndUsage()
-                } catch {
-                    currentError = userFacingError(error, context: "设备端翻译暂不可用")
-                }
-            }
+        if entry.mode == .ask {
+            currentError = "历史指令仅供查看"
             return
         }
         guard preferences.intelligenceMode != .raw else {
@@ -1637,12 +1336,10 @@ final class AppSession {
                 let result = try await dependencies.intelligence.process(request)
                 var updated = entry
                 updated.finalText = result.text
-                updated.answerText = entry.mode == .ask ? result.text : nil
                 updated.status = .completed
                 updated.wasEnhanced = result.source != .raw
                 try await dependencies.history.save(updated)
                 await refreshHistoryAndUsage()
-                if updated.mode == .ask { showHistoryAnswer(updated) }
             } catch {
                 currentError = userFacingError(error, context: "智能处理失败")
             }
@@ -1672,41 +1369,6 @@ final class AppSession {
     func copyText(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-    }
-
-    func closeAnswer() {
-        answerText = nil
-        answerQuestion = ""
-        answerContext = nil
-        answerController.hide()
-    }
-
-    func resizeAnswerPanel(contentHeight: CGFloat) {
-        guard answerText != nil else { return }
-        answerController.resize(
-            to: CGSize(width: 800, height: min(800, max(420, contentHeight))),
-            animated: true
-        )
-    }
-
-    func insertAnswer() {
-        guard let answerText, let answerContext else { return }
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                _ = try await dependencies.textDelivery.deliver(
-                    answerText,
-                    to: answerContext,
-                    replacingSelection: false,
-                    targetPolicy: .reactivateCaptured
-                )
-                await MainActor.run { self.closeAnswer() }
-            } catch {
-                await MainActor.run {
-                    self.currentError = self.userFacingError(error, context: "文本写入失败")
-                }
-            }
-        }
     }
 
     private func configureHotkeys(reportError: Bool) {
@@ -1807,13 +1469,13 @@ final class AppSession {
         case .translate:
             handleCaptureHotkey(trigger, mode: .translation)
         case .ask:
-            handleCaptureHotkey(trigger, mode: .ask)
+            return
         case .dictateHandsFree:
             handleLegacyHandsFreeHotkey(trigger, mode: .dictation, action: .dictate)
         case .translateHandsFree:
             handleLegacyHandsFreeHotkey(trigger, mode: .translation, action: .translate)
         case .askHandsFree:
-            handleLegacyHandsFreeHotkey(trigger, mode: .ask, action: .ask)
+            return
         case .pasteLastResult:
             if trigger.phase == .began { pasteLastResult() }
         case .cancel:
@@ -1824,8 +1486,6 @@ final class AppSession {
             }
             if hasActiveCapture {
                 cancelCapture(resetHotkeyState: false)
-            } else if answerText != nil {
-                closeAnswer()
             }
         }
     }
@@ -1894,7 +1554,7 @@ final class AppSession {
                 startCapture(
                     mode,
                     handsFree: true,
-                    quickDictate: mode == .dictation
+                    quickDictate: mode == .dictation && preferences.quickDictateEnabled
                 )
                 return
             }
@@ -1969,9 +1629,7 @@ final class AppSession {
     private func startCapture(
         _ mode: CaptureMode,
         handsFree: Bool,
-        quickDictate: Bool = false,
-        voiceEditTarget: DeliveryReceiptPresentation? = nil,
-        redictation: Bool = false
+        quickDictate: Bool = false
     ) {
         guard !isShortcutConfigurationActive else {
             currentError = "快捷键测试期间不会开始录音"
@@ -1984,24 +1642,11 @@ final class AppSession {
         guard !legacyApplicationIsRunning() else { return }
         guard !isCleaningCapture else { return }
         guard !hasActiveCapture else { return }
+        guard mode != .ask else { return }
         guard mode == .translation || authorizeIntelligenceIfNeeded(for: mode) else { return }
-        let recentReceipt = deliveryReceipt ?? recentVoiceEditTarget
-        let receiptEditTarget: DeliveryReceiptPresentation? = if mode == .dictation,
-                                                                 preferences.historyRetention != .never,
-                                                                 let receipt = recentReceipt,
-                                                                 receipt.canCorrect,
-                                                                 receipt.status == .delivered
-                                                                    || receipt.status == .confirmSubmit,
-                                                                 Date.now.timeIntervalSince(
-                                                                    receipt.systemReceipt.committedAt
-                                                                 ) <= 60 {
-            receipt
-        } else {
-            nil
-        }
-        activeVoiceEditTarget = voiceEditTarget ?? receiptEditTarget
-        isVoiceRedictationCapture = redictation && activeVoiceEditTarget != nil
-        dismissDeliveryReceipt()
+        deliveredTextObservationTask?.cancel()
+        Task { await dependencies.deliveredTextObserver.stopObserving() }
+        recoveryPresentation = nil
         let intelligenceMode: IntelligenceMode = if mode == .dictation,
                                                     preferences.intelligenceMode == .local,
                                                     !localAIIsReady {
@@ -2045,22 +1690,16 @@ final class AppSession {
         remoteProvider: RemoteProviderConfiguration?
     ) async {
         stopOnboardingMicrophoneTest()
-        answerController.hide()
 
         guard captureGeneration == generation, !Task.isCancelled else { return }
         guard await ensureCapturePermissions() else {
             if captureGeneration == generation {
-                if let activeVoiceEditTarget {
-                    recentVoiceEditTarget = activeVoiceEditTarget
-                }
                 captureGeneration = nil
                 activeHotkeyOrigin = nil
                 isStartingCapture = false
                 isHandsFreeCapture = false
                 isQuickDictateCapture = false
                 quickDictateDetectedSpeech = false
-                activeVoiceEditTarget = nil
-                isVoiceRedictationCapture = false
             }
             return
         }
@@ -2078,11 +1717,27 @@ final class AppSession {
         }
 
         do {
+            let vocabulary = dictionaryEntries
+                .filter { entry in
+                    !entry.isSnippet
+                        && (entry.applicationBundleIdentifier == nil
+                            || entry.applicationBundleIdentifier == context.bundleIdentifier)
+                }
+                .sorted { lhs, rhs in
+                    if lhs.applicationBundleIdentifier != rhs.applicationBundleIdentifier {
+                        return lhs.applicationBundleIdentifier != nil
+                    }
+                    if lhs.useCount != rhs.useCount { return lhs.useCount > rhs.useCount }
+                    return lhs.updatedAt > rhs.updatedAt
+                }
+                .prefix(100)
+                .map { SpeechVocabularyTerm(dictionaryEntry: $0) }
             let stream = try await dependencies.speech.start(
                 localeIdentifier: preferences.recognitionLocaleIdentifier,
                 microphoneDeviceUID: preferences.microphoneDeviceUID,
                 muteOtherAudio: preferences.muteOtherAudio,
                 saveAudio: preferences.shouldSaveCaptureAudio,
+                vocabulary: vocabulary,
                 detectSpeechEndpoint: isQuickDictateCapture
             )
             guard captureGeneration == generation, !Task.isCancelled else {
@@ -2099,8 +1754,7 @@ final class AppSession {
                 intelligenceMode: intelligenceMode,
                 remoteProvider: remoteProvider,
                 toneInstruction: toneProfile?.instruction,
-                toneProfileApplicationName: toneProfile?.applicationName,
-                allowsVoiceFinishAction: isHandsFreeCapture && mode == .dictation
+                toneProfileApplicationName: toneProfile?.applicationName
             )
             activeSession = session
             isStartingCapture = false
@@ -2171,20 +1825,6 @@ final class AppSession {
             }
             partialTranscript = transcription.rawText
             partialTranscriptIsStable = true
-            if let editTarget = activeVoiceEditTarget,
-               isVoiceRedictationCapture
-                    || VoiceEditCommandResolver.resolve(transcription.rawText) != nil {
-                phase = .enhancing
-                updateHUD()
-                try await completeVoiceEdit(
-                    target: editTarget,
-                    transcription: transcription,
-                    isRedictation: isVoiceRedictationCapture
-                )
-                return
-            }
-            activeVoiceEditTarget = nil
-            isVoiceRedictationCapture = false
             phase = .enhancing
             updateHUD()
             try await complete(
@@ -2218,255 +1858,18 @@ final class AppSession {
         }
     }
 
-    private func completeVoiceEdit(
-        target: DeliveryReceiptPresentation,
-        transcription: SpeechTranscription,
-        isRedictation: Bool
-    ) async throws {
-        let entries = try await dependencies.history.entries()
-        guard var history = entries.first(where: { $0.id == target.historyID }) else {
-            throw LerroError.localData("找不到对应的历史记录")
-        }
-        var lineage: DeliveryEditLineage
-        if let existingLineage = target.editLineage ?? history.editLineage {
-            lineage = existingLineage
-        } else {
-            lineage = try DeliveryEditLineage(originalText: target.text)
-        }
-        let instruction = transcription.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if isRedictation {
-            try lineage.append(
-                text: instruction,
-                origin: .redictation,
-                instruction: "重新听写"
-            )
-            try await applyVoiceEdit(
-                instruction,
-                target: target,
-                history: &history,
-                lineage: lineage,
-                transcription: transcription
-            )
-            return
-        }
-
-        guard let request = VoiceEditCommandResolver.resolve(instruction) else {
-            throw LerroError.insertionFailed("没有识别到明确的修改指令")
-        }
-        switch request {
-        case .deterministic(let command):
-            let outcome: DeterministicVoiceEditOutcome
-            do {
-                outcome = try DeterministicVoiceEditor.outcome(
-                    for: command,
-                    currentText: target.text
-                )
-            } catch DeterministicVoiceEditError.sentenceNumberOutOfRange {
-                throw LerroError.insertionFailed("找不到指定的句子")
-            } catch DeterministicVoiceEditError.sourceTextMissing {
-                throw LerroError.insertionFailed("原文中找不到要替换的内容")
-            } catch DeterministicVoiceEditError.emptyResult {
-                throw LerroError.insertionFailed("修改后没有可写入的文字")
-            }
-
-            switch outcome {
-            case .restorePreviousVersion:
-                guard let previous = lineage.undo() else {
-                    try await dependencies.textDelivery.undo(target.systemReceipt)
-                    history.status = .undone
-                    history.editLineage = lineage
-                    try await dependencies.history.save(history)
-                    try await deleteAudioFile(relativePath: transcription.audioRelativePath)
-                    await refreshHistoryAndUsage()
-                    finishVoiceEditCapture()
-                    presentDeliveryReceipt(DeliveryReceiptPresentation(
-                        historyID: target.historyID,
-                        text: target.text,
-                        applicationName: target.applicationName,
-                        systemReceipt: target.systemReceipt,
-                        status: .undone,
-                        canCorrect: false,
-                        requestedSubmit: false,
-                        editLineage: lineage
-                    ))
-                    updateHUD()
-                    return
-                }
-                try await applyVoiceEdit(
-                    previous.text,
-                    target: target,
-                    history: &history,
-                    lineage: lineage,
-                    transcription: transcription
-                )
-            case .replaceText(let text):
-                try lineage.append(
-                    text: text,
-                    origin: .deterministic,
-                    instruction: instruction
-                )
-                try await applyVoiceEdit(
-                    text,
-                    target: target,
-                    history: &history,
-                    lineage: lineage,
-                    transcription: transcription
-                )
-                if case .replaceExact(let source, let replacement) = command {
-                    await learnVoiceReplacement(
-                        source: source,
-                        replacement: replacement,
-                        history: history
-                    )
-                }
-            case .beginRedictation:
-                try await deleteAudioFile(relativePath: transcription.audioRelativePath)
-                finishVoiceEditCapture()
-                startCapture(
-                    .dictation,
-                    handsFree: true,
-                    quickDictate: true,
-                    voiceEditTarget: target,
-                    redictation: true
-                )
-            }
-        case .semantic(let semantic):
-            guard let session = activeSession else { throw CancellationError() }
-            guard session.intelligenceMode != .raw else {
-                throw LerroError.modelUnavailable("语义修改需要在“智能处理”中选择本地 AI 或 API 模型")
-            }
-            let modelStatusMonitor = session.intelligenceMode == .local
-                ? startModelStatusMonitor()
-                : nil
-            defer { modelStatusMonitor?.cancel() }
-            let result = try await dependencies.intelligence.process(IntelligenceRequest(
-                task: .rewriteSelection,
-                mode: session.intelligenceMode,
-                remoteProvider: session.remoteProvider,
-                transcript: semantic.instruction,
-                selectedText: target.text,
-                context: target.systemReceipt.context,
-                dictionary: dictionaryEntries.filter { !$0.isSnippet },
-                toneInstruction: session.toneInstruction
-            ))
-            try lineage.append(
-                text: result.text,
-                origin: .semantic,
-                instruction: semantic.instruction,
-                modelIdentifier: result.modelIdentifier,
-                processingRoute: historyProcessingRoute(result: result)
-            )
-            try await applyVoiceEdit(
-                result.text,
-                target: target,
-                history: &history,
-                lineage: lineage,
-                transcription: transcription
-            )
-        }
-    }
-
-    private func applyVoiceEdit(
-        _ text: String,
-        target: DeliveryReceiptPresentation,
-        history: inout HistoryEntry,
-        lineage: DeliveryEditLineage,
-        transcription: SpeechTranscription
-    ) async throws {
-        let correctedReceipt = try await dependencies.textDelivery.correct(
-            text,
-            using: target.systemReceipt
-        )
-        if history.processedText == nil, history.finalText != text {
-            history.processedText = history.finalText
-        }
-        history.finalText = text
-        history.status = .completed
-        history.editLineage = lineage
-        try await dependencies.history.save(history)
-        try await deleteAudioFile(relativePath: transcription.audioRelativePath)
-        await refreshHistoryAndUsage()
-        lastResult = text
-        finishVoiceEditCapture()
-        presentDeliveryReceipt(DeliveryReceiptPresentation(
-            historyID: target.historyID,
-            text: text,
-            applicationName: correctedReceipt.context.applicationName,
-            systemReceipt: correctedReceipt,
-            status: .delivered,
-            canCorrect: correctedReceipt.canUndo,
-            requestedSubmit: false,
-            editLineage: lineage
-        ))
-        updateHUD()
-    }
-
-    private func finishVoiceEditCapture() {
-        activeSession = nil
-        activeVoiceEditTarget = nil
-        isVoiceRedictationCapture = false
-        captureGeneration = nil
-        committedTextDeliverySessionID = nil
-        captureError = nil
-        activeHotkeyOrigin = nil
-        pendingHotkeysAfterCancellation.removeAll()
-        isStartingCapture = false
-        isHandsFreeCapture = false
-        isQuickDictateCapture = false
-        quickDictateDetectedSpeech = false
-        phase = .idle
-        isHUDSuppressed = false
-        partialTranscript = ""
-        partialTranscriptIsStable = false
-        audioLevel = 0
-        captureElapsed = 0
-    }
-
-    private func learnVoiceReplacement(
-        source: String,
-        replacement: String,
-        history: HistoryEntry
-    ) async {
-        guard source.caseInsensitiveCompare(replacement) != .orderedSame else { return }
-        var learned = dictionaryEntries.first {
-            $0.source == .learned
-                && $0.phrase.caseInsensitiveCompare(source) == .orderedSame
-                && $0.applicationBundleIdentifier == history.bundleIdentifier
-        } ?? DictionaryEntry(
-            phrase: source,
-            replacement: replacement,
-            source: .learned,
-            applicationBundleIdentifier: history.bundleIdentifier
-        )
-        learned.replacement = replacement
-        learned.updatedAt = .now
-        do {
-            try await dependencies.dictionary.save(learned)
-            await refreshDictionaryAndUsage()
-        } catch {
-            currentError = "自动词典保存失败：\(error.localizedDescription)"
-        }
-    }
-
     private func complete(
         session: CaptureSession,
         transcription: SpeechTranscription,
         transcriptionLatency: TimeInterval
     ) async throws {
         let processingStartedAt = Date.now
-        let finishResolution = session.allowsVoiceFinishAction
-            ? VoiceFinishActionResolver.resolve(transcription.rawText)
-            : VoiceFinishResolution(text: transcription.rawText, requestsSubmit: false)
-        let processingTranscript = finishResolution.text
+        let processingTranscript = transcription.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         let task = intelligenceTask(
             mode: session.mode,
             transcript: processingTranscript,
             context: session.context
         )
-        if task == .rewriteSelection, session.context.selectedTextWasTruncated {
-            throw LerroError.selectionTooLong(CapturedContext.maximumSelectedTextCharacters)
-        }
         let request = IntelligenceRequest(
             task: task,
             mode: session.intelligenceMode,
@@ -2492,21 +1895,6 @@ final class AppSession {
                 modelIdentifier: "local-snippet",
                 source: .raw
             )
-        } else if session.mode == .translation {
-            guard let targetLanguage = session.targetLanguage else {
-                throw LerroError.translationUnavailable("请先选择翻译目标语言")
-            }
-            let text = try await dependencies.translation.translate(
-                processingTranscript,
-                sourceLanguageIdentifier: transcription.localeIdentifier,
-                targetLanguageIdentifier: targetLanguage
-            )
-            result = IntelligenceResult(
-                text: text,
-                disposition: .insert,
-                modelIdentifier: "apple-translation",
-                source: .raw
-            )
         } else if session.intelligenceMode == .raw {
             result = try rawResult(for: request, task: task)
         } else {
@@ -2515,11 +1903,7 @@ final class AppSession {
                 : nil
             defer { modelStatusMonitor?.cancel() }
             do {
-                if task == .answer {
-                    result = try await processStreamingAnswer(request, session: session)
-                } else {
-                    result = try await dependencies.intelligence.process(request)
-                }
+                result = try await dependencies.intelligence.process(request)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
@@ -2542,7 +1926,7 @@ final class AppSession {
             mode: session.mode,
             rawText: transcription.rawText,
             finalText: result.text,
-            answerText: result.disposition == .showAnswer ? result.text : nil,
+            answerText: nil,
             targetLanguage: session.targetLanguage,
             sourceLanguage: transcription.localeIdentifier,
             duration: transcription.duration,
@@ -2553,20 +1937,15 @@ final class AppSession {
             audioRelativePath: transcription.audioRelativePath,
             processingRoute: historyProcessingRoute(result: result),
             modelIdentifier: result.modelIdentifier,
-            contextReceipt: historyContextReceipt(session: session, result: result),
-            finishAction: finishResolution.requestsSubmit ? .requested : nil
+            contextReceipt: historyContextReceipt(session: session, result: result)
         )
         var systemReceipt: TextDeliveryReceipt?
-        var receiptStatus: DeliveryReceiptStatus = .delivered
         var deliveryDuration: TimeInterval = 0
 
         do {
             switch result.disposition {
             case .showAnswer:
-                answerQuestion = transcription.rawText
-                answerText = result.text
-                answerContext = session.context
-                showAnswerPanel()
+                throw LerroError.modelUnavailable("此版本已关闭指令回答")
             case .insert, .replaceSelection:
                 phase = .inserting
                 committedTextDeliverySessionID = nil
@@ -2585,48 +1964,34 @@ final class AppSession {
                     }
                 )
                 deliveryDuration = Date.now.timeIntervalSince(deliveryStartedAt)
-                if finishResolution.requestsSubmit,
-                   let systemReceipt,
-                   VoiceFinishActionResolver.permitsSubmit(in: systemReceipt.context) {
-                    if preferences.voiceFinishApplications.contains(where: {
-                        $0.bundleIdentifier == systemReceipt.context.bundleIdentifier
-                    }) {
-                        do {
-                            try await dependencies.textDelivery.submit(systemReceipt)
-                            history.finishAction = .submitted
-                            receiptStatus = .submitted
-                        } catch {
-                            receiptStatus = .failed(userFacingError(error, context: "发送失败"))
-                        }
-                    } else {
-                        receiptStatus = .confirmSubmit
-                    }
-                } else if finishResolution.requestsSubmit {
-                    receiptStatus = .failed("当前输入框不支持语音发送，文本已保留")
-                }
             case .openURL:
-                if let url = result.url { NSWorkspace.shared.open(url) }
+                throw LerroError.modelUnavailable("此版本已关闭指令打开链接")
             }
         } catch is CancellationError {
             throw CancellationError()
         } catch {
             lastResult = result.text
             history.status = .failed
+            try? await dependencies.recoveryText.copyForRecovery(result.text)
+            recoveryPresentation = RecoveryPresentation(
+                id: history.id,
+                applicationName: session.context.applicationName,
+                text: result.text,
+                message: "内容已复制到剪贴板"
+            )
             if preferences.historyRetention == .never {
                 try await deleteAudioFile(relativePath: history.audioRelativePath)
             } else {
                 try await dependencies.history.save(history)
             }
             await refreshHistoryAndUsage()
-            throw error
+            finishCaptureState(phase: .failed, message: "未能写入 \(session.context.applicationName)")
+            return
         }
 
         guard activeSession?.id == session.id else { throw CancellationError() }
         suppressHUD(for: session.id)
         lastResult = result.text
-        if systemReceipt != nil, session.mode == .dictation {
-            history.editLineage = try? DeliveryEditLineage(originalText: result.text)
-        }
         history.phaseTimings = HistoryPhaseTimings(
             recording: transcription.duration,
             transcription: transcriptionLatency,
@@ -2638,60 +2003,186 @@ final class AppSession {
         } else {
             try await dependencies.history.save(history)
         }
-        let learnedDictionaryEntry = if result.source == .local {
-            await learnDictionary(
-                raw: processingTranscript,
-                final: result.text,
-                context: session.context
-            )
-        } else {
-            false
-        }
         try await applyRetentionAndClean(preferences.historyRetention, now: .now)
         await refreshHistoryAndUsage()
-        if learnedDictionaryEntry {
-            await refreshDictionaryAndUsage()
+        if let systemReceipt,
+           session.mode == .dictation,
+           session.intelligenceMode != .raw,
+           preferences.automaticDictionaryLearningEnabled {
+            startDeliveredTextObservation(text: result.text, receipt: systemReceipt)
         }
+        finishCaptureState(phase: .idle)
+    }
 
+    private func finishCaptureState(phase finalPhase: CapturePhase, message: String? = nil) {
         activeSession = nil
-        activeVoiceEditTarget = nil
-        isVoiceRedictationCapture = false
         captureGeneration = nil
         committedTextDeliverySessionID = nil
-        captureError = nil
+        captureError = message
         activeHotkeyOrigin = nil
         pendingHotkeysAfterCancellation.removeAll()
         isStartingCapture = false
         isHandsFreeCapture = false
         isQuickDictateCapture = false
         quickDictateDetectedSpeech = false
-        phase = .idle
+        phase = finalPhase
         isHUDSuppressed = false
-        partialTranscript = ""
+        partialTranscript = message ?? ""
         partialTranscriptIsStable = false
         audioLevel = 0
         captureElapsed = 0
-        if let systemReceipt {
-            let canSubmit = finishResolution.requestsSubmit
-                && VoiceFinishActionResolver.permitsSubmit(in: systemReceipt.context)
-            presentDeliveryReceipt(DeliveryReceiptPresentation(
-                historyID: history.id,
-                text: result.text,
-                applicationName: systemReceipt.context.applicationName,
-                systemReceipt: systemReceipt,
-                status: receiptStatus,
-                canCorrect: systemReceipt.canUndo
-                    && preferences.historyRetention != .never
-                    && session.mode == .dictation,
-                requestedSubmit: canSubmit,
-                editLineage: history.editLineage
-            ))
-        }
         updateHUD()
     }
 
+    private func startDeliveredTextObservation(text: String, receipt: TextDeliveryReceipt) {
+        deliveredTextObservationTask?.cancel()
+        let mode = preferences.intelligenceMode
+        let remoteProvider = mode == .remote
+            ? normalizedRemoteProvider(preferences.remoteProvider)
+            : nil
+        deliveredTextObservationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let stream = try await dependencies.deliveredTextObserver.observe(
+                    text: text,
+                    receipt: receipt,
+                    timeout: .seconds(60)
+                )
+                for try await edit in stream {
+                    try Task.checkCancellation()
+                    let decision = try await dependencies.intelligence.classifyCorrection(
+                        DictionaryLearningRequest(
+                            mode: mode,
+                            remoteProvider: remoteProvider,
+                            originalSpan: edit.originalSpan,
+                            correctedSpan: edit.correctedSpan,
+                            contextBefore: edit.contextBefore,
+                            contextAfter: edit.contextAfter,
+                            applicationName: edit.applicationName,
+                            bundleIdentifier: edit.bundleIdentifier
+                        )
+                    )
+                    await persistLearningDecision(
+                        decision,
+                        applicationName: edit.applicationName,
+                        bundleIdentifier: edit.bundleIdentifier
+                    )
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                // Correction learning is opportunistic and never interrupts Dictate.
+                return
+            }
+        }
+    }
+
+    @discardableResult
+    private func persistLearningDecision(
+        _ decision: DictionaryLearningDecision,
+        applicationName: String,
+        bundleIdentifier: String?
+    ) async -> Bool {
+        var saved: [DictionaryEntry] = []
+        for candidate in decision.candidates where candidate.confidence >= 0.7 {
+            let source = candidate.phrase.trimmingCharacters(in: .whitespacesAndNewlines)
+            let replacement = candidate.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !dictionaryEntries.contains(where: {
+                $0.phrase.caseInsensitiveCompare(source) == .orderedSame
+                    && $0.replacement == replacement
+                    && $0.applicationBundleIdentifier == bundleIdentifier
+            }) else { continue }
+            let entry = DictionaryEntry(
+                phrase: source,
+                replacement: replacement,
+                source: .learned,
+                applicationBundleIdentifier: bundleIdentifier
+            )
+            do {
+                try await dependencies.dictionary.save(entry)
+                saved.append(entry)
+            } catch {
+                return false
+            }
+        }
+        guard let first = saved.first else { return false }
+        await refreshDictionaryAndUsage()
+        dictionaryLearningToastTask?.cancel()
+        let toast = DictionaryLearningToast(
+            id: UUID(),
+            entryIDs: saved.map(\.id),
+            phrase: first.phrase,
+            replacement: first.replacement,
+            applicationName: applicationName,
+            count: saved.count
+        )
+        dictionaryLearningToast = toast
+        updateHUD()
+        dictionaryLearningToastTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            guard let self, self.dictionaryLearningToast?.id == toast.id else { return }
+            self.dictionaryLearningToast = nil
+            self.updateHUD()
+        }
+        return true
+    }
+
+    func learnOnboardingCorrection(originalText: String, correctedText: String) async -> Bool {
+        guard preferences.isAutomaticDictionaryLearningActive else { return false }
+        let original = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let corrected = correctedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty, !corrected.isEmpty, original != corrected else { return false }
+        do {
+            let decision = try await dependencies.intelligence.classifyCorrection(
+                DictionaryLearningRequest(
+                    mode: preferences.intelligenceMode,
+                    remoteProvider: preferences.intelligenceMode == .remote
+                        ? normalizedRemoteProvider(preferences.remoteProvider)
+                        : nil,
+                    originalSpan: original,
+                    correctedSpan: corrected,
+                    applicationName: "Lerro Onboarding",
+                    bundleIdentifier: nil
+                )
+            )
+            return await persistLearningDecision(
+                decision,
+                applicationName: "Lerro Onboarding",
+                bundleIdentifier: nil
+            )
+        } catch {
+            return false
+        }
+    }
+
+    func previewAppTone(
+        application: ApplicationDescriptor,
+        instruction: String
+    ) async -> String? {
+        guard selectedAIIsReady else { return nil }
+        let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        do {
+            return try await dependencies.intelligence.process(IntelligenceRequest(
+                task: .polish,
+                mode: preferences.intelligenceMode,
+                remoteProvider: preferences.intelligenceMode == .remote
+                    ? normalizedRemoteProvider(preferences.remoteProvider)
+                    : nil,
+                transcript: "明天下午三点开会，请提前准备资料。",
+                context: CapturedContext(
+                    applicationName: application.name,
+                    bundleIdentifier: application.bundleIdentifier
+                ),
+                dictionary: dictionaryEntries.filter { !$0.isSnippet },
+                toneInstruction: trimmed
+            )).text
+        } catch {
+            return nil
+        }
+    }
+
     private func historyProcessingRoute(result: IntelligenceResult) -> HistoryProcessingRoute {
-        if result.modelIdentifier == "apple-translation" { return .appleTranslation }
         if result.modelIdentifier == "local-snippet" { return .localSnippet }
         return switch result.source {
         case .raw: .raw
@@ -2884,11 +2375,7 @@ final class AppSession {
         case .translation:
             return .translate
         case .ask:
-            if context.selectionState == .knownSelection,
-               context.selectedText?.isEmpty == false {
-                return .rewriteSelection
-            }
-            return .answer
+            return .polish
         }
     }
 
@@ -2899,39 +2386,14 @@ final class AppSession {
         guard !request.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw LerroError.emptyTranscription
         }
-        let output = task == .rewriteSelection
-            ? request.selectedText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? request.transcript
-            : request.transcript
+        let output = request.transcript
         guard !output.isEmpty else { throw LerroError.emptyTranscription }
         return IntelligenceResult(
             text: output,
-            disposition: task == .rewriteSelection ? .replaceSelection : .insert,
+            disposition: .insert,
             modelIdentifier: "raw-apple-speech",
             source: .raw
         )
-    }
-
-    private func processStreamingAnswer(
-        _ request: IntelligenceRequest,
-        session: CaptureSession
-    ) async throws -> IntelligenceResult {
-        answerQuestion = request.transcript
-        answerText = ""
-        answerContext = session.context
-        showAnswerPanel()
-
-        let stream = try await dependencies.intelligence.processStream(request)
-        var finalResult: IntelligenceResult?
-        for try await partial in stream {
-            try Task.checkCancellation()
-            guard activeSession?.id == session.id else { throw CancellationError() }
-            finalResult = partial
-            answerText = partial.text
-        }
-        guard let finalResult else {
-            throw LerroError.modelUnavailable("本地模型没有生成回答")
-        }
-        return finalResult
     }
 
     private func startModelStatusMonitor() -> Task<Void, Never> {
@@ -2958,43 +2420,6 @@ final class AppSession {
                 try? await Task.sleep(for: .milliseconds(250))
             }
         }
-    }
-
-    @discardableResult
-    private func learnDictionary(
-        raw: String,
-        final: String,
-        context: CapturedContext
-    ) async -> Bool {
-        let rawTokens = raw.split(whereSeparator: \.isWhitespace).map(String.init)
-        let finalTokens = final.split(whereSeparator: \.isWhitespace).map(String.init)
-        guard rawTokens.count == finalTokens.count, rawTokens.count <= 100 else { return false }
-        var didSaveEntry = false
-
-        for (source, replacement) in zip(rawTokens, finalTokens) where
-            source.caseInsensitiveCompare(replacement) != .orderedSame
-                && source.count >= 2 && replacement.count >= 2
-                && source.count <= 48 && replacement.count <= 48 {
-            let existing = dictionaryEntries.contains {
-                $0.phrase.caseInsensitiveCompare(source) == .orderedSame
-                    && $0.replacement == replacement
-            }
-            if !existing {
-                let entry = DictionaryEntry(
-                    phrase: source,
-                    replacement: replacement,
-                    source: .learned,
-                    applicationBundleIdentifier: context.bundleIdentifier
-                )
-                do {
-                    try await dependencies.dictionary.save(entry)
-                    didSaveEntry = true
-                } catch {
-                    currentError = "自动词典保存失败：\(error.localizedDescription)"
-                }
-            }
-        }
-        return didSaveEntry
     }
 
     private func applyRetentionAndClean(_ retention: HistoryRetention, now: Date) async throws {
@@ -3099,19 +2524,6 @@ final class AppSession {
         )
     }
 
-    private func showAnswerPanel() {
-        guard presentsFloatingPanels else { return }
-        let estimatedLines = ceil(Double((answerText?.count ?? 0) + answerQuestion.count) / 54)
-        let height = min(800, max(500, 250 + estimatedLines * 25))
-        answerController.show(
-            content: AnyView(
-                AskAnswerCardView(session: self)
-                    .environment(\.locale, LerroInterfaceLocalization.locale(for: preferences.appLanguage))
-            ),
-            size: CGSize(width: 800, height: height)
-        )
-    }
-
     private func configureVisualFixtureIfRequested() {
         let environment = ProcessInfo.processInfo.environment
         guard environment["LERRO_FIXTURE_MODE"] == "1" else { return }
@@ -3131,16 +2543,6 @@ final class AppSession {
         isPanelOnlyVisualFixture = environment["LERRO_FIXTURE_PANEL_ONLY"] == "1"
 
         switch presentation {
-        case "ask":
-            if let entry = historyEntries.first(where: { $0.mode == .ask }) {
-                if isPanelOnlyVisualFixture {
-                    answerQuestion = entry.rawText
-                    answerText = entry.answerText
-                    answerContext = nil
-                } else {
-                    showHistoryAnswer(entry)
-                }
-            }
         case "settings":
             presentSettings(SettingsDestination.settings)
         case "settings-intelligence":
@@ -3215,27 +2617,25 @@ final class AppSession {
             captureError = "没有识别到语音"
             partialTranscript = "合成错误"
             if !isPanelOnlyVisualFixture { updateHUD() }
-        case "hud-receipt", "hud-send-confirmation":
-            let context = CapturedContext(
+        case "hud-recovery":
+            recoveryPresentation = RecoveryPresentation(
+                id: UUID(),
                 applicationName: "Messages",
-                processIdentifier: 42,
-                bundleIdentifier: "com.apple.MobileSMS",
-                selectionState: .knownEmpty,
-                role: "AXTextArea"
-            )
-            deliveryReceipt = DeliveryReceiptPresentation(
-                historyID: UUID(),
                 text: "明天下午三点把新版发布清单发给设计和工程团队。",
-                applicationName: "Messages",
-                systemReceipt: TextDeliveryReceipt(
-                    context: context,
-                    focusedValueFingerprint: 1,
-                    focusedElementFingerprint: 1
-                ),
-                status: presentation == "hud-send-confirmation" ? .confirmSubmit : .delivered,
-                canCorrect: true,
-                requestedSubmit: presentation == "hud-send-confirmation"
+                message: "内容已复制到剪贴板"
             )
+            phase = .failed
+            if !isPanelOnlyVisualFixture { updateHUD() }
+        case "hud-dictionary-learned":
+            dictionaryLearningToast = DictionaryLearningToast(
+                id: UUID(),
+                entryIDs: [UUID()],
+                phrase: "乐若",
+                replacement: "Lerro",
+                applicationName: "Messages",
+                count: 1
+            )
+            phase = .idle
             if !isPanelOnlyVisualFixture { updateHUD() }
         default:
             break
@@ -3288,10 +2688,6 @@ final class AppSession {
     }
 
     private func fail(_ error: any Error) {
-        answerController.hide()
-        answerText = nil
-        answerQuestion = ""
-        answerContext = nil
         let message = userFacingError(error, context: "语音输入失败")
         captureError = message
         captureGeneration = nil
@@ -3301,8 +2697,6 @@ final class AppSession {
         isStartingCapture = false
         isCleaningCapture = true
         activeSession = nil
-        activeVoiceEditTarget = nil
-        isVoiceRedictationCapture = false
         isHandsFreeCapture = false
         isQuickDictateCapture = false
         quickDictateDetectedSpeech = false
@@ -3318,7 +2712,7 @@ final class AppSession {
         Task { @MainActor [weak self] in
             guard let self else { return }
             await dependencies.speech.cancel()
-            await dependencies.translation.cancel()
+            await dependencies.deliveredTextObserver.stopObserving()
             await reconcileOrphanedAudioFiles()
             isCleaningCapture = false
         }
@@ -3377,7 +2771,8 @@ final class AppSession {
             phase: phase,
             isStartingCapture: isStartingCapture,
             isHandsFreeCapture: isHandsFreeCapture,
-            hasDeliveryReceipt: deliveryReceipt != nil,
+            hasRecoveryPresentation: recoveryPresentation != nil,
+            hasDictionaryLearningToast: dictionaryLearningToast != nil,
             isSuppressed: isHUDSuppressed
         )
         if !partialTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -3399,7 +2794,8 @@ final class AppSession {
             phase: phase,
             isStartingCapture: isStartingCapture,
             isHandsFreeCapture: isHandsFreeCapture,
-            hasDeliveryReceipt: deliveryReceipt != nil,
+            hasRecoveryPresentation: recoveryPresentation != nil,
+            hasDictionaryLearningToast: dictionaryLearningToast != nil,
             isSuppressed: isHUDSuppressed
         )
     }

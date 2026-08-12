@@ -69,7 +69,7 @@ Lerro -> LerroIntelligence -> LerroCore
 
 - Core 只使用 Foundation，不能导入 AppKit、Speech、AVFoundation、MLX 或 Hugging Face。
 - Intelligence 通过 Core 的 `LocalLanguageModelRuntime`、`RemoteLanguageModelRuntime` 与 `IntelligenceProcessing` 契约向上提供能力。
-- Mac 通过 Core 的 `SpeechTranscribing`、`ContextCapturing`、`TextDelivering`、`HotkeyMonitoring`、`PermissionChecking` 和 `LoginItemManaging` 契约提供系统能力。
+- Mac 通过 Core 的 `SpeechTranscribing`、`ContextCapturing`、`TextDelivering`、`DeliveredTextObserving`、`RecoveryTextCopying`、`ApplicationCataloging`、`HotkeyMonitoring`、`PermissionChecking` 和 `LoginItemManaging` 契约提供系统能力。
 - Lerro app target 负责组合与交互，不在 view 中直接创建生产 adapter。
 - 新第三方依赖先明确所属 target，避免把大依赖传播到 Core 和 UI。
 
@@ -162,6 +162,9 @@ macOS adapters
 ├── MicrophoneLevelTester
 ├── AccessibilityContextService
 ├── AccessibilityTextDeliverer
+├── AccessibilityDeliveredTextObserver
+├── PasteboardRecoveryTextCopier
+├── MacApplicationCatalog
 ├── GlobalHotkeyMonitor
 ├── MacPermissionService
 ├── MacDeviceCapabilityAssessor
@@ -172,13 +175,13 @@ PipelineIntelligenceService
 └── OpenAICompatibleRemoteLanguageModelRuntime
 ```
 
-`AccessibilityTextDeliverer` returns an in-memory `TextDeliveryReceipt` after the
-paste consumption window. The receipt binds follow-up Undo, correction, and submit
-actions to the actual post-delivery PID, bundle, role/subrole, focused element, and
-complete AX value. Core owns the receipt value and finish-action policy; LerroMac
-owns AX validation and synthetic key events; AppSession owns the six-second UI state.
-The long-lived boundary is recorded in
-[ADR 0009](decisions/0009-bound-delivery-receipts.md).
+`AccessibilityTextDeliverer` 在写入前重新校验 capture 时冻结的应用、输入元素、完整值、
+选区和安全状态，再通过单一 Command-V 事务交付。成功写入只返回供自动词典观察使用的
+进程内 `TextDeliveryReceipt`，HUD 立即退出；失败文本由 `RecoveryTextCopying` 留在剪贴板。
+启用 AI 自动学习时，`AccessibilityDeliveredTextObserver` 使用该 receipt 在同一目标观察
+最多 60 秒，800 ms 稳定后只产出最小差异，AI 才决定是否写入词典。边界记录在
+[ADR 0012](decisions/0012-strict-delivery-ai-dictionary-learning.md)。ADR 0005、0009 和
+0010 的交付、回执与语音跟进方案由 0012 取代。
 
 `LERRO_FIXTURE_MODE=1` 选择 fixture 组合。fixture 必须由内存仓库、规则引擎和 inert system adapters 构成；它不能访问磁盘、麦克风、TCC、AX、CGEventTap、剪贴板、登录项或网络。维护时通过
 [`AppDependencies.swift`](../Sources/Lerro/App/AppDependencies.swift) 的 fixture adapter 列表核验这一约束。
@@ -191,14 +194,16 @@ The long-lived boundary is recorded in
 - 当前 sidebar/settings/onboarding 页面状态。
 - `CapturePhase`、`CaptureMode`、generation、active session、设备 AI 建议与异步任务。
 - 历史、词典、偏好、模型状态和权限快照。
-- HUD 与 Ask panel controller。
+- HUD controller、写入失败恢复卡与自动学习提示。
 - 核心命令：开始、完成、取消、重试、交付、保存和清理。
 
 视图通过 `@Bindable` 读取状态并转发用户意图。跨页面共享状态应继续由 `AppSession` 或 Core store 管理。
 
 Onboarding 的设备策略位于 Core 的 `LocalAIReadiness`，生产硬件读取位于 LerroMac 的
-`MacDeviceCapabilityAssessor`。App target 负责呈现本地、API 和基础听写路径。未完成的本地
-下载由 AppSession 持有，因此关闭 Onboarding 或主窗口不会取消任务；退出 app 会保留可恢复断点。
+`MacDeviceCapabilityAssessor`。App target 固定按 Apple 听写、远端 AI、本地 AI 的顺序呈现，
+并要求完成隐私、Speech、AI、快捷键、真实听写、失败恢复、自动词典和应用语气八项操作。
+Apple-only 用户在恢复练习后完成；AI 用户继续完成词典与语气。未完成的本地下载由
+AppSession 持有，因此关闭 Onboarding 或主窗口不会取消任务；退出 app 会保留可恢复断点。
 
 设置页把 `UserPreferences` 的旧值与新值一并交给 `AppSession`。持久化仍通过串行合并队列完成；外观、Dock 可见性、全局快捷键和 Login Item 只在各自字段发生变化时访问对应系统服务。启动时完整应用当前外观与 Dock 状态，保存失败时按回滚前后的字段差异恢复对应系统状态。
 
@@ -233,7 +238,8 @@ Onboarding 的设备策略位于 Core 的 `LocalAIReadiness`，生产硬件读�
 [`Sources/LerroCore/Stores`](../Sources/LerroCore/Stores)。
 
 `preferences.json` 统一保存三种智能处理模式、Provider、Base URL、Model ID、六项上下文
-开关、免手发送 app 授权和用户 API Key。API Key 依产品决策以明文 JSON 字段保存；Application Support 根目录
+开关、自动词典学习、Quick Dictate 和用户 API Key。新安装采用 Apple raw，Quick Dictate
+默认关闭；自动学习偏好默认开启并只在 local/remote AI 模式生效。API Key 依产品决策以明文 JSON 字段保存；Application Support 根目录
 每次准备或迁移时收紧到 `0700`，preferences 文件每次读取或原子替换后收紧到 `0600`。
 设置页使用 view-local draft，只有“保存并启用”会提交 Provider 配置。
 
@@ -241,10 +247,10 @@ Onboarding 的设备策略位于 Core 的 `LocalAIReadiness`，生产硬件读�
 [`FileHistoryRepository.swift`](../Sources/LerroCore/Stores/FileHistoryRepository.swift) 在 actor 内复用稳定排序的
 snapshot，分页、统计与连续 mutation 共享同一份解码结果。mutation 以 revision-CAS 提交一次紧凑、确定性的
 原子 JSON 写入；磁盘 fingerprint 与 `NSFileCoordinator` 让同一路径的多实例 mutation 保持有序，并让外部更新立即失效缓存。
-旧版 pretty-printed JSON 保持可读。历史条目可选保存 raw→processed→corrected 沿袭、
-处理路由、模型标识、上下文类别、remote 共享类别、阶段耗时与发送状态；不保存
-post-delivery focused value 或 element fingerprint。v1.5 的 `editLineage` 以版本父链保存
-原始写入、手动修改、确定性修改、语义修改与重新听写结果。历史视图只渲染已经展示的页面，完整 snapshot 仅用于本地统计、
+旧版 pretty-printed JSON 保持可读。历史条目保存 raw/final 文本、处理路由、模型标识、
+上下文类别、remote 共享类别、阶段耗时与交付状态；不保存 post-delivery focused value、
+element fingerprint 或自动学习差异。旧 Ask 条目只保留解码和历史展示，生产代码不创建新条目。
+历史视图只渲染已经展示的页面，完整 snapshot 仅用于本地统计、
 retention 与录音索引对账。历史和词典搜索先进入视图本地状态，120 ms 可取消延迟后更新缓存结果，避免每次击键重算完整列表。
 
 [`identity.md`](identity.md#legacy-compatibility-boundary) 记录的兼容数据根到
@@ -267,7 +273,7 @@ retention 与录音索引对账。历史和词典搜索先进入视图本地状�
 ## UI 与 AppKit 分工
 
 - SwiftUI：主窗口、设置、引导、列表和 panel 内容。
-- AppKit：窗口配置、非激活 HUD、可交互 Ask panel、激活策略和系统事件。
+- AppKit：窗口配置、非激活 HUD、激活策略和系统事件。
 - [`FloatingPanelController.swift`](../Sources/LerroMac/Panels/FloatingPanelController.swift) 管理 panel 级别、Space 行为、底部定位和鼠标交互区域。
 - [`WindowConfigurator.swift`](../Sources/LerroMac/System/WindowConfigurator.swift) 把 window 配置保持在 Mac target。
 - 视觉常量集中在 [`DesignTokens.swift`](../Sources/Lerro/DesignSystem/DesignTokens.swift)。

@@ -79,13 +79,18 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     public var remoteProvider: RemoteProviderConfiguration
     public var hotkeys: [HotkeyDefinition]
     public var appToneProfiles: [AppToneProfile]
-    public var voiceFinishApplications: [VoiceFinishApplication]
+    public var automaticDictionaryLearningEnabled: Bool
+    public var quickDictateEnabled: Bool
     public var hasApprovedModelDownload: Bool
     public var hasCompletedOnboarding: Bool
     public var onboardingStepIndex: Int?
 
     public var shouldSaveCaptureAudio: Bool {
         saveAudio && historyRetention != .never
+    }
+
+    public var isAutomaticDictionaryLearningActive: Bool {
+        automaticDictionaryLearningEnabled && intelligenceMode != .raw
     }
 
     public init(
@@ -101,13 +106,14 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         showInDock: Bool = true,
         saveAudio: Bool = false,
         historyRetention: HistoryRetention = .forever,
-        enhancementEnabled: Bool = true,
+        enhancementEnabled: Bool = false,
         intelligenceMode: IntelligenceMode? = nil,
         localModelIdentifier: String = "mlx-community/Qwen3.5-4B-MLX-4bit",
         remoteProvider: RemoteProviderConfiguration = RemoteProviderConfiguration(),
         hotkeys: [HotkeyDefinition] = UserPreferences.defaultHotkeys,
         appToneProfiles: [AppToneProfile] = [],
-        voiceFinishApplications: [VoiceFinishApplication] = [],
+        automaticDictionaryLearningEnabled: Bool = true,
+        quickDictateEnabled: Bool = false,
         hasApprovedModelDownload: Bool = false,
         hasCompletedOnboarding: Bool = false,
         onboardingStepIndex: Int? = nil
@@ -131,7 +137,8 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         self.remoteProvider = remoteProvider
         self.hotkeys = hotkeys
         self.appToneProfiles = appToneProfiles
-        self.voiceFinishApplications = voiceFinishApplications
+        self.automaticDictionaryLearningEnabled = automaticDictionaryLearningEnabled
+        self.quickDictateEnabled = quickDictateEnabled
         self.hasApprovedModelDownload = hasApprovedModelDownload
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.onboardingStepIndex = onboardingStepIndex
@@ -156,7 +163,8 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         case remoteProvider
         case hotkeys
         case appToneProfiles
-        case voiceFinishApplications
+        case automaticDictionaryLearningEnabled
+        case quickDictateEnabled
         case hasApprovedModelDownload
         case hasCompletedOnboarding
         case onboardingStepIndex
@@ -242,10 +250,14 @@ public struct UserPreferences: Codable, Equatable, Sendable {
                 [AppToneProfile].self,
                 forKey: .appToneProfiles
             ) ?? defaults.appToneProfiles,
-            voiceFinishApplications: try container.decodeIfPresent(
-                [VoiceFinishApplication].self,
-                forKey: .voiceFinishApplications
-            ) ?? defaults.voiceFinishApplications,
+            automaticDictionaryLearningEnabled: try container.decodeIfPresent(
+                Bool.self,
+                forKey: .automaticDictionaryLearningEnabled
+            ) ?? defaults.automaticDictionaryLearningEnabled,
+            quickDictateEnabled: try container.decodeIfPresent(
+                Bool.self,
+                forKey: .quickDictateEnabled
+            ) ?? defaults.quickDictateEnabled,
             hasApprovedModelDownload: try container.decodeIfPresent(
                 Bool.self,
                 forKey: .hasApprovedModelDownload
@@ -275,14 +287,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
             usesFunctionKey: true,
             activation: .toggle,
             displayName: "Fn ⇧"
-        ),
-        HotkeyDefinition(
-            action: .ask,
-            keyCode: 49,
-            modifiers: 1 << 23,
-            usesFunctionKey: true,
-            activation: .toggle,
-            displayName: "Fn Space"
         ),
         HotkeyDefinition(
             action: .pasteLastResult,
@@ -325,13 +329,12 @@ public struct UserPreferences: Codable, Equatable, Sendable {
             return definition
         }
         var signatures = Set<HotkeySignature>()
-        var resolved = migrated.filter { signatures.insert($0.signature).inserted }
-        if !resolved.contains(where: { $0.action == .ask }),
-           let command = defaultHotkeys.first(where: { $0.action == .ask }),
-           signatures.insert(command.signature).inserted {
-            resolved.append(command)
+        return migrated.filter { definition in
+            guard definition.action != .ask, definition.action != .askHandsFree else {
+                return false
+            }
+            return signatures.insert(definition.signature).inserted
         }
-        return resolved
     }
 
     private static func modifierFlag(forLegacyKeyCode keyCode: Int64?) -> UInt64? {

@@ -112,38 +112,6 @@ struct PromptComposerTests {
         #expect(prompts.user.contains("Target language: English"))
     }
 
-    @Test("Answer prompt includes selected text and spoken request")
-    func composesAnswerPrompt() {
-        let request = IntelligenceRequest(
-            task: .answer,
-            transcript: "Explain this",
-            selectedText: "Selected passage",
-            context: CapturedContext(applicationName: "Safari")
-        )
-
-        let prompts = composer.prompts(for: request, cleanedTranscript: "Explain this")
-
-        #expect(prompts.system.contains("desktop assistant"))
-        #expect(prompts.user.contains("Selected text:\nSelected passage"))
-        #expect(prompts.user.contains("Request:\nExplain this"))
-    }
-
-    @Test("Rewrite prompt requests a complete replacement")
-    func composesRewriteSelectionPrompt() {
-        let request = IntelligenceRequest(
-            task: .rewriteSelection,
-            transcript: "Make it concise",
-            selectedText: "A long selected paragraph",
-            context: CapturedContext(applicationName: "Mail")
-        )
-
-        let prompts = composer.prompts(for: request, cleanedTranscript: "Make it concise")
-
-        #expect(prompts.system.contains("complete replacement text"))
-        #expect(prompts.user.contains("Selected text:\nA long selected paragraph"))
-        #expect(prompts.user.contains("Editing instruction:\nMake it concise"))
-    }
-
     private func makeRequest(
         task: IntelligenceTask,
         targetLanguage: String? = nil
