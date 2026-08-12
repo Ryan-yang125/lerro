@@ -166,6 +166,5 @@ T5 分别验证 remote/local polish、Translate、learning、tone，以及 local
 - [`permissions.md`](../permissions.md)
 - [`privacy-security.md`](../privacy-security.md)
 - [`testing.md`](../testing.md)
-- [`ui-parity.md`](../ui-parity.md)
 - [`troubleshooting.md`](../troubleshooting.md)
 - [`PRIVACY.md`](../../PRIVACY.md)
