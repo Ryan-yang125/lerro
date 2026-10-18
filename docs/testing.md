@@ -79,7 +79,7 @@ swift test --filter V16SystemAdapterTests
 
 Swift Testing 的 filter 匹配当前生成的 test spec。筛选结果为空时运行 `swift test list` 查看完整名称，并把最终使用的筛选命令记录在交付说明中。
 
-测试文件统一使用 `*Tests.swift` 命名。CI 会把 `Tests/**/*Tests.swift` 与 `swift package describe --type json` 中的 test target source 做集合比较，发现未接入 SwiftPM 的文件。
+测试文件统一使用 `*Tests.swift` 命名。`verify_release.sh` 会把 `Tests/**/*Tests.swift` 与 `swift package describe --type json` 中的 test target source 做集合比较，发现未接入 SwiftPM 的文件。
 
 测试数量与 suite 数量从本次 `swift test` 输出读取，文档不维护固定计数。
 
@@ -461,14 +461,13 @@ Logo、App Icon、菜单栏或公开模板变化时先执行：
 
 ## CI 边界
 
-[CI](../.github/workflows/ci.yml) 当前执行：
+[CI](../.github/workflows/ci.yml) 在 `ubuntu-latest` 上执行一个约一分钟的 job：
 
-1. toolchain 报告。
-2. shell 语法。
-3. Metal toolchain 准备。
-4. 以 ad-hoc 模式运行 `verify_release.sh`；该脚本内部执行 test source discovery、全量测试、Release build、打包、独立解压、签名/资源/manifest/dSYM 校验和 inert fixture smoke。
+1. shell 语法与 `validate_agent_workspace.sh`（文档链接、Skill 入口）。
+2. `benchmark_contextual_dictation.py --validate`、`test_contextual_benchmark.py`、`test_capture_latency_report.py`。
+3. 网站 `npm ci`、`npm run lint`、`npm run build`、`npm test`。
 
-CI 不设置 `LERRO_LIVE_MODEL_SMOKE=1` 或 `LERRO_LIVE_REMOTE_SMOKE=1`，因此真实 MLX 与第三方 Provider 调用继续位于显式验收边界。CI 也不拥有目标 Mac 的真实 TCC、麦克风、输入设备、用户剪贴板、模型下载授权、Provider Key 或 Developer ID/notary 凭据。Release 实机矩阵和分发门禁保留在本地或专用发布环境。
+Swift 构建与测试、Release 打包、签名、manifest/dSYM 校验和 inert fixture 只在本地 `verify_release.sh` 中执行；该脚本同样运行上面的 shell 与 Python 检查。真实 MLX、第三方 Provider、TCC、麦克风和 Developer ID/notary 凭据都不进入 CI。
 
 ## 交付证据模板
 

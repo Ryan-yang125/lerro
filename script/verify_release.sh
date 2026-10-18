@@ -35,7 +35,7 @@ trap cleanup EXIT INT TERM
 
 cd "$project_dir"
 
-print "[1/8] Linting release entrypoints and property lists"
+print "[1/8] Linting release entrypoints, property lists, and Python scripts"
 zsh -n \
     "$project_dir/Brand/scripts"/*.sh \
     "$script_dir"/*.sh \
@@ -50,6 +50,9 @@ if ! grep -q -- '--pipe' "$project_dir/script/publish_cloudflare_release.sh"; th
 fi
 plutil -lint config/Info.plist config/Lerro.entitlements Sources/Lerro/Resources/PrivacyInfo.xcprivacy
 "$project_dir/script/validate_agent_workspace.sh"
+python3 "$script_dir/benchmark_contextual_dictation.py" --validate
+python3 "$script_dir/test_contextual_benchmark.py"
+python3 "$script_dir/test_capture_latency_report.py"
 
 print "[2/8] Verifying deterministic Brand Kit assets"
 "$project_dir/Brand/scripts/verify-assets.sh"

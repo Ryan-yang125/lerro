@@ -72,7 +72,7 @@ resources.
 | Mode | Intended use | Identity |
 | --- | --- | --- |
 | `auto` | Local convenience | Resolves Apple Development when available, then ad-hoc |
-| `ad-hoc` | Local build and CI | `-` |
+| `ad-hoc` | Local build | `-` |
 | `development` | Stable local TCC and device testing | Apple Development |
 | `developer-id` | Public distribution | Developer ID Application |
 

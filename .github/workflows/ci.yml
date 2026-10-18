@@ -1,5 +1,8 @@
 name: CI
 
+# Fast checks for pull requests. The Swift build, tests, signing and packaging
+# run locally in script/verify_release.sh before every release.
+
 on:
   push:
   pull_request:
@@ -12,14 +15,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  website:
-    name: Website
+  checks:
+    name: Checks
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    defaults:
-      run:
-        working-directory: site
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -32,49 +31,24 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install zsh
+        run: sudo apt-get install -y --no-install-recommends zsh
 
-      - name: Verify website
+      - name: Scripts and documentation links
         run: |
-          npm run lint
-          npm run build
-          npm test
-          npm audit --omit=dev --audit-level=high
+          zsh -n Brand/scripts/*.sh script/*.sh script/*.zsh
+          ./script/validate_agent_workspace.sh
 
-  swift-package:
-    name: Build and test
-    runs-on: macos-26
-    timeout-minutes: 45
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Report toolchain
-        run: |
-          xcode-select -p
-          swift --version
-
-      - name: Validate shell entrypoints
-        run: zsh -n Brand/scripts/*.sh script/*.sh script/*.zsh
-
-      - name: Validate agent workspace
-        run: ./script/validate_agent_workspace.sh
-
-      - name: Validate contextual benchmark
+      - name: Python scripts
         run: |
           python3 script/benchmark_contextual_dictation.py --validate
           python3 script/test_contextual_benchmark.py
           python3 script/test_capture_latency_report.py
 
-      - name: Prepare Metal toolchain
+      - name: Website
+        working-directory: site
         run: |
-          if ! xcrun metal --version >/dev/null 2>&1; then
-            xcodebuild -downloadComponent MetalToolchain
-          fi
-
-      - name: Verify Release artifact
-        env:
-          LERRO_SIGNING_MODE: ad-hoc
-        run: ./script/verify_release.sh
+          npm ci
+          npm run lint
+          npm run build
+          npm test

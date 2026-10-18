@@ -172,7 +172,7 @@ Lerro -> LerroIntelligence -> LerroCore
 - SwiftPM `.bundle`、图标、隐私文件、条款、第三方许可证和 upstream NOTICE 保留在 `Contents/Resources`。
 - app binary 与 dSYM 都是 arm64，UUID 保持一致。
 - 签名模式为 `auto`、`development`、`ad-hoc`、`developer-id`，解析规则以 `signing_support.zsh` 为准。
-- `ad-hoc` 用于本机与 CI；`development` 用于稳定 TCC 测试；`developer-id` 同时需要 notary profile。
+- `ad-hoc` 用于本机；`development` 用于稳定 TCC 测试；`developer-id` 同时需要 notary profile。
 - 发布期间源码树发生变化时立即停止并重新打包。
 - 失败的构建、公证或复验不得覆盖上一份有效 canonical 产物。
 - 版本发布同步更新 `CFBundleShortVersionString`、`CFBundleVersion`、CHANGELOG 与验收记录。
