@@ -176,8 +176,8 @@ class CaptureLatencyReportTests(unittest.TestCase):
         names = [name for name, _, _ in REPORT.STEPS]
         self.assertEqual(names[0], "hotkeyPressed>hotkeyHandled")
         self.assertNotIn("listening>stopRequested", names)
-        self.assertEqual(len(names), 17 + 6)
-        self.assertEqual(len(REPORT.SUMMARIES), 11)
+        self.assertEqual(len(names), 12 + 4 + 6)
+        self.assertEqual(len(REPORT.SUMMARIES), 12)
 
     def test_missing_file_exits_nonzero(self):
         with contextlib.redirect_stderr(io.StringIO()):
