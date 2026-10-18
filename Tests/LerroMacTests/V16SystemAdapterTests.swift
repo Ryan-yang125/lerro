@@ -90,6 +90,28 @@ struct V16SystemAdapterTests {
         #expect(merged.first?.isRunning == true)
     }
 
+    @Test("Application catalog keeps the first duplicate installed bundle")
+    func applicationCatalogKeepsFirstDuplicateInstalledBundle() {
+        let merged = mergedApplicationDescriptors(
+            installed: [
+                ApplicationDescriptor(
+                    bundleIdentifier: "com.example.Editor",
+                    name: "Editor",
+                    bundleURL: "/Applications/Editor.app"
+                ),
+                ApplicationDescriptor(
+                    bundleIdentifier: "com.example.Editor",
+                    name: "Editor",
+                    bundleURL: "/Applications/Utilities/Editor.app"
+                ),
+            ],
+            running: []
+        )
+
+        #expect(merged.count == 1)
+        #expect(merged.first?.bundleURL == "/Applications/Editor.app")
+    }
+
     @Test("Strict delivery rejects application, element, value, range, and secure drift")
     func strictDeliveryValidation() {
         let context = CapturedContext(

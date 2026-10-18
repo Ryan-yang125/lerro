@@ -15,11 +15,14 @@ renderer="$temporary_dir/render-svg"
 /usr/bin/swiftc -O "$script_dir/render-svg.swift" -o "$renderer"
 
 mkdir -p \
-  "$exports_dir/logo" \
-  "$exports_dir/app-icon" \
-  "$exports_dir/menu-bar" \
+  "$exports_dir" \
   "$templates_dir" \
   "$validation_dir"
+find "$exports_dir" -mindepth 1 -delete
+mkdir -p \
+  "$exports_dir/logo" \
+  "$exports_dir/app-icon" \
+  "$exports_dir/menu-bar"
 
 render_png() {
   "$renderer" png "$1" "$2" "$3" "$4"
@@ -41,67 +44,70 @@ copy_and_render_logo() {
   render_png "$source" "$exports_dir/logo/$name.png" "$png_width" "$png_height"
 }
 
-copy_and_render_logo lerro-symbol 64 64 512 512
-copy_and_render_logo lerro-symbol-monochrome 64 64 512 512
-copy_and_render_logo lerro-symbol-reversed 64 64 512 512
-copy_and_render_logo lerro-micro-16 16 16 16 16
-copy_and_render_logo lerro-micro-24 24 24 24 24
-copy_and_render_logo lerro-wordmark 220 64 880 256
-copy_and_render_logo lerro-lockup-horizontal 300 80 1200 320
-copy_and_render_logo lerro-lockup-horizontal-dark 300 80 1200 320
-copy_and_render_logo lerro-lockup-vertical 180 180 720 720
+copy_and_render_logo lerro-mark 44 69 440 690
+copy_and_render_logo lerro-mark-reversed 44 69 440 690
+copy_and_render_logo lerro-mark-mono 44 69 440 690
+copy_and_render_logo lerro-wordmark 172 69 1376 552
+copy_and_render_logo lerro-wordmark-reversed 172 69 1376 552
+copy_and_render_logo lerro-lockup-horizontal 207 80 828 320
+copy_and_render_logo lerro-lockup-horizontal-dark 207 80 828 320
 copy_and_render_logo lerro-construction 640 400 1280 800
 
-app_icon_source="$source_dir/app-icon/lerro-app-icon.svg"
-app_icon_mono_source="$source_dir/app-icon/lerro-app-icon-monochrome.svg"
-/bin/cp "$app_icon_source" "$exports_dir/app-icon/lerro-app-icon.svg"
-/bin/cp "$app_icon_mono_source" "$exports_dir/app-icon/lerro-app-icon-monochrome.svg"
-render_pdf "$app_icon_source" "$exports_dir/app-icon/lerro-app-icon.pdf" 1024 1024
-render_pdf "$app_icon_mono_source" "$exports_dir/app-icon/lerro-app-icon-monochrome.pdf" 1024 1024
-render_png "$app_icon_source" "$exports_dir/app-icon/lerro-app-icon-1024.png" 1024 1024
-render_png "$app_icon_mono_source" "$exports_dir/app-icon/lerro-app-icon-monochrome-1024.png" 1024 1024
+flat_icon_source="$source_dir/app-icon/lerro-app-icon-flat.svg"
+/bin/cp "$flat_icon_source" "$exports_dir/app-icon/lerro-app-icon-flat.svg"
+render_png "$flat_icon_source" "$exports_dir/app-icon/lerro-app-icon-1024.png" 1024 1024
 
-iconset="$exports_dir/app-icon/Lerro.iconset"
-find "$iconset" -depth -delete 2>/dev/null || true
-mkdir -p "$iconset"
-render_png "$app_icon_source" "$iconset/icon_16x16.png" 16 16
-render_png "$app_icon_source" "$iconset/icon_16x16@2x.png" 32 32
-render_png "$app_icon_source" "$iconset/icon_32x32.png" 32 32
-render_png "$app_icon_source" "$iconset/icon_32x32@2x.png" 64 64
-render_png "$app_icon_source" "$iconset/icon_128x128.png" 128 128
-render_png "$app_icon_source" "$iconset/icon_128x128@2x.png" 256 256
-render_png "$app_icon_source" "$iconset/icon_256x256.png" 256 256
-render_png "$app_icon_source" "$iconset/icon_256x256@2x.png" 512 512
-render_png "$app_icon_source" "$iconset/icon_512x512.png" 512 512
-render_png "$app_icon_source" "$iconset/icon_512x512@2x.png" 1024 1024
-/usr/bin/iconutil -c icns "$iconset" -o "$exports_dir/app-icon/Lerro.icns"
+actool_output="$temporary_dir/actool"
+mkdir -p "$actool_output"
+/usr/bin/xcrun actool "$source_dir/app-icon/AppIcon.icon" "$source_dir/app-icon/Accent.xcassets" "$source_dir/icons/Glyphs.xcassets" \
+  --compile "$actool_output" \
+  --platform macosx \
+  --minimum-deployment-target 26.0 \
+  --app-icon AppIcon \
+  --accent-color AccentColor \
+  --output-partial-info-plist "$actool_output/partial.plist"
+for icon_file in AppIcon.icns Assets.car; do
+  [[ -s "$actool_output/$icon_file" ]] || {
+    print -u2 "actool did not produce $icon_file"
+    exit 1
+  }
+  /bin/cp "$actool_output/$icon_file" "$exports_dir/app-icon/$icon_file"
+done
 
-for state in idle listening processing error; do
+menu_states=(
+  idle:Idle
+  listening:Listening
+  listening-dim:ListeningDim
+  processing-1:Processing1
+  processing-2:Processing2
+  processing-3:Processing3
+  processing-4:Processing4
+  error:Error
+)
+for entry in $menu_states; do
+  state=${entry%%:*}
+  title=${entry#*:}
   source="$source_dir/menu-bar/lerro-menubar-$state.svg"
   /bin/cp "$source" "$exports_dir/menu-bar/lerro-menubar-$state.svg"
-  render_pdf "$source" "$exports_dir/menu-bar/lerro-menubar-$state.pdf" 24 24
-  render_png "$source" "$exports_dir/menu-bar/lerro-menubar-$state-16.png" 16 16
-  render_png "$source" "$exports_dir/menu-bar/lerro-menubar-$state-16@2x.png" 32 32
-  render_png "$source" "$exports_dir/menu-bar/lerro-menubar-$state-24.png" 24 24
-  render_png "$source" "$exports_dir/menu-bar/lerro-menubar-$state-24@2x.png" 48 48
-  state_title=${(C)state}
-  render_png "$source" "$exports_dir/menu-bar/LerroMenu${state_title}Template.png" 18 18
-  render_png "$source" "$exports_dir/menu-bar/LerroMenu${state_title}Template@2x.png" 36 36
+  render_pdf "$source" "$exports_dir/menu-bar/lerro-menubar-$state.pdf" 18 18
+  render_png "$source" "$exports_dir/menu-bar/LerroMenu${title}Template.png" 18 18
+  render_png "$source" "$exports_dir/menu-bar/LerroMenu${title}Template@2x.png" 36 36
 done
 
 [[ -d "$app_resources_dir/MenuBar" ]] || {
   print -u2 "Missing Lerro app resource directory: $app_resources_dir/MenuBar"
   exit 1
 }
-/bin/cp "$exports_dir/app-icon/Lerro.icns" "$app_resources_dir/icon.icns"
-for state in idle listening processing error; do
-  state_title=${(C)state}
+for icon_file in AppIcon.icns Assets.car; do
+  /bin/cp "$exports_dir/app-icon/$icon_file" "$app_resources_dir/$icon_file"
+done
+find "$app_resources_dir/MenuBar" -type f -delete
+for entry in $menu_states; do
+  title=${entry#*:}
   /bin/cp \
-    "$exports_dir/menu-bar/LerroMenu${state_title}Template.png" \
-    "$app_resources_dir/MenuBar/LerroMenu${state_title}Template.png"
-  /bin/cp \
-    "$exports_dir/menu-bar/LerroMenu${state_title}Template@2x.png" \
-    "$app_resources_dir/MenuBar/LerroMenu${state_title}Template@2x.png"
+    "$exports_dir/menu-bar/LerroMenu${title}Template.png" \
+    "$exports_dir/menu-bar/LerroMenu${title}Template@2x.png" \
+    "$app_resources_dir/MenuBar/"
 done
 
 render_png "$source_dir/templates/github-social-preview.svg" "$templates_dir/github-social-preview.png" 1280 640

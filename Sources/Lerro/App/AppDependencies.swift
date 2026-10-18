@@ -20,9 +20,12 @@ struct AppDependencies: Sendable {
     let identityMonitor: any ApplicationIdentityMonitoring
     let history: any HistoryRepository
     let dictionary: any DictionaryRepository
+    let dictionarySuggestions: any DictionarySuggestionRepository
     let preferences: any PreferencesRepository
+    let aiUsage: any AIUsageRepository
     let intelligence: any IntelligenceProcessing
     let deviceCapabilities: any DeviceCapabilityAssessing
+    let captureTrace: any CaptureTraceObserving
 
     static func live() -> AppDependencies {
         if ProcessInfo.processInfo.environment["LERRO_FIXTURE_MODE"] == "1" {
@@ -56,6 +59,7 @@ struct AppDependencies: Sendable {
             modelCacheDirectory: paths.modelsDirectory
         )
         let remoteModelRuntime = OpenAICompatibleRemoteLanguageModelRuntime()
+        let aiUsage = FileAIUsageRepository(fileURL: paths.aiUsageFile)
         return AppDependencies(
             applicationPaths: paths,
             dataMigrationResult: migrationResult,
@@ -73,48 +77,23 @@ struct AppDependencies: Sendable {
             identityMonitor: identityMonitor,
             history: FileHistoryRepository(fileURL: paths.historyFile),
             dictionary: FileDictionaryRepository(fileURL: paths.dictionaryFile),
+            dictionarySuggestions: FileDictionarySuggestionRepository(fileURL: paths.dictionarySuggestionsFile),
             preferences: preferences,
+            aiUsage: aiUsage,
             intelligence: PipelineIntelligenceService(
                 runtime: modelRuntime,
                 remoteRuntime: remoteModelRuntime,
-                modelIdentifier: defaultPreferences.localModelIdentifier
+                modelIdentifier: defaultPreferences.localModelIdentifier,
+                usageRecorder: aiUsage
             ),
-            deviceCapabilities: MacDeviceCapabilityAssessor(storageURL: paths.rootDirectory)
+            deviceCapabilities: MacDeviceCapabilityAssessor(storageURL: paths.rootDirectory),
+            captureTrace: OSLogCaptureTraceObserver()
         )
     }
 
     private static func fixture(startupStorageError: String? = nil) -> AppDependencies {
-        let now = Date(timeIntervalSince1970: 1_785_283_200)
-        let history = [
-            HistoryEntry(
-                createdAt: now,
-                mode: .dictation,
-                rawText: "这是一段用于视觉回归的合成口述。",
-                finalText: "这是一段用于视觉回归的合成口述。",
-                duration: 18,
-                applicationName: "Notes",
-                wasEnhanced: true
-            ),
-            HistoryEntry(
-                createdAt: now.addingTimeInterval(-3_600),
-                mode: .translation,
-                rawText: "请把这段合成文本翻译成英文。",
-                finalText: "Please translate this synthetic text into English.",
-                targetLanguage: "en_US",
-                duration: 11,
-                applicationName: "Mail",
-                wasEnhanced: true
-            )
-        ]
-        let dictionary = [
-            DictionaryEntry(
-                phrase: "meeting link",
-                replacement: "https://meet.example.com/lerro",
-                useCount: 8
-            ),
-            DictionaryEntry(phrase: "code x", replacement: "Codex", source: .learned, useCount: 5),
-            DictionaryEntry(phrase: "swift ui", replacement: "SwiftUI", useCount: 3)
-        ]
+        let history = fixtureHistory()
+        let dictionary = fixtureDictionary()
         let onboardingRequested = ProcessInfo.processInfo.environment["LERRO_FIXTURE_ONBOARDING"] == "1"
         let onboardingStepIndex: Int? = switch ProcessInfo.processInfo.environment["LERRO_FIXTURE_ONBOARDING_STEP"] {
         case "privacy": 0
@@ -127,17 +106,16 @@ struct AppDependencies: Sendable {
         case "tone": 7
         default: nil
         }
-        let preferences = UserPreferences(
-            appToneProfiles: [
-                AppToneProfile(
-                    bundleIdentifier: "com.apple.mail",
-                    applicationName: "Mail",
-                    instruction: "表达清楚、友好、简洁"
-                )
-            ],
+        var preferences = UserPreferences(
+            appToneProfiles: fixtureAppToneProfiles(),
+            defaultToneInstruction: "自然、简洁，保留我的原意",
             hasCompletedOnboarding: !onboardingRequested,
             onboardingStepIndex: onboardingRequested ? onboardingStepIndex : nil
         )
+        if !onboardingRequested {
+            preferences.intelligenceMode = .remote
+            preferences.remoteProvider = .preset(.deepSeek, apiKey: "fixture-not-a-real-key")
+        }
 
         return AppDependencies(
             applicationPaths: nil,
@@ -156,10 +134,307 @@ struct AppDependencies: Sendable {
             identityMonitor: FixtureApplicationIdentityMonitor(),
             history: InMemoryHistoryRepository(entries: history),
             dictionary: InMemoryDictionaryRepository(entries: dictionary),
+            dictionarySuggestions: InMemoryDictionarySuggestionRepository(value: fixtureDictionarySuggestions()),
             preferences: InMemoryPreferencesRepository(value: preferences),
+            aiUsage: InMemoryAIUsageRepository(records: fixtureAIUsageRecords()),
             intelligence: RuleBasedIntelligenceService(),
-            deviceCapabilities: FixtureDeviceCapabilityAssessor()
+            deviceCapabilities: FixtureDeviceCapabilityAssessor(),
+            captureTrace: DiscardingCaptureTraceObserver()
         )
+    }
+
+    private static func fixtureHistory() -> [HistoryEntry] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+        func at(_ day: Date, _ hour: Int, _ minute: Int) -> Date {
+            calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
+        }
+        let fullReceipt = HistoryContextReceipt(
+            capturedCategories: [.application, .windowTitle, .nearbyText, .dictionary, .tone],
+            remoteSharedCategories: [.application, .dictionary, .tone]
+        )
+        let timings = HistoryPhaseTimings(
+            recording: 8.6,
+            transcription: 0.4,
+            processing: 1.1,
+            delivery: 0.1,
+            milestones: [
+                .hotkeyPressed: 0,
+                .contextCaptured: 0.06,
+                .speechStartRequested: 0.08,
+                .listening: 0.42,
+                .firstPartial: 0.9
+            ]
+        )
+        func entry(
+            _ day: Date,
+            _ hour: Int,
+            _ minute: Int,
+            mode: CaptureMode = .dictation,
+            raw: String,
+            final: String,
+            duration: TimeInterval,
+            app: String,
+            bundle: String,
+            window: String? = nil,
+            status: HistoryStatus = .completed,
+            enhanced: Bool = true,
+            target: String? = nil
+        ) -> HistoryEntry {
+            HistoryEntry(
+                createdAt: at(day, hour, minute),
+                mode: mode,
+                rawText: raw,
+                finalText: final,
+                targetLanguage: target,
+                duration: duration,
+                applicationName: app,
+                bundleIdentifier: bundle,
+                windowTitle: window,
+                status: status,
+                wasEnhanced: enhanced,
+                processedText: enhanced ? final : nil,
+                processingRoute: enhanced ? .remote : .raw,
+                modelIdentifier: enhanced ? "deepseek-flash" : nil,
+                contextReceipt: enhanced ? fullReceipt : nil,
+                phaseTimings: timings
+            )
+        }
+        return [
+            entry(today, 9, 5, raw: "嗯我想把这个 App 的主界面整体重构一下，就是现在的那个太不高级了。",
+                  final: "我想把这个 App 的主界面整体重构一下，现在的太不高级了。",
+                  duration: 8.6, app: "Claude", bundle: "com.anthropic.claudefordesktop", window: "Lerro 重构"),
+            entry(today, 9, 48, raw: "那个明天下午三点把新版发布清单发给设计和那个工程团队。",
+                  final: "明天下午三点把新版发布清单发给设计和工程团队。",
+                  duration: 6.2, app: "邮件", bundle: "com.apple.mail", window: "新版发布"),
+            entry(today, 11, 20, raw: "这个 PR 嗯先不合，等 CI 跑完再看一下签名那一步。",
+                  final: "这个 PR 先不合，等 CI 跑完再看一下签名那一步。",
+                  duration: 7.4, app: "Slack", bundle: "com.tinyspeck.slackmacgap", window: "#release"),
+            entry(today, 13, 42, raw: "周五之前把词典导入的 CSV 格式整理成文档，就是顺便补上示例。",
+                  final: "周五之前把词典导入的 CSV 格式整理成文档，顺便补上示例。",
+                  duration: 9.1, app: "备忘录", bundle: "com.apple.Notes"),
+            entry(today, 15, 10, mode: .translation,
+                  raw: "晚上一起吃饭吗，我大概八点到，你们先点。",
+                  final: "Want to grab dinner tonight? I'll get there around eight, so go ahead and order.",
+                  duration: 5.8, app: "微信", bundle: "com.tencent.xinWeChat", target: "en_US"),
+            entry(today, 16, 35, raw: "把 HUD 结尾的那个标志直接去掉，嗯开头保持现在的速度。",
+                  final: "把 HUD 结尾的标志直接去掉，开头保持现在的速度。",
+                  duration: 7.0, app: "Claude", bundle: "com.anthropic.claudefordesktop",
+                  status: .failed),
+            entry(yesterday, 10, 2, raw: "今天上午先把设置窗口的几个标签页过一遍。",
+                  final: "今天上午先把设置窗口的几个标签页过一遍。",
+                  duration: 5.0, app: "备忘录", bundle: "com.apple.Notes", enhanced: false),
+            entry(yesterday, 14, 30, raw: "那个周报我晚点补，先把本周的数据导出来。",
+                  final: "周报我晚点补，先把本周的数据导出来。",
+                  duration: 6.4, app: "邮件", bundle: "com.apple.mail"),
+            entry(yesterday, 18, 15, raw: "可以，就按刚才说的方案来，明早我再确认一遍。",
+                  final: "可以，就按刚才说的方案来，明早我再确认一遍。",
+                  duration: 5.5, app: "微信", bundle: "com.tencent.xinWeChat"),
+            entry(yesterday, 21, 40, raw: "嗯这个构建在我这边是通过的，你再拉一下最新的分支试试。",
+                  final: "这个构建在我这边是通过的，你再拉一下最新的分支试试。",
+                  duration: 7.7, app: "Slack", bundle: "com.tinyspeck.slackmacgap")
+        ]
+    }
+
+    private static func fixtureAIUsageRecords() -> [AIUsageRecord] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        var records: [AIUsageRecord] = []
+        for dayOffset in 0..<30 {
+            guard let day = calendar.date(byAdding: .day, value: -dayOffset, to: today) else { continue }
+            let dictateCount = 3 + (dayOffset * 7) % 6
+            for index in 0..<dictateCount {
+                let input = 1_500 + ((dayOffset * 131 + index * 223) % 1_501)
+                let output = 30 + ((dayOffset * 17 + index * 41) % 171)
+                let date = calendar.date(
+                    bySettingHour: 9 + (index * 2) % 12,
+                    minute: (index * 13 + dayOffset) % 60,
+                    second: 0,
+                    of: day
+                ) ?? day
+                guard date <= .now else { continue }
+                records.append(AIUsageRecord(
+                    date: date,
+                    feature: .dictate,
+                    provider: .deepSeek,
+                    modelIdentifier: "deepseek-flash",
+                    tokens: AITokenUsage(
+                        inputTokens: input,
+                        outputTokens: output,
+                        cachedInputTokens: input * 4 / 5
+                    ),
+                    latencyMilliseconds: 700 + (index * 90) % 600,
+                    succeeded: true
+                ))
+            }
+            if dayOffset % 3 == 0 {
+                let date = calendar.date(bySettingHour: 15, minute: 20, second: 0, of: day) ?? day
+                if date <= .now {
+                    records.append(AIUsageRecord(
+                        date: date,
+                        feature: .translate,
+                        provider: .deepSeek,
+                        modelIdentifier: "deepseek-flash",
+                        tokens: AITokenUsage(inputTokens: 1_620, outputTokens: 95, cachedInputTokens: 1_400),
+                        latencyMilliseconds: 950,
+                        succeeded: true
+                    ))
+                }
+            }
+            if dayOffset % 5 == 0 {
+                let date = calendar.date(bySettingHour: 17, minute: 5, second: 0, of: day) ?? day
+                if date <= .now {
+                    records.append(AIUsageRecord(
+                        date: date,
+                        feature: .dictionaryLearning,
+                        provider: .deepSeek,
+                        modelIdentifier: "deepseek-flash",
+                        tokens: AITokenUsage(inputTokens: 1_850, outputTokens: 60, cachedInputTokens: 1_700),
+                        latencyMilliseconds: 820,
+                        succeeded: true
+                    ))
+                }
+            }
+        }
+        records.append(AIUsageRecord(
+            date: calendar.date(byAdding: .hour, value: -2, to: .now) ?? .now,
+            feature: .tonePreview,
+            provider: .deepSeek,
+            modelIdentifier: "deepseek-flash",
+            tokens: AITokenUsage(inputTokens: 1_540, outputTokens: 48, cachedInputTokens: 1_300),
+            latencyMilliseconds: 880,
+            succeeded: true
+        ))
+        records.append(AIUsageRecord(
+            date: calendar.date(byAdding: .hour, value: -1, to: .now) ?? .now,
+            feature: .dictate,
+            provider: .deepSeek,
+            modelIdentifier: "deepseek-flash",
+            tokens: nil,
+            latencyMilliseconds: 10_000,
+            succeeded: false
+        ))
+        return records
+    }
+
+    private static func fixtureDictionary() -> [DictionaryEntry] {
+        let now = Date.now
+        func ago(_ days: Double) -> Date { now.addingTimeInterval(-days * 86_400) }
+        return [
+            DictionaryEntry(phrase: "Lerro", createdAt: ago(40), updatedAt: ago(40), useCount: 31),
+            DictionaryEntry(phrase: "DeepSeek", createdAt: ago(30), updatedAt: ago(30), useCount: 12),
+            DictionaryEntry(
+                phrase: "meeting link",
+                replacement: "https://meet.example.com/lerro",
+                createdAt: ago(25),
+                updatedAt: ago(25),
+                useCount: 8
+            ),
+            DictionaryEntry(
+                phrase: "我的邮箱",
+                replacement: "hello@example.com",
+                createdAt: ago(22),
+                updatedAt: ago(22),
+                useCount: 5
+            ),
+            DictionaryEntry(
+                phrase: "CI",
+                applicationBundleIdentifier: "com.tinyspeck.slackmacgap",
+                createdAt: ago(18),
+                updatedAt: ago(18),
+                useCount: 9
+            ),
+            DictionaryEntry(
+                phrase: "HUD",
+                applicationBundleIdentifier: "com.anthropic.claudefordesktop",
+                createdAt: ago(15),
+                updatedAt: ago(15),
+                useCount: 4
+            ),
+            DictionaryEntry(
+                phrase: "MLX",
+                source: .learned,
+                createdAt: ago(20),
+                updatedAt: ago(20),
+                useCount: 3
+            ),
+            DictionaryEntry(
+                phrase: "code x",
+                replacement: "Codex",
+                source: .learned,
+                createdAt: ago(1),
+                updatedAt: ago(1),
+                useCount: 5
+            ),
+            DictionaryEntry(
+                phrase: "乐若",
+                replacement: "Lerro",
+                source: .learned,
+                createdAt: ago(2),
+                updatedAt: ago(2),
+                useCount: 2
+            ),
+            DictionaryEntry(
+                phrase: "swift ui",
+                replacement: "SwiftUI",
+                source: .learned,
+                createdAt: ago(5),
+                updatedAt: ago(5),
+                useCount: 3
+            )
+        ]
+    }
+
+    private static func fixtureDictionarySuggestions() -> DictionarySuggestionState {
+        let now = Date.now
+        func ago(_ days: Double) -> Date { now.addingTimeInterval(-days * 86_400) }
+        var state = DictionarySuggestionState()
+        state.suggestions = [
+            DictionarySuggestion(
+                phrase: "糊涂", replacement: "富途", occurrences: 3,
+                lastSeen: ago(1), applicationName: "Claude"
+            ),
+            DictionarySuggestion(
+                phrase: "史册", replacement: "实测", occurrences: 2,
+                lastSeen: ago(2), applicationName: "Slack"
+            ),
+            DictionarySuggestion(
+                phrase: "畅巧", replacement: "长桥", occurrences: 2,
+                lastSeen: ago(4), applicationName: "备忘录"
+            ),
+            DictionarySuggestion(
+                phrase: "折腾死命而", replacement: "Druckenmiller", occurrences: 1,
+                lastSeen: ago(6), applicationName: "Claude"
+            )
+        ]
+        return state
+    }
+
+    private static func fixtureAppToneProfiles() -> [AppToneProfile] {
+        [
+            AppToneProfile(
+                bundleIdentifier: "com.tencent.xinWeChat",
+                applicationName: "微信",
+                instruction: "口语化、简短，保留语气词"
+            ),
+            AppToneProfile(
+                bundleIdentifier: "com.apple.mail",
+                applicationName: "邮件",
+                instruction: "表达清楚、友好、简洁，使用完整句子"
+            ),
+            AppToneProfile(
+                bundleIdentifier: "com.tinyspeck.slackmacgap",
+                applicationName: "Slack",
+                instruction: "直接、专业，适合工作群沟通"
+            ),
+            AppToneProfile(
+                bundleIdentifier: "com.anthropic.claudefordesktop",
+                applicationName: "Claude",
+                instruction: "把口述整理成清晰的指令，保留技术名词",
+                enabled: false
+            )
+        ]
     }
 }
 
@@ -168,7 +443,7 @@ struct AppDependencies: Sendable {
 /// Accessibility, pasteboard, TCC, login items, or disk.
 private actor FixtureSpeechTranscriber: SpeechTranscribing {
     func availableInputDevices() async -> [AudioInputDevice] {
-        [AudioInputDevice(uid: "fixture-input", name: "Fixture Microphone", isDefault: true)]
+        [AudioInputDevice(uid: "fixture-input", name: "MacBook Pro 麦克风", isDefault: true)]
     }
 
     func start(
@@ -176,8 +451,8 @@ private actor FixtureSpeechTranscriber: SpeechTranscribing {
         microphoneDeviceUID: String?,
         muteOtherAudio: Bool,
         saveAudio: Bool,
-        vocabulary: [SpeechVocabularyTerm],
-        detectSpeechEndpoint: Bool
+        detectSpeechEndpoint: Bool,
+        milestones: @escaping CaptureMilestoneReporter
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error> {
         AsyncThrowingStream { continuation in
             continuation.yield(.availability("Fixture speech adapter"))
@@ -197,7 +472,7 @@ private actor FixtureSpeechTranscriber: SpeechTranscribing {
 
 private struct FixtureMicrophoneLevelTester: MicrophoneLevelTesting {
     func availableInputDevices() async -> [AudioInputDevice] {
-        [AudioInputDevice(uid: "fixture-input", name: "Fixture Microphone", isDefault: true)]
+        [AudioInputDevice(uid: "fixture-input", name: "MacBook Pro 麦克风", isDefault: true)]
     }
 
     func start(microphoneDeviceUID: String?) async throws -> MicrophoneLevelTestSession {
@@ -270,6 +545,24 @@ private struct FixtureApplicationCatalog: ApplicationCataloging {
                 name: "ChatGPT",
                 isRunning: true
             ),
+            ApplicationDescriptor(
+                bundleIdentifier: "com.tencent.xinWeChat",
+                name: "微信",
+                isRunning: true
+            ),
+            ApplicationDescriptor(
+                bundleIdentifier: "com.tinyspeck.slackmacgap",
+                name: "Slack",
+                isRunning: true
+            ),
+            ApplicationDescriptor(
+                bundleIdentifier: "com.anthropic.claudefordesktop",
+                name: "Claude",
+                isRunning: false
+            ),
+            ApplicationDescriptor(bundleIdentifier: "com.apple.Notes", name: "备忘录"),
+            ApplicationDescriptor(bundleIdentifier: "com.apple.dt.Xcode", name: "Xcode"),
+            ApplicationDescriptor(bundleIdentifier: "notion.id", name: "Notion"),
         ]
     }
 }

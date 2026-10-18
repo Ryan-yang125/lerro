@@ -82,7 +82,6 @@ runtime 直接恢复 paused 状态。停止操作只删除未完成下载工件�
 ## 验证
 
 ```zsh
-swift test --filter LocalAIReadinessTests
 swift test --filter MLXLanguageModelRuntimeTests
 swift test --filter AppSessionCoreFlowTests
 swift test --package-path Vendor/swift-huggingface --filter HubCacheTests

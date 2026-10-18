@@ -265,8 +265,15 @@ plutil -p dist/Lerro.app/Contents/Info.plist
 - 麦克风设备仍存在，sample rate 和 channel count 大于零。
 - 麦克风 TCC 已授权；SpeechAnalyzer/SpeechTranscriber 不请求 Speech Recognition TCC。
 
+「语音资源暂未就绪」在不重启时反复出现：`AssetInventory.status` 可能把已安装的语言报告为
+`.supported`（mobileassetd 重启后出现过），随后进程内重新安装失败，日志有
+`Failed to connect with remote process … Code=4099`。此时 `SpeechTranscriber.installedLocales`
+仍包含该语言，转写正常。资源检查先看 `installedLocales`，只有其中没有该语言时才按
+`status` 下载安装。
+
 日志与错误入口位于
-[`AppleSpeechService.swift`](../Sources/LerroMac/Speech/AppleSpeechService.swift)。禁止通过跳过 locale/assets 检查继续分析。
+[`AppleSpeechService.swift`](../Sources/LerroMac/Speech/AppleSpeechService.swift)。locale 与资源检查不可省略：
+资源以 `installedLocales` 为准，缺失时安装失败要明确报错。
 
 ## 麦克风切换失败
 
@@ -371,11 +378,9 @@ V1.6 HUD 应从约 120 pt 的居中波形胶囊平滑增长到最多 420 pt。�
 - Reduce Motion 是否取消 spring scale 并保留 fade；
 - timer/VoiceOver 更新是否通过 MainActor 且有节流。
 
-最窄验证：
+最窄自动验证与 T3 fixture：
 
 ```zsh
-swift test --filter CaptureHUDVisualStateTests
-swift test --filter FloatingPanelControllerTests
 LERRO_FIXTURE_MODE=1 LERRO_FIXTURE_PRESENTATION=hud-dictating \
   LERRO_FIXTURE_PANEL_ONLY=1 dist/Lerro.app/Contents/MacOS/Lerro
 ```
@@ -465,7 +470,7 @@ item、transient type 和 final text 时恢复 snapshot。期间出现用户或�
 最窄验证：
 
 ```zsh
-swift test --filter DictionaryLearning
+swift test --filter PipelineIntelligenceServiceTests
 swift test --filter V16SystemAdapterTests
 swift test --filter AppSessionCoreFlowTests
 ```
@@ -573,13 +578,13 @@ LERRO_LIVE_MODEL_OFFLINE=1 \
 
 ## API 模型连接失败、认证失败或无输出
 
-先在“设置 → 智能处理”确认 Provider、Model ID、Base URL 和 API Key，然后使用页面内
+先在“设置 → 智能”确认 Provider、Model ID、Base URL 和 API Key，然后使用页面内
 “测试连接”。该探针只发送固定合成消息。失败信息按认证、余额、模型、限流、服务、超时和
 网络类别显示，并排除 Provider 响应正文。
 
 检查：
 
-- DeepSeek 预设为 `https://api.deepseek.com` 与 `deepseek-v4-flash`。
+- DeepSeek 预设为 `https://api.deepseek.com` 与 `deepseek-flash`。
 - OpenAI 和 Gemini 的 Model ID 已填写，且账户拥有目标模型权限。
 - Custom URL 指向标准 Chat Completions base 或完整 `/chat/completions` endpoint。
 - 公网 endpoint 使用 HTTPS；HTTP 只允许 localhost、`127.0.0.0/8` 或 `::1`。

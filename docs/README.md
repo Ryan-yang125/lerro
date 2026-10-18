@@ -51,7 +51,7 @@ licenses, and deterministic validation assets.
 
 V1.6 当前主路径为快捷键启动、居中实时预览、同一快捷键结束、严格写入和 HUD 消失。
 写入失败进入剪贴板恢复卡；AI Dictate 成功后可以在原字段观察修正并经 AI 分类写入标准词典。
-生产入口包含 Dictate 与 Translate，主导航包含首页、历史、词典和个性化。
+生产入口包含 Dictate 与 Translate，主导航包含首页、历史、词典和应用语气，设置位于独立的 Settings 窗口（⌘,）。
 
 ## Sources of truth
 

@@ -1,0 +1,38 @@
+---
+import "../styles/changelog.css";
+import { getReleases } from "../data/releases";
+import type { Lang } from "../site";
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const releases = getReleases(lang);
+const copy = {
+  zh: { title: "更新日志", current: "当前版本", build: "构建", download: "下载" },
+  en: { title: "Changelog", current: "Current", build: "Build", download: "Download" },
+}[lang];
+---
+<main class="wrap changelog">
+  <h1>{copy.title}</h1>
+  <div class="releases">
+    {releases.map((release, index) => (
+      <article class="card release" id={`v${release.version}`}>
+        <header class="release-head">
+          <h2>Lerro {release.version}</h2>
+          {index === 0 && <span class="pill-current">{copy.current}</span>}
+          <p class="release-meta">
+            <time datetime={release.publishedAt}>{release.publishedLabel}</time>
+            <span aria-hidden="true">·</span>
+            <span>{copy.build} {release.build}</span>
+          </p>
+        </header>
+        <p class="release-summary">{release.summary}</p>
+        <ul class="release-list">
+          {release.highlights.map((item) => <li>{item}</li>)}
+        </ul>
+        <a class={`btn sm ${index === 0 ? "primary" : "ghost"}`} href={release.downloadUrl}>{copy.download} {release.version}</a>
+      </article>
+    ))}
+  </div>
+</main>

@@ -37,6 +37,7 @@ site/
 .github/
 script/build_and_run.sh
 script/benchmark_contextual_dictation.py
+script/capture_latency_report.py
 script/check_maintainer_readiness.sh
 script/check_third_party_licenses.py
 script/export_public_repo.sh
@@ -49,6 +50,7 @@ script/scan_public_repo.sh
 script/signing_support.zsh
 script/test_live_model.sh
 script/test_live_remote.sh
+script/test_capture_latency_report.py
 script/test_contextual_benchmark.py
 script/test_sbom.py
 script/validate_agent_workspace.sh

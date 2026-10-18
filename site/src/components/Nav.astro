@@ -1,0 +1,29 @@
+---
+import { chrome } from "../data/chrome";
+import { downloadUrl, githubUrl, localizedPath, type Lang } from "../site";
+
+interface Props {
+  lang: Lang;
+  path: "/" | "/changelog";
+}
+const { lang, path } = Astro.props;
+const t = chrome[lang].nav;
+const other: Lang = lang === "zh" ? "en" : "zh";
+const home = localizedPath(lang, "/");
+---
+<nav class="top" id="nav">
+  <div class="wrap">
+    <a href={home} aria-label="Lerro"><svg class="wordmark" viewBox="-4 -4 172 69"><use href="#wm"/></svg></a>
+    <div class="links">
+      <a href={`${home}#accuracy`}>{t.features}</a>
+      <a href={`${home}#ai-key`}>{t.ai}</a>
+      <a href={`${home}#privacy`}>{t.privacy}</a>
+      <a href={localizedPath(lang, "/changelog")} aria-current={path === "/changelog" ? "page" : undefined}>{t.changelog}</a>
+    </div>
+    <div class="right">
+      <a href={localizedPath(other, path)} hreflang={other === "zh" ? "zh-CN" : "en"}>{t.switchLabel}</a>
+      <a href={githubUrl}>GitHub</a>
+      <a class="btn primary sm" href={downloadUrl}>{t.download}</a>
+    </div>
+  </div>
+</nav>

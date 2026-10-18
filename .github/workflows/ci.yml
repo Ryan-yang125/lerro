@@ -66,6 +66,7 @@ jobs:
         run: |
           python3 script/benchmark_contextual_dictation.py --validate
           python3 script/test_contextual_benchmark.py
+          python3 script/test_capture_latency_report.py
 
       - name: Prepare Metal toolchain
         run: |

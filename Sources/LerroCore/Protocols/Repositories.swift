@@ -60,9 +60,6 @@ public protocol IntelligenceProcessing: Sendable {
     func pauseLocalModelPreparation() async
     func discardLocalModelDownload() async throws
     func process(_ request: IntelligenceRequest) async throws -> IntelligenceResult
-    func processStream(
-        _ request: IntelligenceRequest
-    ) async throws -> AsyncThrowingStream<IntelligenceResult, any Error>
     func classifyCorrection(
         _ request: DictionaryLearningRequest
     ) async throws -> DictionaryLearningDecision
@@ -77,11 +74,6 @@ public protocol LocalLanguageModelRuntime: Sendable {
     func pauseLoad() async
     func discardDownload() async throws
     func generate(systemPrompt: String, userPrompt: String, maxTokens: Int) async throws -> String
-    func generateStream(
-        systemPrompt: String,
-        userPrompt: String,
-        maxTokens: Int
-    ) async throws -> AsyncThrowingStream<String, any Error>
     func status() async -> LocalModelStatus
 }
 
@@ -91,13 +83,7 @@ public protocol RemoteLanguageModelRuntime: Sendable {
         systemPrompt: String,
         userPrompt: String,
         maxTokens: Int
-    ) async throws -> String
-    func generateStream(
-        configuration: RemoteProviderConfiguration,
-        systemPrompt: String,
-        userPrompt: String,
-        maxTokens: Int
-    ) async throws -> AsyncThrowingStream<String, any Error>
+    ) async throws -> RemoteGeneration
     func testConnection(
         configuration: RemoteProviderConfiguration
     ) async throws -> RemoteConnectionTestOutcome
@@ -117,16 +103,6 @@ public extension IntelligenceProcessing {
 
     func discardLocalModelDownload() async throws {}
 
-    func processStream(
-        _ request: IntelligenceRequest
-    ) async throws -> AsyncThrowingStream<IntelligenceResult, any Error> {
-        let result = try await process(request)
-        return AsyncThrowingStream { continuation in
-            continuation.yield(result)
-            continuation.finish()
-        }
-    }
-
     func testRemoteConnection(
         configuration: RemoteProviderConfiguration
     ) async throws -> RemoteConnectionTestOutcome {
@@ -138,42 +114,6 @@ public extension LocalLanguageModelRuntime {
     func pauseLoad() async {}
 
     func discardDownload() async throws {}
-
-    func generateStream(
-        systemPrompt: String,
-        userPrompt: String,
-        maxTokens: Int
-    ) async throws -> AsyncThrowingStream<String, any Error> {
-        let result = try await generate(
-            systemPrompt: systemPrompt,
-            userPrompt: userPrompt,
-            maxTokens: maxTokens
-        )
-        return AsyncThrowingStream { continuation in
-            continuation.yield(result)
-            continuation.finish()
-        }
-    }
-}
-
-public extension RemoteLanguageModelRuntime {
-    func generateStream(
-        configuration: RemoteProviderConfiguration,
-        systemPrompt: String,
-        userPrompt: String,
-        maxTokens: Int
-    ) async throws -> AsyncThrowingStream<String, any Error> {
-        let result = try await generate(
-            configuration: configuration,
-            systemPrompt: systemPrompt,
-            userPrompt: userPrompt,
-            maxTokens: maxTokens
-        )
-        return AsyncThrowingStream { continuation in
-            continuation.yield(result)
-            continuation.finish()
-        }
-    }
 }
 
 public enum LocalModelState: String, Codable, Sendable {

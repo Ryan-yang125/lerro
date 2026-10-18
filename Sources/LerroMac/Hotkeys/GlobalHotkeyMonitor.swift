@@ -41,6 +41,11 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     // lifecycle methods from MainActor, keeping this gesture state serialized.
     private var currentModifierFlags: CGEventFlags = []
     private var pendingModifierDefinition: HotkeyDefinition?
+    /// Receive time of the event being processed, used as the physical press
+    /// time of `.began` triggers.
+    private var currentEventAt: ContinuousClock.Instant?
+    /// Receive time of the event that staged the pending modifier candidate.
+    private var pendingModifierPressedAt: ContinuousClock.Instant?
     private var activeModifierDefinition: HotkeyDefinition?
     private var activeKeyDefinitions: [Int64: HotkeyDefinition] = [:]
     private var claimedKeyCodes: Set<Int64> = []
@@ -388,6 +393,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         eventSourceUserData: Int64,
         modifierKeyIsDown: Bool?
     ) -> ProcessingResult {
+        currentEventAt = .now
         guard eventSourceUserData != LerroGeneratedEvent.pasteSourceUserData else {
             return ProcessingResult()
         }
@@ -504,7 +510,9 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
 
         if let pending = pendingModifierDefinition,
            requiredFlags(for: pending) != current {
+            let pendingPressedAt = pendingModifierPressedAt
             pendingModifierDefinition = nil
+            pendingModifierPressedAt = nil
             result.timerDirective = .cancel
 
             if grew,
@@ -516,7 +524,9 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
             if pending.activation.resolved == .toggle,
                shrank,
                !modifierSequenceBlocked {
-                result.triggers.append(trigger(for: pending, phase: .began))
+                result.triggers.append(
+                    trigger(for: pending, phase: .began, pressedAt: pendingPressedAt)
+                )
             }
             modifierSequenceBlocked = !current.isEmpty
             if current.isEmpty {
@@ -611,6 +621,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         result: inout ProcessingResult
     ) {
         pendingModifierDefinition = definition
+        pendingModifierPressedAt = currentEventAt
         modifierSequenceOwned = true
         if definition.activation.resolved == .hold {
             result.timerDirective = .schedule(definitionID: definition.id)
@@ -623,7 +634,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     ) {
         modifierSequenceOwned = true
         result.timerDirective = .cancel
-        result.triggers.append(trigger(for: definition, phase: .began))
+        result.triggers.append(trigger(for: definition, phase: .began, pressedAt: currentEventAt))
         result.upgradeContinuation = .modifier(definition: definition)
         if definition.activation.resolved == .hold {
             activeModifierDefinition = definition
@@ -683,6 +694,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
 
         if pendingModifierDefinition != nil {
             pendingModifierDefinition = nil
+            pendingModifierPressedAt = nil
             modifierSequenceBlocked = !currentModifierFlags.isEmpty
             result.timerDirective = .cancel
             if let definition {
@@ -719,7 +731,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     ) {
         claimedKeyCodes.insert(keyCode)
         result.suppressEvent = true
-        result.triggers.append(trigger(for: definition, phase: .began))
+        result.triggers.append(trigger(for: definition, phase: .began, pressedAt: currentEventAt))
         if definition.activation.resolved == .hold {
             activeKeyDefinitions[keyCode] = definition
         }
@@ -833,21 +845,25 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
               !modifierSequenceBlocked else {
             return nil
         }
+        let pressedAt = pendingModifierPressedAt
         pendingModifierDefinition = nil
+        pendingModifierPressedAt = nil
         pendingModifierActivation = nil
         activeModifierDefinition = pending
-        return trigger(for: pending, phase: .began)
+        return trigger(for: pending, phase: .began, pressedAt: pressedAt)
     }
 
     private func trigger(
         for definition: HotkeyDefinition,
-        phase: HotkeyGesturePhase
+        phase: HotkeyGesturePhase,
+        pressedAt: ContinuousClock.Instant? = nil
     ) -> HotkeyTrigger {
         HotkeyTrigger(
             action: definition.action,
             activation: definition.activation,
             phase: phase,
-            definitionID: definition.id
+            definitionID: definition.id,
+            pressedAt: pressedAt
         )
     }
 
@@ -887,6 +903,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     private func beginPhysicalDrain() {
         cancelModifierTimer()
         pendingModifierDefinition = nil
+        pendingModifierPressedAt = nil
         activeModifierDefinition = nil
         activeKeyDefinitions.removeAll()
         physicalDrainRequested = !currentModifierFlags.isEmpty
@@ -982,6 +999,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     private func clearAllGestureState() {
         cancelModifierTimer()
         pendingModifierDefinition = nil
+        pendingModifierPressedAt = nil
         activeModifierDefinition = nil
         activeKeyDefinitions.removeAll()
         claimedKeyCodes.removeAll()

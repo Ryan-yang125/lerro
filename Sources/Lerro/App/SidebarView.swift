@@ -4,112 +4,118 @@ import LerroCore
 struct SidebarView: View {
     @Bindable var session: AppSession
     @Environment(\.locale) private var locale
-    @FocusState private var focusedDestination: SidebarDestination?
+    @Environment(\.openSettings) private var openSettingsWindow
 
     var body: some View {
-        @Bindable var updater = AppUpdateController.shared
-        VStack(spacing: 0) {
-            LerroBrandBadge()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 16)
-
-            VStack(spacing: 4) {
-                navigationButton(.home, title: "首页", systemName: "house")
-                navigationButton(.history, title: "历史", systemName: "clock.arrow.circlepath")
-                navigationButton(.dictionary, title: "词典", systemName: "character.book.closed")
-                navigationButton(.personalization, title: "个性化", systemName: "slider.horizontal.3")
-            }
-            .padding(.horizontal, 12)
-
-            Spacer(minLength: 20)
-
-            HStack(spacing: 4) {
-                LerroIconButton(systemName: "gearshape", help: "设置") {
-                    showSettings(.settings)
-                }
-                .frame(maxWidth: .infinity)
-                LerroIconButton(systemName: "questionmark.circle", help: "帮助与引导") {
-                    session.isOnboardingPresented = true
-                }
-                .frame(maxWidth: .infinity)
-                if updater.updateAvailable {
-                    LerroIconButton(
-                        systemName: AppUpdatePresentation.availableIcon,
-                        help: "发现新版本，立即下载",
-                        foreground: Color(nsColor: .systemBlue)
-                    ) {
-                        updater.checkForUpdates()
-                    }
-                    .frame(maxWidth: .infinity)
-                    .accessibilityLabel("发现新版本，立即下载")
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 10)
+        List(selection: $session.destination) {
+            row(.home, title: "首页", glyph: .home)
+            row(.history, title: "历史", glyph: .history, count: session.historyAllCount)
+            row(
+                .dictionary,
+                title: "词典",
+                glyph: .dictionary,
+                count: session.dictionaryEntries.count
+            )
+            row(
+                .appTones,
+                title: "应用语气",
+                glyph: .tones,
+                count: session.preferences.appToneProfiles.count
+            )
         }
-        .background(LerroTheme.sidebar)
+        .listStyle(.sidebar)
+        .toolbar(removing: .sidebarToggle)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            LerroWordmark(height: 18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 10)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            footer
+        }
     }
 
-    private func navigationButton(
+    @ViewBuilder
+    private func row(
         _ destination: SidebarDestination,
         title: String,
-        systemName: String
+        glyph: LerroGlyph,
+        count: Int? = nil
     ) -> some View {
-        let selected = session.destination == destination
-        return Button {
-            session.destination = destination
-            focusedDestination = destination
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: systemName)
-                    .font(.system(size: LerroTheme.navigationIconSize, weight: .medium))
-                    .frame(width: 18)
-                Text(verbatim: localized(title))
-                    .lerroTypography(selected ? .label : .secondary)
-                Spacer(minLength: 0)
+        let label = Label {
+            Text(verbatim: localized(title))
+        } icon: {
+            LerroGlyphView(glyph: glyph, size: 16)
+        }
+        Group {
+            if let count {
+                label.badge(count)
+            } else {
+                label
             }
         }
-        .buttonStyle(LerroNavigationButtonStyle(selected: selected))
-        .focused($focusedDestination, equals: destination)
-        .onMoveCommand { direction in
-            moveNavigationFocus(from: destination, direction: direction)
-        }
-        .accessibilityLabel(Text(verbatim: localized(title)))
-        .accessibilityValue(Text(verbatim: selected ? localized("已选择") : ""))
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .tag(destination)
     }
 
-    private func showSettings(_ entryPoint: SettingsEntryPoint) {
-        session.presentSettings(entryPoint)
+    private var footer: some View {
+        let status = session.intelligenceStatus
+        return VStack(spacing: 6) {
+            Button {
+                showSettings(.intelligence)
+            } label: {
+                HStack(spacing: 8) {
+                    LerroStatusDot(color: status.isReady ? LerroTheme.success : LerroTheme.warning)
+                    (Text(verbatim: status.title)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(LerroTheme.text)
+                        + Text(verbatim: " · \(status.detail)")
+                        .foregroundStyle(LerroTheme.secondaryText))
+                        .font(LerroFont.caption)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.primary.opacity(0.06))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(verbatim: "\(status.title) · \(status.detail)"))
+
+            HStack(spacing: 4) {
+                LerroIconButton(glyph: .general, help: "设置") {
+                    showSettings(.general)
+                }
+                if AppUpdateController.shared.updateAvailable {
+                    LerroIconButton(
+                        glyph: .update,
+                        help: "发现新版本，立即下载"
+                    ) {
+                        AppUpdateController.shared.checkForUpdates()
+                    }
+                }
+                Spacer(minLength: 0)
+                Text(verbatim: AppMetadata.version)
+                    .font(LerroFont.footnote)
+                    .foregroundStyle(LerroTheme.tertiaryText)
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 10)
+    }
+
+    private func showSettings(_ tab: SettingsTab) {
+        session.settingsTab = tab
+        openSettingsWindow()
     }
 
     private func localized(_ key: String) -> String {
         LerroInterfaceLocalization.string(key, locale: locale)
-    }
-
-    private func moveNavigationFocus(
-        from destination: SidebarDestination,
-        direction: MoveCommandDirection
-    ) {
-        let destinations: [SidebarDestination] = [.home, .history, .dictionary, .personalization]
-        guard let index = destinations.firstIndex(of: destination) else { return }
-
-        let nextIndex: Int
-        switch direction {
-        case .up:
-            nextIndex = max(destinations.startIndex, index - 1)
-        case .down:
-            nextIndex = min(destinations.index(before: destinations.endIndex), index + 1)
-        case .left, .right:
-            return
-        @unknown default:
-            return
-        }
-
-        let nextDestination = destinations[nextIndex]
-        session.destination = nextDestination
-        focusedDestination = nextDestination
     }
 }

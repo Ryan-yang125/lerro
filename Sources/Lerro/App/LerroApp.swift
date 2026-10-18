@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         AppUpdateController.shared.startIfEligible()
+        MenuBarPanelFocus.shared.start()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -33,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct LerroApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var session = AppSession()
+    @State private var menuBarAnimator = LerroMenuBarAnimator()
 
     var body: some Scene {
         Window("Lerro", id: "main") {
@@ -54,39 +56,37 @@ struct LerroApp: App {
         .windowResizability(.contentMinSize)
         .commands { LerroCommands(session: session) }
 
+        Settings {
+            LerroSettingsView(session: session)
+                .environment(\.locale, LerroInterfaceLocalization.locale(for: session.preferences.appLanguage))
+                .tint(LerroTheme.accent)
+        }
+
         MenuBarExtra {
-            MenuBarContentView(session: session)
+            MenuBarPanelView(session: session)
                 .environment(\.locale, LerroInterfaceLocalization.locale(for: session.preferences.appLanguage))
         } label: {
             LerroMenuBarIcon(
-                assetName: LerroMenuBarPresentation.assetName(for: session.phase),
+                assetName: menuBarAnimator.assetName,
                 fallbackSystemName: LerroMenuBarPresentation.systemImage(for: session.phase),
                 accessibilityLabel: LerroMenuBarPresentation.accessibilityLabel(
                     for: session.phase,
                     locale: LerroInterfaceLocalization.locale(for: session.preferences.appLanguage)
                 )
             )
+            .onChange(of: session.phase, initial: true) { _, phase in
+                menuBarAnimator.update(phase: phase)
+            }
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
     }
 }
 
 @MainActor
 private struct LerroCommands: Commands {
     let session: AppSession
-    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
-        CommandGroup(replacing: .appSettings) {
-            Button {
-                presentSettings()
-            } label: {
-                Text(verbatim: copy("设置…"))
-            }
-            .keyboardShortcut(",", modifiers: .command)
-
-        }
-
         CommandMenu("Lerro") {
             Button { session.toggleCapture(.dictation) } label: { Text(verbatim: copy("开始听写")) }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
@@ -106,12 +106,6 @@ private struct LerroCommands: Commands {
             locale: LerroInterfaceLocalization.locale(for: session.preferences.appLanguage)
         )
     }
-
-    private func presentSettings() {
-        openWindow(id: "main")
-        session.presentSettings(SettingsEntryPoint.settings)
-        NSApp.activate(ignoringOtherApps: true)
-    }
 }
 
 enum LerroMenuBarPresentation {
@@ -121,15 +115,6 @@ enum LerroMenuBarPresentation {
         case .listening: "waveform.circle.fill"
         case .transcribing, .enhancing, .inserting: "ellipsis.circle"
         case .failed: "exclamationmark.triangle"
-        }
-    }
-
-    static func assetName(for phase: CapturePhase) -> String {
-        switch phase {
-        case .idle, .success, .cancelled: "LerroMenuIdleTemplate"
-        case .listening: "LerroMenuListeningTemplate"
-        case .transcribing, .enhancing, .inserting: "LerroMenuProcessingTemplate"
-        case .failed: "LerroMenuErrorTemplate"
         }
     }
 

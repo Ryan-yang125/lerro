@@ -1,121 +1,95 @@
 <p align="center">
-  <img src="site/public/lerro-logo.svg" width="176" alt="Lerro">
+  <img src="site/public/lerro-logo.svg" width="160" alt="Lerro">
 </p>
 
-<h1 align="center">Voice to text, native to Mac.</h1>
+<h1 align="center">Speak it. It's written.</h1>
 
 <p align="center">
   English · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
 <p align="center">
-  Press your shortcut, speak with a live centered preview, then press it again to write.<br>
-  Apple Speech works immediately; optional local or BYOK AI adds refinement and personalization.
+  Press a shortcut and talk, press it again, and the text lands at your cursor.<br>
+  Mix Chinese and English freely, and proper nouns come out right.
 </p>
 
 <p align="center">
   <a href="https://updates.lerroapp.com/download/macos/latest"><strong>Download for macOS</strong></a>
-  · <a href="https://lerroapp.com">Website</a>
-  · <a href="https://lerroapp.com/changelog">Changelog</a>
+  · <a href="https://lerroapp.com/en">Website</a>
+  · <a href="https://lerroapp.com/en/changelog">Changelog</a>
 </p>
 
 <p align="center">
-  Apple silicon · macOS 26+ · No account · No subscription
+  Free and open source · macOS 26 · Apple silicon
 </p>
 
-![Lerro home screen](https://lerroapp.com/screenshots/en/lerro-home-light.png)
+![Lerro dictating into a chat window](site/public/readme/en-demo.png)
 
-## One shortcut. One complete writing flow.
+## How it works
 
-1. Press your configured shortcut.
-2. Speak while the centered HUD previews the live transcript.
-3. Press the same shortcut again.
-4. Lerro writes to the captured field and the HUD disappears.
+1. Press your shortcut (Fn by default) and speak. A small capsule at the bottom
+   of the screen shows the live transcript.
+2. Press the shortcut again. Lerro writes the text into the field you were
+   typing in.
+3. If you switched away before it finished, Lerro stops, keeps the text on the
+   clipboard, and offers to paste it.
 
-The HUD grows smoothly from a compact waveform capsule to a two-line transcript.
-If focus or the target field changes before delivery, Lerro stops the write,
-keeps the final text on the clipboard, and offers **Copy again**.
+Apple's on-device speech recognition does the listening. With AI polish turned
+on, your own AI provider fixes misheard words using your dictionary, removes
+fillers, and adds punctuation.
 
-| Capability | Runtime |
-| --- | --- |
-| **Transcription** | Apple Speech on your Mac |
-| **Dictionary-aware recognition** | Apple Speech with up to 100 relevant terms |
-| **Refinement and translation** | Optional local MLX model or your API |
-| **Automatic correction learning** | Optional local MLX model or your API |
-| **Per-app tone** | Optional local MLX model or your API |
+![Raw recognition compared with what Lerro wrote](site/public/readme/en-accuracy.png)
 
-Quick Dictate is an optional setting. It ends a recording after about 1.2 seconds
-of continuous silence and starts disabled.
+## A dictionary that learns
 
-![Lerro shortcut setup](https://lerroapp.com/screenshots/en/lerro-onboarding-shortcuts-light.png)
+Names of people, companies, and projects are hard to recognize the first time.
+When you correct a word Lerro wrote, the AI decides whether it was a
+recognition error and adds it to the dictionary. Lerro can also scan your
+history and list the words it keeps getting wrong, so you can add them with one
+click.
 
-## A dictionary that learns from real corrections
+![Dictionary suggestions](site/public/readme/en-dictionary.png)
 
-After AI-processed Dictate writes text, Lerro can observe edits to that exact
-field for up to 60 seconds. A stable edit is reduced to the smallest changed
-span and classified by the selected local or remote AI. Names, brands,
-technical terms, spelling, homophones, transliterations, and mixed-language
-proper nouns can become app-scoped dictionary entries. Semantic changes and
-large rewrites are ignored.
+Each app can also have its own tone, for example casual in chat and complete
+sentences in email.
 
-The same dictionary supports Apple Speech recognition, local and remote AI
-prompts, manual editing, CSV import, app filtering, and promotion to global
-scope. Learned entries show a lightweight undoable notification.
+## AI polish with your own DeepSeek key
 
-## Personalization at the top level
+Lerro has no subscription. AI polish uses your own
+[DeepSeek](https://platform.deepseek.com) account and costs about ¥1 per 1,000
+dictations. Create an API key, then paste it in **Settings › Smart** and click
+**Test Connection**. Settings › Usage shows what each request cost.
 
-Home, History, Dictionary, and Personalization are first-level destinations.
-Personalization presents installed and running apps in a searchable grid with
-real app icons. Each app can have an AI tone instruction and a real preview
-before saving.
+Without a key, Lerro still works: Apple recognition runs on your Mac for free
+and the transcript is written as is.
 
-## Private by default
+## Privacy
 
-- Raw Dictate uses Apple Speech. Audio saving starts off.
-- History can be disabled; “never save” prevents new history and recordings.
-- Lerro has no account, analytics, advertising SDK, or transcript service.
-- Local AI downloads only after explicit consent and runs on the Mac.
-- BYOK traffic goes directly to the provider and endpoint you configure.
-- Automatic correction learning ends quietly when AI, Accessibility, the target
-  field, or the observation window is unavailable.
+- No account and no telemetry.
+- Speech is recognized on your Mac. With AI polish on, only the recognized text
+  goes to the provider you configured.
+- Recordings are not saved unless you turn it on.
 
-Read the exact data, permission, clipboard, update, and provider boundaries in
-the [Privacy Policy](PRIVACY.md).
-
-![Lerro settings](https://lerroapp.com/screenshots/en/lerro-settings-light.png)
-
-## Guided setup through real actions
-
-Onboarding walks through privacy choices, Apple Speech resources and microphone
-testing, AI selection, shortcut recording, a real Dictate insertion, clipboard
-recovery, correction learning, and per-app tone. Apple-only users finish after
-the recovery exercise. A local-model download can continue in the background
-and supports pause, resume, stop, and restart continuation.
+Details are in the [Privacy Policy](PRIVACY.md).
 
 ## Install
 
-1. [Download the latest signed and Apple-notarized build](https://updates.lerroapp.com/download/macos/latest).
-2. Move **Lerro.app** to Applications.
-3. Complete the guided Microphone, Accessibility, shortcut, and Dictate tasks.
-4. Add local or BYOK AI when you want refinement, translation, automatic
-   learning, and per-app tone.
+1. [Download the latest signed and notarized build](https://updates.lerroapp.com/download/macos/latest).
+2. Move **Lerro.app** to Applications and open it.
+3. Follow the setup to grant Microphone, Speech Recognition, and Accessibility.
 
-Requirements: Apple silicon and macOS 26 or later. The default optional local
-model needs about 3.03 GB of storage.
+Requires an Apple silicon Mac with macOS 26 or later. Lerro updates itself
+from inside the app.
 
-## Open source and documentation
+## Build from source
 
-Lerro is open source under [Apache-2.0](LICENSE).
+See [Build and testing](docs/build.md). Engineering docs:
+[architecture](docs/architecture.md), [core flow](docs/core-flow.md),
+[models and BYOK](docs/models.md), [privacy and security](docs/privacy-security.md),
+and [contributing](CONTRIBUTING.md).
 
-- [Architecture](docs/architecture.md)
-- [Core flow](docs/core-flow.md)
-- [Models and BYOK](docs/models.md)
-- [Privacy and security](docs/privacy-security.md)
-- [Build and testing](docs/build.md)
-- [Contextual benchmark](benchmarks/README.md)
-- [Contributing](CONTRIBUTING.md)
+## License
 
-See [TRADEMARKS.md](TRADEMARKS.md), [NOTICE](NOTICE), and
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for brand and third-party
-notices. First-party documentation and screenshots use
-[CC BY 4.0](LICENSES/CC-BY-4.0.txt).
+Lerro is open source under [Apache-2.0](LICENSE). First-party documentation and
+images use [CC BY 4.0](LICENSES/CC-BY-4.0.txt). See [TRADEMARKS.md](TRADEMARKS.md),
+[NOTICE](NOTICE), and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <title>Lerro app icon flat</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#24252C"/>
+      <stop offset="1" stop-color="#0E0F12"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="230" fill="url(#tile)"/>
+  <rect x="328" y="205" width="102" height="471" rx="51" fill="#3D63FF"/>
+  <rect x="328" y="737" width="369" height="92" rx="46" fill="#F6F4EF"/>
+</svg>

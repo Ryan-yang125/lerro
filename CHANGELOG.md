@@ -6,6 +6,138 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-19
+
+### Added
+
+- The Dictionary page has a 建议 view. 从历史找词 compares the raw and AI-polished
+  text of past dictations, asks the selected AI which changes are recognition
+  corrections, and lists them with how often they occurred. Each suggestion can
+  be added to the dictionary or ignored; nothing is added automatically.
+
+- Every capture records a monotonic timeline from the physical key press through
+  permissions, context capture, Speech resource wait, each Apple Speech startup
+  step, listening, first audio, first partial, transcription, AI processing,
+  Command-V commit, clipboard restore, and history save. Cancelled, failed, and
+  raw-fallback captures record the outcome and the last step reached.
+- The timeline is logged to `app.lerro.mac` / `capture-trace` in milliseconds with
+  signpost intervals for Instruments, and completed or delivery-failed history
+  entries store it in `phaseTimings.milestones`. Logs carry step names and
+  numbers only.
+- History detail shows the time from key press until speech is captured.
+- `script/capture_latency_report.py` reads history read-only and prints p50, p90,
+  and max per step plus the slowest captures.
+- Settings → 用量 shows remote AI tokens, requests, and estimated cost for today,
+  7 days, and 30 days, a daily chart, and breakdowns by feature and model. Each
+  remote call stores time, feature, provider, model, token counts, latency, and
+  success in `ai-usage.json` for 90 days. Prices are built in for DeepSeek with
+  off-peak discounts and can be edited per model.
+
+### Fixed
+
+- In dark mode the Home toolbar no longer keeps a lighter background after launch.
+  Home uses one scroll view for its empty and loaded states, so the toolbar sees
+  the same content from the first frame.
+
+- Dictation no longer fails with 语音资源暂未就绪 until the app restarts. Apple's
+  asset status could report the installed language as missing while transcription
+  still worked; the check now relies on `SpeechTranscriber.installedLocales`.
+
+- The app picker for app tones lists only real apps: background agents and helper
+  processes are gone. Apps are grouped into 常用 (most dictated, from history),
+  正在运行, and 全部应用, and each row shows the icon and name.
+
+- The microphone opens before the speech analyzer is prepared, so the first words
+  of a dictation are no longer cut off. Audio captured while the analyzer prepares
+  is buffered and transcribed in order. An idle audio engine is kept ready between
+  captures without starting the microphone.
+
+- Apple Speech resources prepare automatically at launch, on language changes,
+  and before capture. Onboarding can be closed at any step, preserves completed
+  setup when reopened, and recognizes existing learned dictionary entries.
+- Dictionary onboarding shows progress only during an AI request, reports rejected
+  corrections and failures, supports cancellation and practice reset, and accepts
+  an already learned term without creating a duplicate.
+
+### Changed
+
+- Product icons are a Lerro glyph set: thin rounded strokes on a 16 pt grid, with
+  the ink-blue cursor from the logo in 听写, 智能润色, 首页, 词典 and 关于. The
+  AI icon is a wavy line becoming a straight line with a cursor instead of
+  sparkles. Generic SF Symbols are outline only, except status icons and media
+  controls.
+
+- The menu bar icon opens a branded panel: status with a recording timer, 听写
+  and 翻译 buttons with their shortcuts, the last result with copy and paste,
+  today's dictations, words and AI cost, and native pickers to switch the
+  microphone and intelligence mode. Actions return focus to the previous app
+  first. 重新查看引导 moved to Settings → 关于.
+
+- The remote Dictate prompt (`J_input_method_fixes_json_v1`) treats the transcript
+  as a phonetic draft and, like an input method, replaces words that are not real
+  or do not fit the sentence with same- or similar-sounding words. The model lists
+  its word fixes before the final text in a JSON reply. On recent dictations it
+  fixed 6 of 8 misrecognitions versus 2 of 8, with the same benchmark formatting
+  and about 0.05 s more latency; thinking mode stays off.
+
+- Automatically learned dictionary entries are saved globally instead of being
+  scoped to the app where they were learned.
+
+- Live transcription uses Apple SpeechTranscriber instead of DictationTranscriber.
+  On 40 real recordings it recognized 62% of English words in mixed
+  Chinese–English speech versus 39%, and it no longer drops whole phrases. Spaces
+  around Chinese punctuation are removed. SpeechTranscriber ignores contextual
+  strings, so dictionary terms are no longer sent to Apple Speech; they still reach
+  AI polish.
+
+- The remote Dictate prompt treats the transcript as speech recognition output and
+  corrects misheard words and phrases when context or the dictionary makes the
+  intended wording clear. Remote requests also send up to 40 dictionary terms as
+  `personalization.known_terms` while the dictionary context toggle is on, even when
+  the terms do not appear in the transcript. The prompt version is
+  `M_balanced_eight_shot_asr_v1` with eight examples.
+- Remote model calls no longer use streaming; the unused streaming path was removed.
+- The DeepSeek preset model is `deepseek-flash`. DeepSeek retired `deepseek-v4-flash`
+  and routes it to `deepseek-flash` at the same price.
+- The capture HUD is one ink-black glass capsule that morphs between states:
+  an ink-blue cursor and audio waveform while recording, a single line of live
+  text with the target app icon, and "AI 润色中…" or "翻译中…" while processing.
+  The capsule looks the same in light and dark appearance.
+- Successful insertion fades the HUD at the Command-V commit point. When AI
+  processing fails and the raw transcript is written, an orange notice says so.
+- Recording shows the microphone name after three seconds without speech, an
+  elapsed timer after five seconds, and the stop key during the first twenty
+  hands-free captures.
+- The HUD appears on the screen that holds the focused text field.
+- Recovery and dictionary-learning notices live inside the same capsule; the
+  learning notice stays three seconds and pauses while hovered.
+- New brand: a cursor standing on a baseline forms the L of Lerro. The app icon
+  is a layered macOS 26 Icon Composer icon, the sidebar shows the new wordmark,
+  About shows the app icon, and onboarding opens with the mark.
+- The menu bar icon blinks its cursor while recording and draws its baseline
+  while processing; Reduce Motion keeps it still.
+- The main window is rebuilt on a native `NavigationSplitView`. The sidebar lists
+  Home, History, Dictionary, and App Tones with count badges, plus the AI status,
+  a settings button, and the version. Personalization is renamed App Tones.
+- Home shows today, seven-day, and all-time usage, a seven-day bar chart, the
+  capture shortcuts, a microphone menu, the six most recent captures, and
+  recently learned words.
+- History opens a detail view with Result, Compare, and Original tabs (word-level
+  diff against the raw transcript), a phase timing bar, the context sent to AI,
+  and playback of saved recordings.
+- Dictionary uses a native table, marks words learned in the last seven days as
+  new, and imports and exports CSV as `phrase,replacement`.
+- App Tones adds a default tone that applies when no enabled app tone matches the
+  frontmost app, and the editor previews a tone on a custom sample sentence.
+- Settings moved from an in-window overlay to a standard Settings window (Command-,)
+  with General, Shortcuts, Intelligence, Privacy, and About tabs.
+- The accent color is ink blue (`#2F5BFF` light, `#4A6BFF` dark) and is compiled
+  into the app's `AccentColor`, so system controls, selection, and toggles use it.
+  The main window type scale is 15 / 13 / 16 / 30 / 12 / 11 pt.
+- Fixtures select a main window page with `LERRO_FIXTURE_DESTINATION` and open a
+  settings tab with `LERRO_FIXTURE_PRESENTATION=settings-<tab>`; the previous
+  settings fixture names are removed.
+
 ## [1.6.0] - 2026-08-13
 
 ### Added
@@ -341,7 +473,8 @@ All notable changes to Lerro will be documented here. The project follows
   plaintext BYOK credentials; logs, history, errors, fixtures, and public exports
   exclude API keys and Authorization headers.
 
-[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/Ryan-yang125/lerro/compare/v1.6.0...v1.7.0
 [1.2.0]: https://github.com/Ryan-yang125/lerro/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/Ryan-yang125/lerro/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Ryan-yang125/lerro/compare/v1.0.3...v1.1.0

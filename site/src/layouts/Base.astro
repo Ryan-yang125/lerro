@@ -1,0 +1,64 @@
+---
+import "../styles/global.css";
+import Glyphs from "../components/Glyphs.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import { chrome } from "../data/chrome";
+import { localizedPath, siteUrl, type Lang } from "../site";
+
+interface Props {
+  lang: Lang;
+  title: string;
+  description: string;
+  path: "/" | "/changelog";
+}
+const { lang, title, description, path } = Astro.props;
+const canonical = siteUrl + localizedPath(lang, path);
+const zhUrl = siteUrl + localizedPath("zh", path);
+const enUrl = siteUrl + localizedPath("en", path);
+const ogImage = `${siteUrl}/og.png`;
+---
+<!doctype html>
+<html lang={chrome[lang].htmlLang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="zh-CN" href={zhUrl} />
+    <link rel="alternate" hreflang="en" href={enUrl} />
+    <link rel="alternate" hreflang="x-default" href={zhUrl} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Lerro" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content={lang === "zh" ? "zh_CN" : "en_US"} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#FAFAFA" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#161616" media="(prefers-color-scheme: dark)" />
+  </head>
+  <body>
+    <Glyphs />
+    <Nav lang={lang} path={path} />
+    <slot />
+    <Footer lang={lang} path={path} />
+    <script is:inline>
+      (function () {
+        var nav = document.getElementById("nav");
+        if (!nav) return;
+        function update() { nav.classList.toggle("scrolled", window.scrollY > 8); }
+        window.addEventListener("scroll", update, { passive: true });
+        update();
+      })();
+    </script>
+  </body>
+</html>

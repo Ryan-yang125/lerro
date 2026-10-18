@@ -191,7 +191,7 @@ PipelineIntelligenceService
 [`LerroApp.swift`](../Sources/Lerro/App/LerroApp.swift) 创建单一
 [`AppSession`](../Sources/Lerro/App/AppSession.swift)。`AppSession` 使用 `@MainActor` 和 Observation，拥有：
 
-- 当前 sidebar/settings/onboarding 页面状态。
+- 当前 sidebar 目的地（`SidebarDestination`）、设置窗口标签（`settingsTab`）和 onboarding 状态。
 - `CapturePhase`、`CaptureMode`、generation、active session、设备 AI 建议与异步任务。
 - 历史、词典、偏好、模型状态和权限快照。
 - HUD controller、写入失败恢复卡与自动学习提示。
@@ -272,11 +272,11 @@ retention 与录音索引对账。历史和词典搜索先进入视图本地状�
 
 ## UI 与 AppKit 分工
 
-- SwiftUI：主窗口、设置、引导、列表和 panel 内容。
+- SwiftUI：`NavigationSplitView` 主窗口、`Settings` 场景窗口、引导、原生列表与表格和 panel 内容。
 - AppKit：窗口配置、非激活 HUD、激活策略和系统事件。
 - [`FloatingPanelController.swift`](../Sources/LerroMac/Panels/FloatingPanelController.swift) 管理 panel 级别、Space 行为、底部定位和鼠标交互区域。
 - [`WindowConfigurator.swift`](../Sources/LerroMac/System/WindowConfigurator.swift) 把 window 配置保持在 Mac target。
-- 视觉常量集中在 [`DesignTokens.swift`](../Sources/Lerro/DesignSystem/DesignTokens.swift)。
+- 视觉常量集中在 [`DesignTokens.swift`](../Sources/Lerro/DesignSystem/DesignTokens.swift)，共享控件集中在 [`MainWindowComponents.swift`](../Sources/Lerro/DesignSystem/MainWindowComponents.swift)。
 
 ## 代码放置决策
 

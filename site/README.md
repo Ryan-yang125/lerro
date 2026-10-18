@@ -1,49 +1,43 @@
 # Lerro website
 
-Public product page for [Lerro](https://github.com/Ryan-yang125/lerro), the open-source macOS voice-typing app.
+Public site for [Lerro](https://github.com/Ryan-yang125/lerro), the open-source macOS voice-typing app. Production: <https://lerroapp.com>.
 
-The visual system follows the Interior material and interaction language used
-by Motion Lexicon. Adapted press, ripple, and disclosure components live under
-`app/components/interior/`; the upstream MIT notice is preserved in the root
-`NOTICE`. The animated Hero HUD follows the dimensions and timing of Lerro's
-native macOS HUD.
+## Stack
 
-## Requirements
+Astro 7 static build in `dist/`, served by a Cloudflare Worker with static assets (`worker/index.js`, `wrangler.jsonc`). The Worker redirects `www` to the apex host (308) and the legacy `/zh` routes to `/` and `/changelog` (301); every other request goes to the static assets.
 
-- Node.js 22.13 or later
-- npm
+## Routes
 
-## Local development
+| Path | Page |
+| --- | --- |
+| `/` | Home, Chinese |
+| `/en` | Home, English |
+| `/changelog` | Changelog, Chinese |
+| `/en/changelog` | Changelog, English |
+| `/zh`, `/zh/changelog` | Redirect to `/`, `/changelog` |
 
-```bash
-npm install
-npm run dev
-```
+## Commands
 
-## Verification
+Requires Node.js 22.12 or later.
 
 ```bash
-npm run lint
-npm run build
-npm test
+npm ci
+npm run dev      # local dev server
+npm run lint     # astro check
+npm run build    # static build into dist/
+npm test         # tests read dist/, so build first
+npm run deploy   # build, then wrangler deploy
 ```
 
-`npm run build` verifies the Vinext Worker build in `dist/`.
+## Structure
 
-## Deployment
-
-- Production URL: <https://lerroapp.com>
-- Worker deployment: `npm run deploy`
-- `www.lerroapp.com` permanently redirects to the apex domain.
-
-The download CTA points to <https://updates.lerroapp.com/download/macos/latest>. The
-distribution Worker serves only the currently published, signed macOS archive from
-private Cloudflare R2 storage.
+- `src/layouts/Base.astro`: head metadata, nav, footer.
+- `src/components/`: `HomePage`, `ChangelogPage`, `Nav`, `Footer`, `Glyphs` (SVG sprite), `HeroDemo`.
+- `src/data/home.ts`: home page copy in both languages. `src/data/chrome.ts`: nav and footer copy.
+- `src/data/releases.ts`: release history.
+- `src/styles/global.css`: design tokens and shared styles. `changelog.css`: changelog page.
+- `src/site.ts`: URLs, version, and `localizedPath`.
 
 ## Release history
 
-- Public release notes live at <https://lerroapp.com/changelog>.
-- Add a new published entry to `app/changelog/releases.ts` with its immutable
-  distribution URL: `https://updates.lerroapp.com/releases/<version>/<build>/Lerro-macOS-arm64.zip`.
-- Keep older entries unchanged. The distribution Worker resolves those URLs from
-  its published D1 metadata and private R2 archive.
+Add the new release at the top of `releases` in `src/data/releases.ts` with `version`, `build`, `publishedAt`, `downloadUrl`, and `zh` / `en` objects (`publishedLabel`, `summary`, `highlights`). The download URL is the immutable distribution URL `https://updates.lerroapp.com/releases/<version>/<build>/Lerro-macOS-arm64.zip`. Update `currentVersion` in `src/site.ts` and keep older entries unchanged. The download button on the site points to `https://updates.lerroapp.com/download/macos/latest`, which serves the currently published archive.

@@ -40,16 +40,37 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
         }
     }
 
-    var icon: String {
+    var icon: OnboardingIcon {
         switch self {
-        case .privacy: "hand.raised.fill"
-        case .speech: "waveform"
-        case .ai: "sparkles"
-        case .shortcut: "keyboard.fill"
-        case .dictation: "text.cursor"
-        case .recovery: "doc.on.clipboard.fill"
-        case .dictionary: "character.book.closed.fill"
-        case .tone: "slider.horizontal.3"
+        case .privacy: .glyph(.privacy)
+        case .speech: .glyph(.mic)
+        case .ai: .glyph(.polish)
+        case .shortcut: .glyph(.shortcuts)
+        case .dictation: .glyph(.dictate)
+        case .recovery: .system("doc.on.clipboard")
+        case .dictionary: .glyph(.dictionary)
+        case .tone: .glyph(.tones)
+        }
+    }
+}
+
+/// Step and row icon: a brand glyph or a generic SF Symbol.
+enum OnboardingIcon {
+    case glyph(LerroGlyph)
+    case system(String)
+}
+
+struct OnboardingIconView: View {
+    let icon: OnboardingIcon
+    var size: CGFloat = 16
+
+    var body: some View {
+        switch icon {
+        case .glyph(let glyph):
+            LerroGlyphView(glyph: glyph, size: size)
+        case .system(let name):
+            Image(systemName: name)
+                .font(.system(size: size, weight: .medium))
         }
     }
 }
@@ -60,7 +81,7 @@ private enum OnboardingPermission: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
     var title: String { self == .microphone ? "麦克风" : "辅助功能" }
-    var icon: String { self == .microphone ? "mic.fill" : "accessibility" }
+    var icon: OnboardingIcon { self == .microphone ? .glyph(.mic) : .system("accessibility") }
     var settingsURL: String {
         self == .microphone
             ? "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
@@ -91,9 +112,9 @@ struct OnboardingView: View {
     @State private var dictationText = "把光标放在这里，按快捷键开始说话。"
     @State private var hasCopiedRecoveryText = false
     @State private var dictionaryPracticeText = "我正在使用乐若完成语音写作。"
-    @State private var learnedEntryIDsAtStart = Set<UUID>()
     @State private var dictionaryPracticeLearned = false
-    @State private var isLearningDictionaryCorrection = false
+    @State private var dictionaryLearningTask: Task<Void, Never>?
+    @State private var dictionaryLearningMessage: String?
     @State private var toneApplication: ApplicationDescriptor?
     @State private var toneInstruction = "简洁、自然，适合团队沟通"
     @State private var tonePreview = ""
@@ -113,10 +134,12 @@ struct OnboardingView: View {
                                     Label("返回", systemImage: "chevron.left")
                                 }
                                 .buttonStyle(.borderless)
+                                .font(LerroFont.body)
+                                .foregroundStyle(LerroTheme.accentText)
                             }
 
                             Text(LocalizedStringKey(step.title))
-                                .font(LerroTheme.font(24, weight: .medium))
+                                .font(LerroTheme.font(24, weight: .semibold))
                                 .tracking(LerroTheme.uiTracking)
                                 .foregroundStyle(LerroTheme.text)
                                 .accessibilityAddTraits(.isHeader)
@@ -133,15 +156,14 @@ struct OnboardingView: View {
                                     } icon: {
                                         Image(systemName: "exclamationmark.circle.fill")
                                     }
-                                        .font(LerroTheme.font(12))
-                                        .foregroundStyle(LerroTheme.orange)
+                                        .font(LerroFont.caption)
+                                        .foregroundStyle(LerroTheme.warning)
                                 }
                                 Spacer()
                                 Button(action: next) {
                                     Text(verbatim: primaryActionTitle)
                                 }
-                                    .buttonStyle(LerroPillButtonStyle(prominent: true))
-                                    .controlSize(.large)
+                                    .buttonStyle(LerroButtonStyle(.primary))
                                     .keyboardShortcut(.defaultAction)
                                     .disabled(!canAdvance || isShortcutSaving || isTonePreviewing)
                             }
@@ -165,6 +187,7 @@ struct OnboardingView: View {
             await prepareCurrentStep()
         }
         .onChange(of: step) { previous, current in
+            if previous == .dictionary { cancelDictionaryLearning() }
             if previous == .shortcut {
                 session.endShortcutConfiguration()
                 shortcutConfigurationPrepared = false
@@ -195,6 +218,7 @@ struct OnboardingView: View {
             accessibilityFocus = .heading
         }
         .onDisappear {
+            cancelDictionaryLearning()
             session.stopOnboardingMicrophoneTest()
             session.endShortcutConfiguration()
         }
@@ -203,12 +227,13 @@ struct OnboardingView: View {
     private var progressHeader: some View {
         VStack(spacing: 9) {
             HStack(spacing: 14) {
-                LerroBrandBadge(compact: true)
+                LerroMark(height: 28, blinksOnAppear: true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(LocalizedStringKey(step.shortTitle))
-                        .font(LerroTheme.font(13, weight: .medium))
+                        .font(LerroFont.bodyEmphasis)
+                        .foregroundStyle(LerroTheme.text)
                     Text(verbatim: progressText)
-                        .font(LerroTheme.font(12))
+                        .font(LerroFont.caption)
                         .foregroundStyle(LerroTheme.secondaryText)
                 }
                 Spacer()
@@ -221,15 +246,22 @@ struct OnboardingView: View {
                             .frame(width: 7, height: 7)
                     }
                 }
+                .accessibilityHidden(true)
+                Button("关闭引导", systemImage: "xmark") {
+                    session.dismissOnboarding()
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
             }
             ProgressView(value: Double(step.rawValue + 1), total: 8)
                 .progressViewStyle(.linear)
+                .tint(LerroTheme.accent)
                 .accessibilityLabel("设置进度")
                 .accessibilityValue(Text(verbatim: progressText))
         }
         .padding(.horizontal, 24)
         .padding(.top, 10)
-        .background(LerroTheme.topLayer)
+        .background(LerroTheme.main)
         .overlay(alignment: .bottom) { Divider() }
     }
 
@@ -257,9 +289,11 @@ struct OnboardingView: View {
                 Text("永久").tag(HistoryRetention.forever)
             }
             .pickerStyle(.segmented)
+            .tint(LerroTheme.accent)
 
             Toggle("保存原始录音", isOn: saveAudioBinding)
                 .toggleStyle(.switch)
+                .tint(LerroTheme.accent)
                 .disabled(session.preferences.historyRetention == .never)
 
             Button {
@@ -272,8 +306,9 @@ struct OnboardingView: View {
                     Image(systemName: privacyConfirmed ? "checkmark.circle.fill" : "checkmark.circle")
                 }
             }
-            .buttonStyle(LerroPillButtonStyle(prominent: !privacyConfirmed))
+            .buttonStyle(LerroButtonStyle(privacyConfirmed ? .secondary : .primary))
         }
+        .font(LerroFont.body)
         .onChange(of: session.preferences.historyRetention) { _, _ in privacyConfirmed = false }
         .onChange(of: session.preferences.saveAudio) { _, _ in privacyConfirmed = false }
         .onAppear {
@@ -289,16 +324,19 @@ struct OnboardingView: View {
 
             statusRow(
                 title: "Apple 听写资源",
-                icon: "waveform",
+                icon: .glyph(.dictate),
                 ready: session.speechResourceStatus.state == .ready,
                 status: session.speechResourceStatus.message.isEmpty
                     ? "等待检查"
                     : session.speechResourceStatus.message
             ) {
-                if session.speechResourceStatus.state == .available
-                    || session.speechResourceStatus.state == .failed {
-                    Button("准备") { session.prepareSpeechResources() }
-                        .buttonStyle(LerroPillButtonStyle())
+                if session.speechResourceStatus.state == .failed {
+                    Button("重试") { session.prepareSpeechResources() }
+                        .buttonStyle(LerroButtonStyle(.secondary))
+                } else if session.speechResourceStatus.state == .available
+                    || session.speechResourceStatus.state == .downloading {
+                    ProgressView().controlSize(.small)
+                        .accessibilityLabel("正在准备语音资源")
                 }
             }
 
@@ -320,13 +358,15 @@ struct OnboardingView: View {
                 Label {
                     Text(verbatim: microphoneStatus)
                 } icon: {
-                    Image(systemName: session.onboardingMicrophoneTestPassed
-                        ? "checkmark.circle.fill"
-                        : "mic.circle")
+                    if session.onboardingMicrophoneTestPassed {
+                        Image(systemName: "checkmark.circle.fill")
+                    } else {
+                        LerroGlyph.mic.image
+                    }
                 }
-                .font(LerroTheme.font(12))
+                .font(LerroFont.caption)
                 .foregroundStyle(session.onboardingMicrophoneTestPassed
-                    ? LerroTheme.green
+                    ? LerroTheme.success
                     : LerroTheme.secondaryText)
                 Spacer()
                 Button {
@@ -336,10 +376,13 @@ struct OnboardingView: View {
                         session.isOnboardingMicrophoneTestRunning ? "停止测试" : "测试麦克风"
                     ))
                 }
-                .buttonStyle(LerroPillButtonStyle(prominent: !session.onboardingMicrophoneTestPassed))
+                .buttonStyle(LerroButtonStyle(
+                    session.onboardingMicrophoneTestPassed ? .secondary : .primary
+                ))
                 .disabled(!session.microphonePermission)
             }
         }
+        .font(LerroFont.body)
     }
 
     private var shortcutContent: some View {
@@ -354,8 +397,12 @@ struct OnboardingView: View {
                     .frame(maxWidth: .infinity, minHeight: 180)
             }
 
-            Label("录制后，按一下开始，再按一下结束。", systemImage: "keyboard")
-            .font(LerroTheme.font(12))
+            Label {
+                Text("录制后，按一下开始，再按一下结束。")
+            } icon: {
+                LerroGlyph.shortcuts.image
+            }
+            .font(LerroFont.caption)
             .foregroundStyle(LerroTheme.secondaryText)
 
             if !shortcutSaveError.isEmpty {
@@ -364,8 +411,8 @@ struct OnboardingView: View {
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
                 }
-                    .font(LerroTheme.font(12))
-                    .foregroundStyle(LerroTheme.orange)
+                    .font(LerroFont.caption)
+                    .foregroundStyle(LerroTheme.warning)
             }
         }
     }
@@ -380,29 +427,18 @@ struct OnboardingView: View {
                         ? "checkmark.circle.fill"
                         : "waveform")
                 }
-                    .font(LerroTheme.font(12, weight: .medium))
-                    .foregroundStyle(hasCompletedDictation ? LerroTheme.green : LerroTheme.accent)
+                    .font(LerroFont.caption)
+                    .foregroundStyle(hasCompletedDictation ? LerroTheme.success : LerroTheme.accentText)
                 Spacer()
-                ShortcutBadge(title: dictationShortcutName)
+                LerroShortcutKeys(displayName: dictationShortcutName)
             }
 
-            TextEditor(text: $dictationText)
-                .font(LerroTheme.font(14))
-                .scrollContentBackground(.hidden)
-                .padding(12)
-                .frame(minHeight: 150)
-                .background(LerroTheme.topLayer)
-                .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
-                        .stroke(editorFocused ? LerroTheme.focusBorder : LerroTheme.thinBorder)
-                }
-                .focused($editorFocused)
+            practiceEditor(text: $dictationText)
 
             Button(action: togglePracticeCapture) {
                 Text(verbatim: dictationButtonTitle)
             }
-                .buttonStyle(LerroPillButtonStyle(prominent: true))
+                .buttonStyle(LerroButtonStyle(.primary))
                 .disabled(isCaptureProcessing)
         }
         .onAppear { editorFocused = true }
@@ -411,13 +447,14 @@ struct OnboardingView: View {
     private var recoveryContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
-                Image(systemName: "doc.on.clipboard.fill")
-                    .foregroundStyle(LerroTheme.orange)
+                Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(LerroTheme.warning)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("未能写入练习编辑器")
-                        .font(LerroTheme.font(14, weight: .medium))
+                        .font(LerroFont.bodyEmphasis)
                     Text("内容已复制到剪贴板")
-                        .font(LerroTheme.font(12))
+                        .font(LerroFont.caption)
                         .foregroundStyle(LerroTheme.secondaryText)
                 }
                 Spacer()
@@ -426,16 +463,15 @@ struct OnboardingView: View {
                     hasCopiedRecoveryText = NSPasteboard.general.string(forType: .string)
                         == recoverySample
                 }
-                .buttonStyle(LerroPillButtonStyle(prominent: !hasCopiedRecoveryText))
+                .buttonStyle(LerroButtonStyle(hasCopiedRecoveryText ? .secondary : .primary))
             }
-            .padding(16)
-            .background(LerroTheme.fillContainerThin)
-            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
+            .padding(14)
+            .onboardingSurface()
 
             if hasCopiedRecoveryText {
                 Label("恢复文本已再次复制", systemImage: "checkmark.circle.fill")
-                    .font(LerroTheme.font(12, weight: .medium))
-                    .foregroundStyle(LerroTheme.green)
+                    .font(LerroFont.caption)
+                    .foregroundStyle(LerroTheme.success)
             }
         }
         .onAppear {
@@ -450,20 +486,9 @@ struct OnboardingView: View {
     private var dictionaryContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("把“乐若”改成“Lerro”，再让 AI 判断这次修正。")
-                .font(LerroTheme.font(13))
+                .font(LerroFont.body)
 
-            TextEditor(text: $dictionaryPracticeText)
-                .font(LerroTheme.font(14))
-                .scrollContentBackground(.hidden)
-                .padding(12)
-                .frame(minHeight: 150)
-                .background(LerroTheme.topLayer)
-                .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
-                        .stroke(editorFocused ? LerroTheme.focusBorder : LerroTheme.thinBorder)
-                }
-                .focused($editorFocused)
+            practiceEditor(text: $dictionaryPracticeText)
 
             HStack {
                 Button {
@@ -473,27 +498,45 @@ struct OnboardingView: View {
                         isLearningDictionaryCorrection ? "AI 正在判断" : "检测这次修正"
                     ))
                 }
-                    .buttonStyle(LerroPillButtonStyle(prominent: true))
+                    .buttonStyle(LerroButtonStyle(.primary))
                     .disabled(
                         dictionaryPracticeText == dictionaryPracticeOriginal
                             || isLearningDictionaryCorrection
                     )
+                Button("重置练习") {
+                    dictionaryPracticeText = dictionaryPracticeOriginal
+                }
+                .buttonStyle(.borderless)
+                .disabled(isLearningDictionaryCorrection)
                 Spacer()
-                if hasLearnedDictionaryEntry {
-                    Label("修正已通过 AI 加入词典", systemImage: "checkmark.circle.fill")
-                        .font(LerroTheme.font(12, weight: .medium))
-                        .foregroundStyle(LerroTheme.green)
-                } else {
+                if isLearningDictionaryCorrection {
                     ProgressView()
                         .controlSize(.small)
-                        .accessibilityLabel("等待自动词典学习")
+                        .accessibilityLabel("AI 正在判断")
+                    Button("取消") { cancelDictionaryLearning() }
+                        .buttonStyle(.borderless)
+                } else if hasLearnedDictionaryEntry {
+                    Label(
+                        dictionaryPracticeLearned
+                            ? "修正已通过 AI 加入词典"
+                            : "词典里已有 AI 学到的词，可以直接继续",
+                        systemImage: "checkmark.circle.fill"
+                    )
+                        .font(LerroFont.caption)
+                        .foregroundStyle(LerroTheme.success)
                 }
             }
+            if let dictionaryLearningMessage {
+                Text(verbatim: localized(dictionaryLearningMessage))
+                    .font(LerroFont.caption)
+                    .foregroundStyle(LerroTheme.warning)
+            }
+        }
+        .onChange(of: dictionaryPracticeText) { _, _ in
+            cancelDictionaryLearning()
+            dictionaryLearningMessage = nil
         }
         .onAppear {
-            learnedEntryIDsAtStart = Set(
-                session.dictionaryEntries.filter { $0.source == .learned }.map(\.id)
-            )
             if isFixture {
                 dictionaryPracticeText = "我正在使用 Lerro 完成语音写作。"
                 dictionaryPracticeLearned = true
@@ -513,7 +556,7 @@ struct OnboardingView: View {
             }
 
             TextEditor(text: $toneInstruction)
-                .font(LerroTheme.font(14))
+                .font(LerroFont.body)
                 .scrollContentBackground(.hidden)
                 .padding(10)
                 .frame(minHeight: 90)
@@ -531,36 +574,29 @@ struct OnboardingView: View {
                     isTonePreviewing ? "正在运行 AI 预览" : "运行 AI 预览"
                 ))
             }
-            .buttonStyle(LerroPillButtonStyle(prominent: tonePreview.isEmpty))
+            .buttonStyle(LerroButtonStyle(tonePreview.isEmpty ? .primary : .secondary))
             .disabled(toneApplication == nil || trimmedToneInstruction.isEmpty || isTonePreviewing)
 
             if !tonePreview.isEmpty {
                 Text(verbatim: tonePreview)
-                    .font(LerroTheme.font(13))
+                    .font(LerroFont.body)
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(LerroTheme.fillContainerThin)
-                    .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+                    .onboardingSurface()
             }
         }
     }
 
     private var visualPanel: some View {
-        VStack(spacing: 18) {
-            Image(systemName: step.icon)
-                .font(.system(size: 34, weight: .medium))
+        VStack(spacing: 14) {
+            OnboardingIconView(icon: step.icon, size: 40)
                 .foregroundStyle(LerroTheme.accent)
-                .frame(width: 76, height: 76)
-                .background(LerroTheme.fillContainerThin)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             Text(LocalizedStringKey(step.shortTitle))
-                .font(LerroTheme.font(14, weight: .medium))
-            Text(LocalizedStringKey(visualCaption))
-                .font(LerroTheme.font(12))
+                .font(LerroFont.bodyEmphasis)
                 .foregroundStyle(LerroTheme.secondaryText)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 180)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityHidden(true)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(LerroTheme.sidebar)
     }
@@ -578,48 +614,62 @@ struct OnboardingView: View {
         ) {
             if granted {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(LerroTheme.green)
+                    .foregroundStyle(LerroTheme.success)
+                    .accessibilityHidden(true)
             } else {
                 Button("授权") {
                     Task { await session.refreshPermissions(prompt: true) }
                 }
-                .buttonStyle(LerroPillButtonStyle(prominent: true))
+                .buttonStyle(LerroButtonStyle(.primary))
                 Button("系统设置") { openSystemSettings(permission) }
-                    .buttonStyle(LerroPillButtonStyle())
+                    .buttonStyle(LerroButtonStyle(.secondary))
             }
         }
     }
 
     private func statusRow<Accessory: View>(
         title: String,
-        icon: String,
+        icon: OnboardingIcon,
         ready: Bool,
         status: String,
         @ViewBuilder accessory: () -> Accessory
     ) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
-                .foregroundStyle(ready ? LerroTheme.green : LerroTheme.accent)
-                .frame(width: 26)
+            OnboardingIconView(icon: icon, size: 16)
+                .foregroundStyle(LerroTheme.secondaryText)
+                .frame(width: 24)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(verbatim: localized(title))
-                    .font(LerroTheme.font(14, weight: .medium))
-                Text(verbatim: localized(status))
-                    .font(LerroTheme.font(12))
-                    .foregroundStyle(LerroTheme.secondaryText)
+                    .font(LerroFont.bodyEmphasis)
+                HStack(spacing: 6) {
+                    if ready { LerroStatusDot(color: LerroTheme.success) }
+                    Text(verbatim: localized(status))
+                        .font(LerroFont.caption)
+                        .foregroundStyle(LerroTheme.secondaryText)
+                }
             }
             Spacer()
             accessory()
         }
         .padding(.horizontal, 14)
-        .frame(minHeight: 62)
-        .background(LerroTheme.fillContainerThin)
-        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
-                .stroke(LerroTheme.thinBorder)
-        }
+        .frame(minHeight: 56)
+        .onboardingSurface()
+    }
+
+    private func practiceEditor(text: Binding<String>) -> some View {
+        TextEditor(text: text)
+            .font(LerroFont.body)
+            .scrollContentBackground(.hidden)
+            .padding(12)
+            .frame(minHeight: 150)
+            .background(LerroTheme.topLayer)
+            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                    .stroke(editorFocused ? LerroTheme.focusBorder : LerroTheme.thinBorder)
+            }
+            .focused($editorFocused)
     }
 
     private func prepareCurrentStep() async {
@@ -734,14 +784,32 @@ struct OnboardingView: View {
     }
 
     private func learnDictionaryCorrection() {
-        isLearningDictionaryCorrection = true
-        Task { @MainActor in
-            dictionaryPracticeLearned = await session.learnOnboardingCorrection(
+        guard !isLearningDictionaryCorrection else { return }
+        dictionaryLearningMessage = nil
+        let correctedText = dictionaryPracticeText
+        dictionaryLearningTask = Task { @MainActor in
+            let result = await session.learnOnboardingCorrection(
                 originalText: dictionaryPracticeOriginal,
-                correctedText: dictionaryPracticeText
+                correctedText: correctedText
             )
-            isLearningDictionaryCorrection = false
+            guard !Task.isCancelled else { return }
+            dictionaryLearningTask = nil
+            switch result {
+            case .learned:
+                dictionaryPracticeLearned = true
+            case .noLearning:
+                dictionaryLearningMessage = "AI 未发现可学习的词语修正，请只把“乐若”改成“Lerro”后重试。"
+            case .failed(let message):
+                dictionaryLearningMessage = message
+            }
         }
+    }
+
+    private var isLearningDictionaryCorrection: Bool { dictionaryLearningTask != nil }
+
+    private func cancelDictionaryLearning() {
+        dictionaryLearningTask?.cancel()
+        dictionaryLearningTask = nil
     }
 
     private func openSystemSettings(_ permission: OnboardingPermission) {
@@ -794,19 +862,6 @@ struct OnboardingView: View {
             locale: locale,
             arguments: Int64(step.rawValue + 1), Int64(OnboardingStep.allCases.count)
         )
-    }
-
-    private var visualCaption: String {
-        switch step {
-        case .privacy: "历史与录音由你决定。"
-        case .speech: "权限、资源和麦克风逐项验证。"
-        case .ai: "Apple 听写、远端 AI、本地 AI。"
-        case .shortcut: "\(dictationShortcutName) · 按一下开始，再按一下结束。"
-        case .dictation: "实时预览，完成后直接写入。"
-        case .recovery: "焦点变化时，文字安全留在剪贴板。"
-        case .dictionary: "修正专名，Lerro 自动学习。"
-        case .tone: "每个应用都有合适的表达方式。"
-        }
     }
 
     private var historyRetentionBinding: Binding<HistoryRetention> {
@@ -874,7 +929,7 @@ struct OnboardingView: View {
 
     private var hasLearnedDictionaryEntry: Bool {
         dictionaryPracticeLearned || session.dictionaryEntries.contains {
-            $0.source == .learned && !learnedEntryIDsAtStart.contains($0.id)
+            $0.source == .learned
         }
     }
 
@@ -917,7 +972,7 @@ private struct WaveLevelMeter: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(LerroTheme.fillContainerTough)
                 Capsule()
-                    .fill(level >= 0.12 ? LerroTheme.green : LerroTheme.accent)
+                    .fill(level >= 0.12 ? LerroTheme.success : LerroTheme.accent)
                     .frame(width: max(4, geometry.size.width * CGFloat(min(1, max(0, level)))))
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: level)
             }
@@ -925,5 +980,18 @@ private struct WaveLevelMeter: View {
         .frame(height: 8)
         .opacity(isRunning ? 1 : 0.55)
         .accessibilityHidden(true)
+    }
+}
+
+extension View {
+    /// Neutral rounded surface shared by the onboarding rows and cards.
+    func onboardingSurface(radius: CGFloat = LerroTheme.controlRadius) -> some View {
+        self
+            .background(LerroTheme.fillContainerThin)
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(LerroTheme.thinBorder)
+            }
     }
 }

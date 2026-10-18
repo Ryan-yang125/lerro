@@ -1,11 +1,13 @@
+import AppKit
 import SwiftUI
 import LerroCore
 
 struct RootView: View {
     @Bindable var session: AppSession
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.locale) private var locale
+    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         ZStack {
@@ -24,24 +26,14 @@ struct RootView: View {
                 }
                 .navigationSplitViewStyle(.balanced)
                 .tracking(LerroTheme.uiTracking)
-                .allowsHitTesting(!session.isOnboardingPresented && !session.isSettingsPresented)
-                .accessibilityHidden(session.isOnboardingPresented || session.isSettingsPresented)
+                .allowsHitTesting(!session.isOnboardingPresented)
+                .accessibilityHidden(session.isOnboardingPresented)
 
                 if session.isOnboardingPresented {
                     OnboardingView(session: session)
                         .tracking(LerroTheme.uiTracking)
                         .transition(reduceMotion ? .opacity : .scale(scale: 0.985).combined(with: .opacity))
-                        .allowsHitTesting(!session.isSettingsPresented)
-                        .accessibilityHidden(session.isSettingsPresented)
                         .zIndex(10)
-                }
-
-                if session.isSettingsPresented {
-                    settingsModal
-                        .transition(reduceMotion
-                            ? .opacity
-                            : .scale(scale: 0.98).combined(with: .opacity))
-                        .zIndex(20)
                 }
             }
         }
@@ -49,18 +41,26 @@ struct RootView: View {
             minWidth: LerroTheme.hubMinimumSize.width,
             minHeight: LerroTheme.hubMinimumSize.height
         )
-        .toolbar(removing: .title)
-        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        .toolbarVisibility(
-            session.isSettingsPresented ? .hidden : .automatic,
-            for: .windowToolbar
-        )
+        .toolbarVisibility(session.isOnboardingPresented ? .hidden : .automatic, for: .windowToolbar)
         .tint(LerroTheme.accent)
-        .accentColor(LerroTheme.accent)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: session.isOnboardingPresented)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: session.isSettingsPresented)
+        .onChange(of: session.visualFixturePresentation, initial: true) { _, presentation in
+            if presentation?.hasPrefix("settings-") == true {
+                openSettings()
+            }
+        }
+        .onChange(of: session.isOnboardingPresented) { _, isPresented in
+            if isPresented {
+                openWindow(id: "main")
+                NSApp.activate()
+            }
+        }
         .alert("下载本地 AI 模型？", isPresented: $session.isModelDownloadConsentPresented) {
-            Button("下载并启用") { session.approveLocalModelDownload() }
+            Button("下载并启用") {
+                let showsProgress = !session.isOnboardingPresented
+                session.approveLocalModelDownload()
+                if showsProgress { openSettings() }
+            }
             if session.canContinueWithBaseDictation {
                 Button("使用基础听写") { session.continueWithBaseDictation() }
             }
@@ -78,49 +78,6 @@ struct RootView: View {
         }
     }
 
-    private var settingsModal: some View {
-        GeometryReader { geometry in
-            let width = min(
-                LerroTheme.settingsMaximumSize.width,
-                max(
-                    LerroTheme.settingsMinimumSize.width,
-                    geometry.size.width - LerroTheme.settingsModalHorizontalInset * 2
-                )
-            )
-            let height = min(
-                LerroTheme.settingsMaximumSize.height,
-                max(
-                    LerroTheme.settingsMinimumSize.height,
-                    geometry.size.height - LerroTheme.settingsModalVerticalInset * 2
-                )
-            )
-
-            ZStack {
-                Color.black
-                    .opacity(colorScheme == .dark ? 0.46 : 0.24)
-                    .contentShape(Rectangle())
-                    .onTapGesture { session.dismissSettings() }
-                    .accessibilityHidden(true)
-
-                SettingsOverlayView(session: session)
-                    .frame(width: width, height: height)
-                    .clipShape(RoundedRectangle(
-                        cornerRadius: LerroTheme.settingsModalCornerRadius,
-                        style: .continuous
-                    ))
-                    .overlay {
-                        RoundedRectangle(
-                            cornerRadius: LerroTheme.settingsModalCornerRadius,
-                            style: .continuous
-                        )
-                        .stroke(LerroTheme.border, lineWidth: 1)
-                    }
-                    .shadow(color: Color.black.opacity(0.20), radius: 28, x: 0, y: 14)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-    }
-
     @ViewBuilder
     private var detail: some View {
         switch session.destination {
@@ -130,8 +87,8 @@ struct RootView: View {
             HistoryView(session: session)
         case .dictionary:
             DictionaryView(session: session)
-        case .personalization:
-            PersonalizationView(session: session)
+        case .appTones:
+            AppTonesView(session: session)
         }
     }
 
@@ -139,12 +96,12 @@ struct RootView: View {
     private var visualFixture: some View {
         ZStack {
             LerroTheme.canvas
-            switch session.visualFixturePresentation {
-            case "hud-waiting", "hud-recording", "hud-profile", "hud-dictating", "hud-hands-free", "hud-processing", "hud-error", "hud-recovery", "hud-dictionary-learned":
+            if session.visualFixturePresentation?.hasPrefix("hud-") == true {
                 CaptureHUDView(session: session)
                     .frame(width: 750, height: 500)
-            default:
-                EmptyView()
+            }
+            if session.visualFixturePresentation?.hasPrefix("menubar-panel") == true {
+                MenuBarPanelView(session: session, drawsChrome: true)
             }
         }
     }

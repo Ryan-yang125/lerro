@@ -146,10 +146,9 @@ for path in root.rglob("*"):
 
     parts = pathlib.PurePosixPath(relative).parts
     forbidden_parts = {
+        ".astro",
         ".build",
-        ".next",
         ".swiftpm",
-        ".vinext",
         ".wrangler",
         "clean-public",
         "coverage",
@@ -420,7 +419,7 @@ history_paths = subprocess.check_output(
 ).splitlines()
 forbidden = re.compile(
     r"(^|/)(outputs|out|dist|work|clean-public|node_modules|coverage|"
-    r"\.build|\.swiftpm|\.next|\.vinext|\.wrangler)(/|$)|"
+    r"\.astro|\.build|\.swiftpm|\.wrangler)(/|$)|"
     r"\.(app|dmg|dSYM|zip|sqlite3?|caf|wav|m4a|gguf|safetensors)$"
 )
 

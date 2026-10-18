@@ -23,6 +23,13 @@ Dictionary records contain a phrase, replacement, source, optional application
 scope, and usage metadata. Learned entries can be reviewed, edited, promoted to
 global scope, undone from the learning notification, or deleted.
 
+AI usage records in `ai-usage.json` describe each remote model call: time,
+feature, provider, model ID, input, output and cached token counts reported by
+the provider, latency, and success. They contain no transcript, prompt, model
+output, context text, or API key. Records older than 90 days are removed, and
+Settings → 用量 can clear them. Cost estimates are calculated on the Mac from the
+built-in or user-edited price table; nothing about usage is sent anywhere.
+
 ## System permissions
 
 Lerro requests two macOS permissions:
@@ -64,15 +71,16 @@ Application logs exclude audio, transcripts, selected text, focused text,
 changed spans, prompts, model output, dictionary contents, API keys,
 authorization headers, invitation codes, and personal identifiers.
 
-## Apple Speech and dictionary context
+## Apple Speech
 
-Apple Speech performs transcription. Lerro supplies up to 100 relevant personal
-dictionary replacements through `AnalysisContext.contextualStrings`. This
-context remains inside the Apple Speech framework. Quick Dictate optionally uses
+Apple Speech performs transcription on the Mac from the microphone audio only;
+Lerro does not pass dictionary entries to it. Quick Dictate optionally uses
 Apple `SpeechDetector` to end after about 1.2 seconds of continuous silence; it
 starts disabled and adds no permission.
 
-macOS may obtain Speech language resources through Apple-managed services.
+Lerro automatically prepares the selected Speech language resources at launch,
+when the recognition language changes, and before capture as needed. macOS
+downloads missing resources through Apple-managed services.
 
 ## Local model and Hugging Face
 
@@ -96,13 +104,22 @@ user's API key. A connection test sends a fixed synthetic message.
 Depending on enabled context categories and the action, a request can include
 the raw transcript, application name and type, window title, up to 80 UTF-16
 units before the caret, up to 40 after it, selected text needed by the action,
-the per-app tone, and up to 12 matching dictionary entries. Correction learning
-uses the smaller span-only payload described above. The provider receives this
+the per-app tone, up to 12 matching dictionary entries, and up to 40 dictionary
+terms (shared names and vocabulary, each at most 40 characters) even when they do
+not appear in the transcript. Dictionary entries and terms are sent only while the
+dictionary context category is enabled; application-scoped terms also require the
+application category. Correction learning
+uses the smaller span-only payload described above. When you choose 从历史找词 on
+the Dictionary page, Lerro compares the raw and final text of AI-processed history
+entries on the Mac and sends each changed fragment (at most 20 characters per
+side) with up to 40 characters of surrounding final text, the application name,
+and the optional Bundle ID to the selected AI. Suggestions, ignored suggestions,
+and the IDs of scanned entries are stored in `dictionary-suggestions.json`. The provider receives this
 content plus normal connection and billing metadata under its terms.
 
 Remote or local AI is required for refinement, translation, automatic
 correction learning, and per-app tone. Apple-only mode still provides raw
-transcription, dictionary-aware recognition, manual dictionary management,
+transcription, manual dictionary management,
 preview, strict delivery, and recovery.
 
 ## Updates

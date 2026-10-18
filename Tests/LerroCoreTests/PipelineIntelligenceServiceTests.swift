@@ -106,79 +106,6 @@ struct PipelineIntelligenceServiceTests {
         }
     }
 
-    @Test("Accumulates streamed chunks into progressive results")
-    func accumulatesStreamedChunks() async throws {
-        let runtime = FakeLanguageModelRuntime(
-            output: "unused",
-            streamChunks: ["Hel", "lo", " ", "world"]
-        )
-        let service = PipelineIntelligenceService(runtime: runtime, modelIdentifier: "stream-model")
-
-        let stream = try await service.processStream(makeRequest(task: .polish))
-        var results: [IntelligenceResult] = []
-        for try await result in stream {
-            results.append(result)
-        }
-
-        #expect(results.map(\.text) == ["Hel", "Hello", "Hello world"])
-        #expect(results.last?.text == "Hello world")
-        #expect(results.allSatisfy { $0.disposition == .insert })
-        #expect(results.allSatisfy { $0.modelIdentifier == "stream-model" })
-        #expect(results.allSatisfy { $0.source == .local })
-
-        let events = await runtime.recordedEvents()
-        #expect(events.count == 2)
-        guard events.count == 2 else { return }
-        guard case .load("stream-model") = events[0],
-              case .generateStream(_, _, 768) = events[1] else {
-            Issue.record("Expected model loading followed by streamed generation")
-            return
-        }
-    }
-
-    @Test("Empty polish stream falls back to the exact transcript")
-    func fallsBackForEmptyPolishStream() async throws {
-        let runtime = FakeLanguageModelRuntime(
-            output: "unused",
-            streamChunks: ["  ", "\n"]
-        )
-        let service = PipelineIntelligenceService(runtime: runtime, modelIdentifier: "stream-model")
-
-        let stream = try await service.processStream(
-            makeRequest(task: .polish, transcript: " uh fallback fallback ")
-        )
-        var results: [IntelligenceResult] = []
-        for try await result in stream {
-            results.append(result)
-        }
-
-        #expect(results.map(\.text) == [" uh fallback fallback "])
-    }
-
-    @Test(
-        "Rejects empty non-polish streams",
-        arguments: [IntelligenceTask.translate]
-    )
-    func rejectsEmptyNonPolishStream(task: IntelligenceTask) async throws {
-        let runtime = FakeLanguageModelRuntime(
-            output: "unused",
-            streamChunks: ["  ", "\n"]
-        )
-        let service = PipelineIntelligenceService(runtime: runtime, modelIdentifier: "stream-model")
-        let stream = try await service.processStream(makeRequest(task: task))
-
-        do {
-            for try await _ in stream {}
-            Issue.record("Expected an empty \(task.rawValue) stream to fail")
-        } catch {
-            guard case LerroError.modelUnavailable(let message) = error else {
-                Issue.record("Received an unexpected stream error: \(error)")
-                return
-            }
-            #expect(message == "本地模型没有生成有效内容")
-        }
-    }
-
     @Test("Removes code fences and wrapping quotation marks")
     func sanitizesGeneratedText() async throws {
         let cases = [
@@ -300,7 +227,7 @@ struct PipelineIntelligenceServiceTests {
         let events = await remote.recordedEvents()
 
         #expect(result.text == "Remote result")
-        #expect(result.modelIdentifier == "deepseek-v4-flash")
+        #expect(result.modelIdentifier == "deepseek-flash")
         #expect(result.source == .remote)
         #expect(await local.recordedEvents().isEmpty)
         #expect(events.count == 1)
@@ -310,6 +237,57 @@ struct PipelineIntelligenceServiceTests {
         }
         #expect(savedConfiguration == configuration)
         #expect(userPrompt.contains(#""transcript":"  exact remote transcript  ""#))
+    }
+
+    @Test("Remote dictate delivers the text field of the JSON response")
+    func remoteDictateUsesJSONText() async throws {
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(
+                output: #"{"fixes":[["程序华","程序化"]],"text":"用程序化完全代替 AI 识图。"}"#
+            ),
+            usage: InMemoryAIUsageRepository()
+        )
+
+        let result = try await service.process(remoteRequest(task: .polish))
+
+        #expect(result.text == "用程序化完全代替 AI 识图。")
+    }
+
+    @Test("Remote dictate falls back to the raw transcript when the JSON is broken")
+    func remoteDictateBrokenJSONFallsBack() async throws {
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(output: #"{"fixes":[],"text":"cut off"#),
+            usage: InMemoryAIUsageRepository()
+        )
+        let request = remoteRequest(task: .polish)
+
+        let result = try await service.process(request)
+
+        #expect(result.text == request.transcript)
+    }
+
+    @Test("Remote dictate keeps plain text output when the model skips the JSON format")
+    func remoteDictateKeepsPlainText() async throws {
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(output: "Plain polished text."),
+            usage: InMemoryAIUsageRepository()
+        )
+
+        let result = try await service.process(remoteRequest(task: .polish))
+
+        #expect(result.text == "Plain polished text.")
+    }
+
+    @Test("Remote translate does not read JSON text")
+    func remoteTranslateIgnoresJSONFormat() async throws {
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(output: "Hello"),
+            usage: InMemoryAIUsageRepository()
+        )
+
+        let result = try await service.process(remoteRequest(task: .translate))
+
+        #expect(result.text == "Hello")
     }
 
     @Test("Remote connection testing delegates to the remote runtime")
@@ -471,6 +449,213 @@ struct PipelineIntelligenceServiceTests {
         }
     }
 
+    @Test("Remote dictate records tokens, feature, provider and model")
+    func remoteDictateRecordsUsage() async throws {
+        let usage = InMemoryAIUsageRepository()
+        let tokens = AITokenUsage(inputTokens: 120, outputTokens: 30, cachedInputTokens: 40)
+        let configuration = RemoteProviderConfiguration(provider: .deepSeek, apiKey: "test-key")
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(output: "Remote result", tokens: tokens),
+            usage: usage
+        )
+
+        _ = try await service.process(remoteRequest(task: .polish, configuration: configuration))
+
+        let records = try await usage.records(since: .distantPast)
+        let record = try #require(records.first)
+        #expect(records.count == 1)
+        #expect(record.feature == .dictate)
+        #expect(record.provider == .deepSeek)
+        #expect(record.modelIdentifier == configuration.modelIdentifier)
+        #expect(record.tokens == tokens)
+        #expect(record.succeeded)
+    }
+
+    @Test("Remote translate records the translate feature")
+    func remoteTranslateRecordsUsage() async throws {
+        let usage = InMemoryAIUsageRepository()
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(output: "Hello"),
+            usage: usage
+        )
+
+        _ = try await service.process(remoteRequest(task: .translate))
+
+        let records = try await usage.records(since: .distantPast)
+        #expect(records.map(\.feature) == [.translate])
+        #expect(records.first?.tokens == nil)
+        #expect(records.first?.succeeded == true)
+    }
+
+    @Test("An explicit usage feature overrides the task default")
+    func honorsExplicitUsageFeature() async throws {
+        let usage = InMemoryAIUsageRepository()
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(output: "Preview"),
+            usage: usage
+        )
+
+        _ = try await service.process(remoteRequest(task: .polish, usageFeature: .tonePreview))
+
+        #expect(try await usage.records(since: .distantPast).map(\.feature) == [.tonePreview])
+    }
+
+    @Test("A failed remote call records an unsuccessful request and rethrows")
+    func recordsRemoteFailure() async throws {
+        let usage = InMemoryAIUsageRepository()
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(
+                output: "unused",
+                tokens: AITokenUsage(inputTokens: 1, outputTokens: 1),
+                generationError: FakeRuntimeError.generationFailed
+            ),
+            usage: usage
+        )
+
+        await #expect(throws: FakeRuntimeError.generationFailed) {
+            try await service.process(remoteRequest(task: .polish))
+        }
+
+        let records = try await usage.records(since: .distantPast)
+        #expect(records.count == 1)
+        #expect(records.first?.succeeded == false)
+        #expect(records.first?.tokens == nil)
+    }
+
+    @Test("A cancelled remote call records nothing")
+    func cancellationRecordsNothing() async throws {
+        let usage = InMemoryAIUsageRepository()
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(
+                output: "unused",
+                generationError: CancellationError()
+            ),
+            usage: usage
+        )
+
+        await #expect(throws: CancellationError.self) {
+            try await service.process(remoteRequest(task: .polish))
+        }
+
+        #expect(try await usage.records(since: .distantPast).isEmpty)
+    }
+
+    @Test("Remote correction classification records dictionary learning usage")
+    func correctionClassificationRecordsUsage() async throws {
+        let usage = InMemoryAIUsageRepository()
+        let tokens = AITokenUsage(inputTokens: 50, outputTokens: 5)
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(output: #"{"candidates":[]}"#, tokens: tokens),
+            usage: usage
+        )
+
+        _ = try await service.classifyCorrection(DictionaryLearningRequest(
+            mode: .remote,
+            remoteProvider: RemoteProviderConfiguration(apiKey: "test-key"),
+            originalSpan: "明天",
+            correctedSpan: "昨天",
+            applicationName: "Notes"
+        ))
+
+        let records = try await usage.records(since: .distantPast)
+        #expect(records.map(\.feature) == [.dictionaryLearning])
+        #expect(records.first?.tokens == tokens)
+    }
+
+    @Test("Connection tests record tokens and the outcome")
+    func connectionTestRecordsUsage() async throws {
+        let usage = InMemoryAIUsageRepository()
+        let tokens = AITokenUsage(inputTokens: 8, outputTokens: 1)
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(
+                output: "unused",
+                connectionOutcome: .success(latencyMilliseconds: 42, tokens: tokens)
+            ),
+            usage: usage
+        )
+
+        _ = try await service.testRemoteConnection(
+            configuration: RemoteProviderConfiguration(apiKey: "test-key")
+        )
+
+        let records = try await usage.records(since: .distantPast)
+        #expect(records.map(\.feature) == [.connectionTest])
+        #expect(records.first?.tokens == tokens)
+        #expect(records.first?.succeeded == true)
+    }
+
+    @Test("A connection test that throws records an unsuccessful request")
+    func failedConnectionTestRecordsUsage() async throws {
+        let usage = InMemoryAIUsageRepository()
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(
+                output: "unused",
+                generationError: FakeRuntimeError.generationFailed
+            ),
+            usage: usage
+        )
+
+        await #expect(throws: FakeRuntimeError.generationFailed) {
+            try await service.testRemoteConnection(
+                configuration: RemoteProviderConfiguration(apiKey: "test-key")
+            )
+        }
+
+        let records = try await usage.records(since: .distantPast)
+        #expect(records.map(\.feature) == [.connectionTest])
+        #expect(records.first?.succeeded == false)
+        #expect(records.first?.tokens == nil)
+    }
+
+    @Test("Local and raw modes record nothing")
+    func localAndRawRecordNothing() async throws {
+        let usage = InMemoryAIUsageRepository()
+        let service = PipelineIntelligenceService(
+            runtime: FakeLanguageModelRuntime(output: "Local result"),
+            remoteRuntime: FakeRemoteLanguageModelRuntime(output: "unused"),
+            modelIdentifier: "local-model",
+            usageRecorder: usage
+        )
+
+        _ = try await service.process(makeRequest(task: .polish))
+        _ = try await service.process(IntelligenceRequest(
+            task: .polish,
+            mode: .raw,
+            transcript: "raw text",
+            context: CapturedContext(applicationName: "Tests")
+        ))
+
+        #expect(try await usage.records(since: .distantPast).isEmpty)
+    }
+
+    private func makeRemoteService(
+        remote: FakeRemoteLanguageModelRuntime,
+        usage: InMemoryAIUsageRepository
+    ) -> PipelineIntelligenceService {
+        PipelineIntelligenceService(
+            runtime: FakeLanguageModelRuntime(output: "unused", loadError: .loadFailed),
+            remoteRuntime: remote,
+            modelIdentifier: "local-model",
+            usageRecorder: usage
+        )
+    }
+
+    private func remoteRequest(
+        task: IntelligenceTask,
+        configuration: RemoteProviderConfiguration = RemoteProviderConfiguration(apiKey: "test-key"),
+        usageFeature: AIUsageFeature? = nil
+    ) -> IntelligenceRequest {
+        IntelligenceRequest(
+            task: task,
+            mode: .remote,
+            remoteProvider: configuration,
+            transcript: "Test transcript",
+            targetLanguage: task == .translate ? "en_US" : nil,
+            context: CapturedContext(applicationName: "Tests"),
+            usageFeature: usageFeature
+        )
+    }
+
     private func makeRequest(
         task: IntelligenceTask,
         transcript: String = "Test transcript"
@@ -493,23 +678,19 @@ private actor FakeLanguageModelRuntime: LocalLanguageModelRuntime {
     enum Event: Equatable, Sendable {
         case load(String)
         case generate(systemPrompt: String, userPrompt: String, maxTokens: Int)
-        case generateStream(systemPrompt: String, userPrompt: String, maxTokens: Int)
     }
 
     private let output: String
-    private let streamChunks: [String]?
     private let loadError: FakeRuntimeError?
     private let generationError: FakeRuntimeError?
     private var events: [Event] = []
 
     init(
         output: String,
-        streamChunks: [String]? = nil,
         loadError: FakeRuntimeError? = nil,
         generationError: FakeRuntimeError? = nil
     ) {
         self.output = output
-        self.streamChunks = streamChunks
         self.loadError = loadError
         self.generationError = generationError
     }
@@ -539,30 +720,6 @@ private actor FakeLanguageModelRuntime: LocalLanguageModelRuntime {
         return output
     }
 
-    func generateStream(
-        systemPrompt: String,
-        userPrompt: String,
-        maxTokens: Int
-    ) throws -> AsyncThrowingStream<String, any Error> {
-        events.append(
-            .generateStream(
-                systemPrompt: systemPrompt,
-                userPrompt: userPrompt,
-                maxTokens: maxTokens
-            )
-        )
-        if let generationError {
-            throw generationError
-        }
-        let chunks = streamChunks ?? [output]
-        return AsyncThrowingStream { continuation in
-            for chunk in chunks {
-                continuation.yield(chunk)
-            }
-            continuation.finish()
-        }
-    }
-
     func status() -> LocalModelStatus {
         LocalModelStatus(
             state: .ready,
@@ -584,14 +741,20 @@ private actor FakeRemoteLanguageModelRuntime: RemoteLanguageModelRuntime {
     }
 
     private let output: String
+    private let tokens: AITokenUsage?
+    private let generationError: (any Error)?
     private let connectionOutcome: RemoteConnectionTestOutcome
     private var events: [Event] = []
 
     init(
         output: String,
+        tokens: AITokenUsage? = nil,
+        generationError: (any Error)? = nil,
         connectionOutcome: RemoteConnectionTestOutcome = .success()
     ) {
         self.output = output
+        self.tokens = tokens
+        self.generationError = generationError
         self.connectionOutcome = connectionOutcome
     }
 
@@ -600,15 +763,25 @@ private actor FakeRemoteLanguageModelRuntime: RemoteLanguageModelRuntime {
         systemPrompt: String,
         userPrompt: String,
         maxTokens: Int
-    ) -> String {
+    ) throws -> RemoteGeneration {
         events.append(.generate(configuration, systemPrompt, userPrompt, maxTokens))
-        return output
+        if let generationError {
+            throw generationError
+        }
+        return RemoteGeneration(
+            text: output,
+            modelIdentifier: configuration.modelIdentifier,
+            tokens: tokens
+        )
     }
 
     func testConnection(
         configuration: RemoteProviderConfiguration
-    ) -> RemoteConnectionTestOutcome {
+    ) throws -> RemoteConnectionTestOutcome {
         events.append(.testConnection(configuration))
+        if let generationError {
+            throw generationError
+        }
         return connectionOutcome
     }
 

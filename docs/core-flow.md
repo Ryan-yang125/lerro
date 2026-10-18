@@ -3,10 +3,10 @@
 Lerro 1.6 的生产主路径固定为：
 
 ```text
-按快捷键 → 居中实时预览 → 再按一次 → 严格写入目标 → HUD 消失
+按快捷键 → 居中实时预览 → 再按一次 → 严格写入目标 → HUD 淡出
 ```
 
-成功写入结束当前交互。HUD 后处理只承担写入失败恢复和自动词典学习提示。
+成功写入在 commit point 淡出 HUD 并结束当前交互。HUD 后处理只承担写入失败恢复和自动词典学习提示。HUD 外观决策见 [ADR 0013](decisions/0013-brand-capsule-hud.md)。
 长期决策见 [ADR 0012](decisions/0012-strict-delivery-ai-dictionary-learning.md)。
 
 ## 参与组件
@@ -72,22 +72,34 @@ idle
 4. 检查启动错误、麦克风、辅助功能和安全输入框。
 5. 通过 `ContextCapturing` 冻结目标应用、元素、文本、选区和安全指纹。
 6. 冻结智能模式与 Provider 配置；本地模型未就绪时当前 Dictate 使用 Apple raw。
-7. 从词典选择当前应用相关条目：应用级优先，其次全局，再按优先级、使用次数和最近使用排序。
-8. 映射为 `SpeechVocabularyTerm`，单次最多 100 条。
-9. 启动 Apple Speech，显示居中波形 HUD，并流式更新 partial transcript。
+7. 等待当前语言的资源准备完成，确认语言受支持后立即启动麦克风，显示居中波形 HUD。
+8. 麦克风打开后在后台准备 SpeechTranscriber 与 SpeechAnalyzer；期间音频按顺序缓存在内存，
+    分析器就绪后先补送缓存再接实时音频，并流式更新 partial transcript。停止发生在分析器就绪前时，
+    停止流程等待准备完成并送完全部缓存音频。
 
-`DictationTranscriber` 使用 `.progressiveLongDictation`。词典 replacement 优先作为
-`AnalysisContext.contextualStrings[.general]`；空 replacement 使用 phrase。大小写与音标折叠后去重。
+空闲时 `AppleSpeechService` 保留一个已建好但未启动的 `AVAudioEngine`：启动时拿到麦克风权限、
+切换麦克风和每次录音结束后保留，设备或默认输入变化时丢弃重建。预热不启动音频 IO，麦克风指示灯
+只在录音期间亮起。
+
+Apple Speech 语言资源在启动和切换听写语言时自动检查并准备。开始听写时再次确保资源已安装；
+缺失时通过系统服务自动下载，准备完成前不打开麦克风。取消听写会阻止等待中的会话启动，
+后台资源准备继续。旧语言的准备结果不能更新新语言状态。
+
+`SpeechTranscriber` 使用 `.progressiveTranscription`，partial 与最终文本经过
+`TranscriptSpacing.normalize` 去掉中文标点两侧的空格。SpeechTranscriber 不使用
+`AnalysisContext.contextualStrings`，词典不发给 Apple Speech，只进入 AI prompt。
 
 ## HUD 实时预览
 
-- 初始宽度约 120 pt，应用名称、实时文本、波形和按钮保持视觉居中。
-- 同一 session 只增宽，最大 420 pt，避免 partial 反复修订造成左右抖动。
-- 达到最大宽度后显示最多两行，并保留最新内容。
-- 左右按钮占对称固定槽位，波形中心不随按钮变化。
-- listening 到 processing 复用当前宽度，以 spring/crossfade 过渡。
-- Reduce Motion 使用即时尺寸与淡入淡出；VoiceOver partial 播报节流。
-- 写入成功立即关闭 HUD；失败进入恢复卡；学习成功显示轻量提示。
+- 所有状态在同一个 40 pt 高的胶囊内完成，宽度以 spring 变化，最大 480 pt。
+- 按键后立即进入 arming：光标常亮、波形压平；麦克风就绪后光标闪烁、波形随音量跳动。
+- 实时文字单行显示，最大 400 pt，旧文字从左侧淡出；左侧显示目标应用图标。
+- 录音中连续 3 秒无人声显示当前麦克风名称；免按住模式前 20 次显示结束键帽；计时 5 秒后出现。
+- AI 处理显示「AI 润色中…」或「翻译中…」；raw 听写跳过处理态。
+- Command-V commit 后 HUD 立即淡出；AI 失败退回原文时显示 2 秒橙色提示。
+- 失败进入胶囊内的恢复态，8 秒后收起；学习成功提示 3 秒，悬停时暂停。
+- HUD 出现在捕获时输入框所在的屏幕。
+- Reduce Motion 使用淡入淡出；VoiceOver partial 播报节流。
 
 ## Apple raw Dictate
 
@@ -120,9 +132,10 @@ AI 缺失、取消或生成失败会显示明确错误并保留失败历史。�
 
 ## 应用语气
 
-个性化页面通过 `ApplicationCataloging` 读取已安装与正在运行的应用、Bundle ID 和真实图标。
+应用语气页面通过 `ApplicationCataloging` 读取已安装与正在运行的应用、Bundle ID 和真实图标。
 用户为一个应用输入 tone instruction，选择的 remote/local AI 使用真实示例运行预览；预览成功后
-保存 `AppToneProfile`。后续 AI Dictate 和 Translate 只使用当前应用命中的 profile。
+保存 `AppToneProfile`。后续 AI Dictate 和 Translate 使用当前应用命中的已启用 profile；没有命中时使用
+`UserPreferences.defaultToneInstruction`，空串表示不加语气。
 
 ## 严格写入事务
 
@@ -152,7 +165,7 @@ commit point 前取消会阻止粘贴并释放已按下按键。commit point 后
 2. 更新 usage 和历史列表。
 3. 符合 AI 自动学习条件时启动观察任务。
 4. 清空 active session、partial transcript 和 capture 状态。
-5. phase 回到 `idle`，HUD 立即消失。
+5. phase 回到 `idle`；HUD 已在 commit point 淡出。
 
 成功路径没有写入回执、撤回、重新听写、语音修改、语音发送或版本恢复。
 
@@ -192,14 +205,14 @@ commit point 前取消会阻止粘贴并释放已按下按键。commit point 后
 4. 本地 UTF-16 差异算法产出 original span、corrected span、前 80/后 40 上下文。
 5. 当前 remote/local AI 使用严格 JSON schema 分类，返回 0–3 个候选。
 6. phrase 必须来自 original span，replacement 必须来自 corrected span，confidence 范围为 0–1。
-7. confidence ≥ 0.7、映射非空且未重复的候选保存为当前应用 scope 的 learned entry。
-8. HUD 显示六秒轻量提示 `已学会：A → B · App`，用户可撤销本批词条。
+7. confidence ≥ 0.7、映射非空且未重复的候选保存为全局 learned entry。
+8. HUD 显示三秒轻量提示 `A → B`，悬停时暂停，用户可撤销本批词条。
 
 应学习人名、品牌、术语、拼写、同音词、音译和中英文专名。语义变化、事实或日期变化、增删句、
 语气修改、结构调整和大段改写返回零候选。AI 输出包含额外字段、代码围栏、超过三条或来源不匹配时
 整体拒绝。
 
-同一词典数据进入 Apple Speech 最多 100 条上下文、remote/local AI prompt、词典页编辑与删除、
+同一词典数据进入 remote/local AI prompt、词典页编辑与删除、
 CSV、应用筛选和全局提升。新 capture、离开 app/field、secure input、AX 失败、编辑器不支持、
 文本过大、超时和任务取消都会安静结束观察。
 
@@ -217,6 +230,12 @@ Onboarding 由八个操作步骤构成：
 8. AI 用户选择真实应用，运行 tone 预览并保存。
 
 Apple-only 用户完成第 6 步后进入首页。本地模型下载可在后台继续，模型可用后完成 AI 步骤。
+
+引导可通过关闭按钮随时退出；Escape 保留给取消练习录音。重新查看保留原有完成状态，入口在设置 → 关于。
+已有 AI 学习词条可直接满足词典练习条件。
+
+词典练习只在 AI 请求期间显示进度，允许取消和重置练习。零候选与请求失败显示明确结果并可重试；
+AI 确认的词条已存在时也可继续，不重复保存。编辑练习文本或离开页面会取消请求，过期结果不进入词典。
 
 ## 失败与取消
 
@@ -251,6 +270,43 @@ Speech event、model result、delivery callback 和 observer event 返回 UI 前
 - 删除历史先删除音频，再删除索引；音频删除失败时保留历史。
 - 启动时只有成功读取历史索引后才清理孤儿 CAF。
 - failed delivery history 保留最终恢复文本，不保存 AX fingerprint 或自动学习 spans。
+
+## 计时观测
+
+每次 capture 有一个 [`CaptureTrace`](../Sources/LerroCore/Models/CaptureTrace.swift)，id 等于 capture
+generation，起点是物理按键时刻，里程碑使用 `ContinuousClock` 单调时间。`AppSession` 持有
+`CaptureTraceRecorder`，只接受当前 generation 的打点；每个里程碑首次写入有效，trace 结束后拒绝
+新打点，旧 Speech、模型或交付回调无法写入新 trace。
+
+| 区段 | 里程碑与打点位置 |
+| --- | --- |
+| 按键 | `hotkeyPressed`（`GlobalHotkeyMonitor` 收到起始物理事件；单修饰键 hold 含 120 ms 判定延迟，单修饰键 toggle 在松开时触发，按住时长计入 `hotkeyDispatch`）→ `hotkeyHandled`（`startCapture`）→ `hudArmed` |
+| App 准备 | `permissionsChecked` → `hotkeysConfigured` → `contextCaptured`（AX）→ `speechResourcesReady` → `speechStartRequested` |
+| 开麦 | `AppleSpeechService.start` 通过 `CaptureMilestoneReporter` 上报 `speechLocaleResolved`、`audioEngineCreated`（复用预热引擎或新建）、`audioInputConfigured`、`audioEngineStarted` |
+| 分析器准备 | 开麦后后台上报 `speechAssetsReserved`、`audioFormatNegotiated`、`analyzerCreated`、`analyzerPrepared`；区段 `analyzerStartup` 为 `audioEngineStarted → analyzerPrepared` |
+| 可以说话 | `listening`（麦克风已在收音，HUD 波形亮起）；随后 `firstAudioBuffer`、`firstPartial` |
+| 结束 | `stopRequested` → `transcriptionFinished` → `processingFinished` → `deliveryCommitted`（Command-V commit）→ `deliveryFinished`（含剪贴板恢复）→ `historySaved` → `finished` |
+
+trace 以 `completed`、`completedWithRawFallback`（AI Dictate 退回原文）、`deliveryFailed`、`failed`
+或 `cancelled` 结束，并记录最后到达的里程碑和无 payload 的错误类别。命名区段由
+`CaptureTraceSegment.summaries` 定义，核心指标 `readyToSpeak` 为 `hotkeyPressed → listening`。
+
+输出：
+
+- os.Logger `app.lerro.mac` / `capture-trace`：每个里程碑一条 debug，结束时两条 notice（命名区段与
+  相邻步骤的毫秒数）。词典学习分类另记一条耗时与候选数量。
+- OSSignposter `app.lerro.mac` / Points of Interest：Capture、Startup、Recording、Transcription、
+  Processing、Delivery 区间和每个里程碑事件。
+- completed 与 deliveryFailed 历史的 `phaseTimings.milestones` 保存距按键的秒数和 `outcome`；
+  取消和其他失败不写历史，只进入日志。历史详情页显示「按键到可以说话」及准备、语音启动、首字。
+- [`script/capture_latency_report.py`](../script/capture_latency_report.py) 只读 `history.json`，
+  输出各区段 p50 / p90 / max 和最慢的几次。
+
+```zsh
+/usr/bin/log stream --level debug --predicate 'subsystem == "app.lerro.mac" AND category == "capture-trace"'
+/usr/bin/log show --last 1d --predicate 'subsystem == "app.lerro.mac" AND category == "capture-trace"'
+python3 script/capture_latency_report.py --since 2026-10-17
+```
 
 ## 模型与下载生命周期
 

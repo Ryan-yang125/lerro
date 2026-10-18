@@ -5,9 +5,12 @@
   --lerro-color-label: CanvasText;
   --lerro-color-secondary-label: GrayText;
   --lerro-color-separator: color-mix(in srgb, CanvasText 18%, transparent);
-  --lerro-color-accent: AccentColor;
-  --lerro-color-brand-ink: #111113;
-  --lerro-color-brand-light: #f5f2ea;
+  --lerro-color-ink: #15161a;
+  --lerro-color-paper: #f6f4ef;
+  --lerro-color-ink-blue: #2f5bff;
+  --lerro-color-ink-blue-on-dark: #4a6bff;
+  --lerro-color-graphite: #8b8c93;
+  --lerro-color-accent: var(--lerro-color-ink-blue);
   --lerro-color-success: #34c759;
   --lerro-color-warning: #ff9500;
   --lerro-color-error: #ff3b30;
@@ -31,10 +34,22 @@
   --lerro-motion-crossfade: 160ms;
   --lerro-motion-panel: 180ms;
   --lerro-spring-response: 320ms;
+  --lerro-cursor-blink: 1.05s;
+  --lerro-baseline-draw: 1.2s;
+
+  /* Mark geometry in brand units */
+  --lerro-mark-cursor-width: 10;
+  --lerro-mark-cursor-height: 46;
+  --lerro-mark-gap: 6;
+  --lerro-mark-baseline-width: 36;
+  --lerro-mark-baseline-height: 9;
+  --lerro-mark-width: 36;
+  --lerro-mark-height: 61;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
+    --lerro-color-accent: var(--lerro-color-ink-blue-on-dark);
     --lerro-color-success: #30d158;
     --lerro-color-warning: #ff9f0a;
     --lerro-color-error: #ff453a;

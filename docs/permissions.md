@@ -15,8 +15,9 @@ Usage descriptions live in [`config/Info.plist`](../config/Info.plist), entitlem
 in [`config/Lerro.entitlements`](../config/Lerro.entitlements), and permission checks
 in [`MacPermissionService.swift`](../Sources/LerroMac/System/MacPermissionService.swift).
 
-Apple Speech authorization and language-resource readiness are checked as part of
-the Apple Dictate preparation task. Language assets are managed by macOS.
+Apple Speech language assets are managed by macOS and prepared automatically at
+launch, on recognition-language changes, and before capture as needed. Resource
+preparation is independent of microphone and Accessibility authorization.
 
 ## Identity and consent
 
@@ -46,7 +47,7 @@ The user must:
 
 1. confirm the chosen history and audio policy;
 2. grant Microphone and Speech authorization;
-3. prepare the selected Speech language resource;
+3. wait for the selected Speech language resource to prepare automatically;
 4. complete the microphone level test;
 5. grant Accessibility before recording and testing the global shortcut;
 6. complete a real Dictate write and a simulated failure-recovery copy.

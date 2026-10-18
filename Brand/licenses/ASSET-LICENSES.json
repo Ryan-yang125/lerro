@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "project": "Lerro",
-  "generatedAt": "2026-07-30",
+  "generatedAt": "2026-10-16",
   "assets": [
     {
-      "glob": "source/logo/**, source/app-icon/**, source/menu-bar/**, exports/logo/**, exports/app-icon/**, exports/menu-bar/**",
-      "origin": "Original deterministic artwork created for Lerro",
+      "glob": "source/logo/**, source/app-icon/**, source/menu-bar/**, source/icons/**, exports/logo/**, exports/app-icon/**, exports/menu-bar/**",
+      "origin": "Original artwork created for Lerro: cursor mark, wordmark composition, Icon Composer app icon bundle, menu bar template frames, product glyphs",
       "creator": "Lerro project contributors",
       "license": "LicenseRef-Lerro-Trademark",
-      "notes": "Name and logo usage follows the project trademark policy when that policy is added to the public repository."
+      "notes": "The letters \"erro\" in wordmark and lockup files are outlines of Inter SemiBold; see fonts[Inter] and licenses/Inter-OFL.txt. Name and logo usage follows the project trademark policy when that policy is added to the public repository."
     },
     {
       "glob": "source/templates/**, templates/**, source/validation/**, validation/**, guidelines/**",
@@ -37,6 +37,18 @@
     {
       "family": "SF Mono",
       "distribution": "Provided by Apple developer tools where available; referenced through a fallback stack",
+      "bundled": false
+    },
+    {
+      "family": "Inter",
+      "version": "4.1",
+      "author": "Rasmus Andersson",
+      "license": "SIL Open Font License 1.1",
+      "licenseFile": "licenses/Inter-OFL.txt",
+      "source": "https://github.com/rsms/inter",
+      "usage": "SemiBold glyph outlines for \"erro\" in the Lerro wordmark",
+      "outlinedInto": "source/logo/lerro-wordmark*.svg, source/logo/lerro-lockup-*.svg and their exports",
+      "distribution": "Outlined to vector paths; the font files stay out of the repository",
       "bundled": false
     }
   ],

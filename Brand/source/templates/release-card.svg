@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
   <title>Lerro release card</title>
-  <rect width="1200" height="630" fill="#1C1C1E"/>
-  <rect x="48" y="48" width="1104" height="534" rx="34" fill="#242426" stroke="#545458"/>
-  <g transform="translate(96 82) scale(1.45)">
-    <path d="M8 10V42C8 49 12 52 19 52H20V38C20 30 24 26 30 26C36 26 40 30 40 38V52V38C40 30 44 26 50 26C56 26 60 30 60 38V52" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M78.34 35.24A11 11 0 1 0 78.34 42.76" stroke="#FFFFFF" stroke-width="7" stroke-linecap="butt"/>
+  <rect width="1200" height="630" fill="#15161A"/>
+  <rect x="48" y="48" width="1104" height="534" rx="34" fill="#1B1C21" stroke="#363740"/>
+  <g transform="translate(96 110) scale(2.3)">
+    <rect width="10" height="46" rx="5" fill="#4A6BFF"/>
+    <rect y="52" width="36" height="9" rx="4.5" fill="#F6F4EF"/>
+    <path d="M57.7 61.86C66.55 61.86 73.57 56.74 75 49.32L66.55 49.32C65.51 52.55 62.46 54.73 57.92 54.73C51.83 54.73 48.32 50.61 48.1 44.45L75.46 44.45L75.46 41.98C75.46 30.38 68.23 22.32 57.34 22.32C46.74 22.32 39.26 30.63 39.26 42.13C39.26 53.59 46.35 61.86 57.7 61.86ZM48.17 38.22C48.78 32.81 52.26 29.48 57.49 29.48C62.71 29.48 66.22 32.81 66.8 38.22ZM79.39 61L88.41 61L88.41 39.58C88.41 33.67 91.74 30.7 96.04 30.7C97.83 30.7 99.62 30.88 100.3 30.99L100.3 22.97C99.59 22.89 98.58 22.82 97.37 22.82C92.5 22.82 89.6 25.11 88.2 29.45L88.09 29.45L88.09 23.18L79.39 23.18ZM103.69 61L112.72 61L112.72 39.58C112.72 33.67 116.05 30.7 120.34 30.7C122.14 30.7 123.93 30.88 124.61 30.99L124.61 22.97C123.89 22.89 122.89 22.82 121.67 22.82C116.8 22.82 113.9 25.11 112.5 29.45L112.39 29.45L112.39 23.18L103.69 23.18ZM144.04 61.86C155.18 61.86 162.7 53.87 162.7 42.13C162.7 30.38 155.18 22.32 144.04 22.32C132.9 22.32 125.38 30.38 125.38 42.13C125.38 53.87 132.9 61.86 144.04 61.86ZM144.04 54.3C138.2 54.3 134.51 49.68 134.51 42.13C134.51 34.53 138.24 29.88 144.04 29.88C149.8 29.88 153.53 34.57 153.53 42.13C153.53 49.65 149.84 54.3 144.04 54.3Z" fill="#F6F4EF"/>
   </g>
-  <text x="96" y="250" fill="#FFFFFF" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif" font-size="72" font-weight="650" letter-spacing="-2.8">Lerro</text>
   <text x="96" y="304" fill="#EBEBF5" fill-opacity="0.68" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="26">Speak freely. Write clearly.</text>
-  <rect x="96" y="430" width="166" height="48" rx="24" fill="#F2F2F2"/>
+  <rect x="96" y="430" width="166" height="48" rx="24" fill="#F6F4EF"/>
   <text x="179" y="461" text-anchor="middle" fill="#292929" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="18" font-weight="600">VERSION 0.0.0</text>
   <text x="96" y="528" fill="#EBEBF5" fill-opacity="0.52" font-family="'SF Mono', ui-monospace, monospace" font-size="16">SIGNED · NOTARIZED · OPEN SOURCE</text>
-  <g transform="translate(704 112) scale(5.5)" opacity="0.92">
-    <path d="M8 10V42C8 49 12 52 19 52H20V38C20 30 24 26 30 26C36 26 40 30 40 38V52V38C40 30 44 26 50 26C56 26 60 30 60 38V52" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M78.34 35.24A11 11 0 1 0 78.34 42.76" stroke="#FFFFFF" stroke-width="7" stroke-linecap="butt"/>
+  <g transform="translate(805 148) scale(5.5)">
+    <rect width="10" height="46" rx="5" fill="#4A6BFF"/>
+    <rect y="52" width="36" height="9" rx="4.5" fill="#F6F4EF"/>
   </g>
 </svg>

@@ -61,3 +61,20 @@ public actor InMemoryPreferencesRepository: PreferencesRepository {
     public func load() -> UserPreferences { value }
     public func save(_ preferences: UserPreferences) { value = preferences }
 }
+
+public actor InMemoryAIUsageRepository: AIUsageRepository {
+    private var values: [AIUsageRecord]
+    public init(records: [AIUsageRecord] = []) { self.values = records }
+    public func append(_ record: AIUsageRecord) { values.append(record) }
+    public func records(since: Date) -> [AIUsageRecord] {
+        values.filter { $0.date >= since }.sorted { $0.date < $1.date }
+    }
+    public func deleteAll() { values.removeAll() }
+}
+
+public actor InMemoryDictionarySuggestionRepository: DictionarySuggestionRepository {
+    private var value: DictionarySuggestionState
+    public init(value: DictionarySuggestionState = DictionarySuggestionState()) { self.value = value }
+    public func load() -> DictionarySuggestionState { value }
+    public func save(_ state: DictionarySuggestionState) { value = state }
+}

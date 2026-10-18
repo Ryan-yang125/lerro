@@ -178,7 +178,8 @@ required_resources=(
     PrivacyInfo.xcprivacy
     PrivacyPolicy.html
     TermsOfUse.html
-    icon.icns
+    AppIcon.icns
+    Assets.car
     en.lproj/Localizable.strings
     en.lproj/InfoPlist.strings
     zh-Hans.lproj/Localizable.strings
@@ -187,8 +188,16 @@ required_resources=(
     MenuBar/LerroMenuIdleTemplate@2x.png
     MenuBar/LerroMenuListeningTemplate.png
     MenuBar/LerroMenuListeningTemplate@2x.png
-    MenuBar/LerroMenuProcessingTemplate.png
-    MenuBar/LerroMenuProcessingTemplate@2x.png
+    MenuBar/LerroMenuListeningDimTemplate.png
+    MenuBar/LerroMenuListeningDimTemplate@2x.png
+    MenuBar/LerroMenuProcessing1Template.png
+    MenuBar/LerroMenuProcessing1Template@2x.png
+    MenuBar/LerroMenuProcessing2Template.png
+    MenuBar/LerroMenuProcessing2Template@2x.png
+    MenuBar/LerroMenuProcessing3Template.png
+    MenuBar/LerroMenuProcessing3Template@2x.png
+    MenuBar/LerroMenuProcessing4Template.png
+    MenuBar/LerroMenuProcessing4Template@2x.png
     MenuBar/LerroMenuErrorTemplate.png
     MenuBar/LerroMenuErrorTemplate@2x.png
 )
@@ -216,8 +225,16 @@ menu_bar_resource_names=(
     LerroMenuIdleTemplate@2x.png
     LerroMenuListeningTemplate.png
     LerroMenuListeningTemplate@2x.png
-    LerroMenuProcessingTemplate.png
-    LerroMenuProcessingTemplate@2x.png
+    LerroMenuListeningDimTemplate.png
+    LerroMenuListeningDimTemplate@2x.png
+    LerroMenuProcessing1Template.png
+    LerroMenuProcessing1Template@2x.png
+    LerroMenuProcessing2Template.png
+    LerroMenuProcessing2Template@2x.png
+    LerroMenuProcessing3Template.png
+    LerroMenuProcessing3Template@2x.png
+    LerroMenuProcessing4Template.png
+    LerroMenuProcessing4Template@2x.png
     LerroMenuErrorTemplate.png
     LerroMenuErrorTemplate@2x.png
 )
@@ -244,10 +261,19 @@ for resource_name in "${menu_bar_resource_names[@]}"; do
         exit 1
     }
 done
-cmp -s "$app_path/Contents/Resources/icon.icns" "$project_dir/Brand/exports/app-icon/Lerro.icns" || {
-    print -u2 "Packaged app icon differs from the Brand Kit."
-    exit 1
-}
+for icon_resource_name in AppIcon.icns Assets.car; do
+    packaged_icon_resource="$app_path/Contents/Resources/$icon_resource_name"
+    source_icon_resource="$project_dir/Sources/Lerro/Resources/$icon_resource_name"
+    brand_icon_resource="$project_dir/Brand/exports/app-icon/$icon_resource_name"
+    cmp -s "$packaged_icon_resource" "$source_icon_resource" || {
+        print -u2 "Packaged app icon resource differs from app source: $icon_resource_name"
+        exit 1
+    }
+    cmp -s "$source_icon_resource" "$brand_icon_resource" || {
+        print -u2 "App icon resource differs from the Brand Kit: $icon_resource_name"
+        exit 1
+    }
+done
 expected_bundles=(mlx-swift_Cmlx.bundle swift-crypto_Crypto.bundle swift-transformers_Hub.bundle)
 for bundle_name in "${expected_bundles[@]}"; do
     bundle_path="$app_path/Contents/Resources/$bundle_name"

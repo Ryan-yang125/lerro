@@ -77,6 +77,9 @@ public struct AccessibilityContextService: ContextCapturing {
             let focusedText = completeFocusedText.map { String($0.prefix(2_048)) }
             let windowTitle = focusedWindow.flatMap { copyString(from: $0, attribute: kAXTitleAttribute as CFString) }
 
+            let focusedElementScreenFrame = copyScreenFrame(from: focusedElement)
+                ?? copyScreenFrame(from: focusedWindow)
+
             return CapturedContext(
                 applicationName: appName,
                 processIdentifier: processIdentifier,
@@ -105,7 +108,8 @@ public struct AccessibilityContextService: ContextCapturing {
                     : completeFocusedText?.hashValue,
                 selectedRange: selectedRange.map {
                     UTF16TextRange(location: $0.location, length: $0.length)
-                }
+                },
+                focusedElementScreenFrame: focusedElementScreenFrame
             )
         }
     }
@@ -209,4 +213,51 @@ private func copyRange(from element: AXUIElement, attribute: CFString) -> CFRang
         return nil
     }
     return range
+}
+
+@MainActor
+private func copyScreenFrame(from element: AXUIElement?) -> ScreenRect? {
+    guard let element,
+          let position = copyPoint(from: element, attribute: kAXPositionAttribute as CFString),
+          let size = copySize(from: element, attribute: kAXSizeAttribute as CFString),
+          size.width > 0,
+          size.height > 0,
+          let primaryScreen = NSScreen.screens.first else {
+        return nil
+    }
+    return ScreenRect(
+        x: position.x,
+        y: primaryScreen.frame.height - position.y - size.height,
+        width: size.width,
+        height: size.height
+    )
+}
+
+private func copyAXValue(from element: AXUIElement, attribute: CFString, type: AXValueType) -> AXValue? {
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+          let value,
+          CFGetTypeID(value) == AXValueGetTypeID() else {
+        return nil
+    }
+    let axValue = unsafeDowncast(value, to: AXValue.self)
+    return AXValueGetType(axValue) == type ? axValue : nil
+}
+
+private func copyPoint(from element: AXUIElement, attribute: CFString) -> CGPoint? {
+    var point = CGPoint.zero
+    guard let axValue = copyAXValue(from: element, attribute: attribute, type: .cgPoint),
+          AXValueGetValue(axValue, .cgPoint, &point) else {
+        return nil
+    }
+    return point
+}
+
+private func copySize(from element: AXUIElement, attribute: CFString) -> CGSize? {
+    var size = CGSize.zero
+    guard let axValue = copyAXValue(from: element, attribute: attribute, type: .cgSize),
+          AXValueGetValue(axValue, .cgSize, &size) else {
+        return nil
+    }
+    return size
 }

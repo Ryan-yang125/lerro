@@ -59,7 +59,7 @@ Onboarding 需要让首次用户通过真实操作完成可用主链路，并针
 3. delivered text 必须在 baseline 唯一，diff 必须与其范围相交；本地 UTF-16 算法输出最小
    original/corrected spans 与前 80/后 40 context。
 4. local/remote AI 使用严格 JSON schema 返回 0–3 candidates。AI 负责学习判断，diff 代码只定位变化。
-5. phrase/replacement 必须来自输入 spans，confidence ≥ 0.7 的非重复 candidate 保存为当前 app scope。
+5. phrase/replacement 必须来自输入 spans，confidence ≥ 0.7 的非重复 candidate 保存为当前 app scope（2026-10-18 起改为全局保存）。
 6. names、brands、technical terms、spelling、homophones、transliterations 和 mixed-language proper
    nouns 可学习；meaning/fact/date/time/tone/add/delete/restructure/broad rewrite 返回零 candidates。
 7. 学习成功显示六秒轻提示和 Undo；词条保存到标准 `DictionaryEntry`。
@@ -69,7 +69,7 @@ Onboarding 需要让首次用户通过真实操作完成可用主链路，并针
 ### 4. 统一词典
 
 1. `SpeechTranscribing.start` 接收 `[SpeechVocabularyTerm]`。
-2. AppSession 选择当前 app 最相关的 non-snippet entries，app scope 排在 global 前，单次最多 100。
+2. AppSession 选择当前 app 最相关的 non-snippet entries，app scope 排在 global 前，单次最多 100（ADR 0015 起不再发给 Apple Speech）。
 3. `AppleSpeechService` 使用 progressive `DictationTranscriber` 与
    `AnalysisContext.contextualStrings[.general]` 注入去重 replacement/phrase。
 4. 同一 dictionary 进入 local/remote prompt、词典页编辑/删除/CSV/scope 管理。
@@ -143,11 +143,9 @@ V1.6 直接移除旧生产入口和接口，不增加兼容层。`UserPreference
 ## 验证
 
 ```zsh
-swift test --filter DictionaryLearning
+swift test --filter PipelineIntelligenceServiceTests
 swift test --filter AppleSpeechServiceTests
 swift test --filter V16SystemAdapterTests
-swift test --filter CaptureHUDVisualStateTests
-swift test --filter OnboardingV16FlowTests
 swift test --filter AppSessionCoreFlowTests
 swift test
 ./script/build_and_run.sh --release --no-launch

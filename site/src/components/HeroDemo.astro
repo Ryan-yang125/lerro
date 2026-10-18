@@ -1,0 +1,157 @@
+---
+import type { Lang } from "../site";
+import { home } from "../data/home";
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const { demo } = home[lang];
+const config = JSON.stringify({
+  scenarios: demo.scenarios,
+  hints: demo.hints,
+  polishing: demo.polishing,
+});
+---
+
+<div class="stage" id="stage" aria-label={demo.aria} data-demo={config}>
+  <div class="win">
+    <div class="bar">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="t" id="winTitle"></div>
+    </div>
+
+    <div class="scene" data-scene="chat">
+      <div class="bubbles">
+        <div class="bub extra">{demo.chat.earlier}</div>
+        <div class="bub me extra">{demo.chat.reply}</div>
+        <div class="bub">{demo.chat.question}</div>
+        <div class="bub me pasted" data-out hidden></div>
+      </div>
+      <div class="inputbar" data-field><span class="caret"></span></div>
+    </div>
+
+    <div class="scene doc" data-scene="note">
+      <h4>{demo.note.heading}</h4>
+      {demo.note.lines.map((line) => <p>{line}</p>)}
+      <p class="typing" data-field><span class="caret"></span></p>
+    </div>
+
+    <div class="scene" data-scene="mail">
+      <div class="mrow">{demo.mail.toLabel} <b>{demo.mail.toName}</b></div>
+      <div class="mrow">{demo.mail.subjectLabel} <b>{demo.mail.subjectText}</b></div>
+      <div class="mbody" data-field><span class="caret"></span></div>
+    </div>
+  </div>
+
+  <div class="hud" id="hud"></div>
+  <div class="key"><div class="keycap" id="keycap">Fn</div><span id="keyhint">{demo.hints.start}</span></div>
+</div>
+
+<script>
+  interface Scenario {
+    scene: string;
+    title: string;
+    icon: string;
+    sym: string;
+    raw: string;
+    out: string;
+  }
+  interface DemoConfig {
+    scenarios: Scenario[];
+    hints: { start: string; speaking: string; polish: string; done: string };
+    polishing: string;
+  }
+
+  const stage = document.getElementById("stage") as HTMLElement;
+  const { scenarios, hints, polishing }: DemoConfig = JSON.parse(stage.dataset.demo ?? "{}");
+  const hud = document.getElementById("hud") as HTMLElement;
+  const keycap = document.getElementById("keycap") as HTMLElement;
+  const hint = document.getElementById("keyhint") as HTMLElement;
+  const title = document.getElementById("winTitle") as HTMLElement;
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  const icon = (s: Scenario, cls = "appicon s") =>
+    `<span class="${cls} ${s.icon}"><svg viewBox="0 0 16 16"><use href="#${s.sym}"/></svg></span>`;
+  const sceneEl = (s: Scenario) => document.querySelector(`.scene[data-scene="${s.scene}"]`) as HTMLElement;
+
+  let dotsTimer: number | undefined;
+  function dots(n = 9) {
+    return '<span class="dots">' + "<i></i>".repeat(n) + "</span>";
+  }
+  function animateDots(on: boolean) {
+    clearInterval(dotsTimer);
+    if (!on) return;
+    dotsTimer = window.setInterval(
+      () => hud.querySelectorAll<HTMLElement>(".dots i").forEach((i) => (i.style.height = 4 + Math.random() * 16 + "px")),
+      110,
+    );
+  }
+  async function press() {
+    keycap.classList.add("down");
+    await wait(140);
+    keycap.classList.remove("down");
+  }
+  function setScene(s: Scenario) {
+    document.querySelectorAll<HTMLElement>(".scene").forEach((el) => el.classList.toggle("on", el.dataset.scene === s.scene));
+    title.innerHTML = icon(s) + s.title;
+  }
+  function reset(s: Scenario) {
+    const sc = sceneEl(s);
+    (sc.querySelector("[data-field]") as HTMLElement).innerHTML = '<span class="caret"></span>';
+    const o = sc.querySelector<HTMLElement>("[data-out]");
+    if (o) {
+      o.hidden = true;
+      o.innerHTML = "";
+    }
+  }
+  function finalState(s: Scenario) {
+    const sc = sceneEl(s);
+    const o = sc.querySelector<HTMLElement>("[data-out]");
+    if (o) {
+      o.innerHTML = s.out;
+      o.hidden = false;
+    } else {
+      (sc.querySelector("[data-field]") as HTMLElement).innerHTML = `<span class="pasted">${s.out}</span><span class="caret"></span>`;
+    }
+  }
+  async function run() {
+    if (reduce) {
+      const s = scenarios[0];
+      setScene(s);
+      finalState(s);
+      return;
+    }
+    for (let k = 0; ; k = (k + 1) % scenarios.length) {
+      const s = scenarios[k];
+      reset(s);
+      setScene(s);
+      hint.textContent = hints.start;
+      await wait(1100);
+      await press();
+      hint.textContent = hints.speaking;
+      hud.innerHTML = '<span class="cur"></span>' + dots();
+      hud.classList.add("show");
+      animateDots(true);
+      await wait(700);
+      animateDots(false);
+      hud.innerHTML = icon(s) + '<span class="txt"><span></span></span><span class="cur"></span>';
+      const t = hud.querySelector(".txt span") as HTMLElement;
+      for (const ch of s.raw) {
+        t.textContent += ch;
+        await wait(ch === "，" || ch === "。" || ch === "？" ? 160 : 52);
+      }
+      await wait(500);
+      await press();
+      hint.textContent = hints.polish;
+      hud.innerHTML = icon(s) + `<span class="proc">${polishing}</span><span class="x"><svg viewBox="0 0 10 10"><use href="#i-x"/></svg></span>`;
+      await wait(950);
+      hud.classList.remove("show");
+      finalState(s);
+      hint.textContent = hints.done;
+      await wait(3400);
+    }
+  }
+  run();
+</script>

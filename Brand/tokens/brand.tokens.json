@@ -99,23 +99,47 @@
       "preview": { "light": "#E3E3E3", "dark": "#383838" },
       "increaseContrast": { "light": "#858585", "dark": "#787878" }
     },
-    "accent": { "semantic": "macOSControlAccentColor" },
+    "ink": {
+      "kind": "fixedBrandArtwork",
+      "preview": { "light": "#15161A", "dark": "#15161A" },
+      "usage": "appIconPlate, hudCapsule, reversedWordmarkBackground"
+    },
+    "paper": {
+      "kind": "fixedBrandArtwork",
+      "preview": { "light": "#F6F4EF", "dark": "#F6F4EF" },
+      "usage": "baseline, lightBackground, hudText"
+    },
+    "inkBlue": {
+      "kind": "fixedBrandArtwork",
+      "preview": { "light": "#2F5BFF", "dark": "#2F5BFF" },
+      "usage": "cursor, mainWindowAccentLightAppearance"
+    },
+    "inkBlueOnDark": {
+      "kind": "fixedBrandArtwork",
+      "preview": { "light": "#4A6BFF", "dark": "#4A6BFF" },
+      "usage": "cursor and accent on dark backgrounds"
+    },
+    "graphite": {
+      "kind": "fixedBrandArtwork",
+      "preview": { "light": "#8B8C93", "dark": "#8B8C93" },
+      "usage": "secondaryInformation"
+    },
+    "accent": {
+      "kind": "adaptiveBrand",
+      "preview": { "light": "#2F5BFF", "dark": "#4A6BFF" },
+      "alias": "inkBlue / inkBlueOnDark"
+    },
     "accentHover": { "alias": "accent", "opacity": 0.88 },
     "accentPressed": { "alias": "accent", "opacity": 0.72 },
     "primaryAction": { "alias": "accent" },
     "primaryActionHover": { "alias": "accentHover" },
     "primaryActionPressed": { "alias": "accentPressed" },
-    "primaryActionForeground": { "semantic": "macOSAlternateSelectedControlTextColor" },
+    "primaryActionForeground": {
+      "kind": "fixedBrandArtwork",
+      "preview": { "light": "#FFFFFF", "dark": "#FFFFFF" }
+    },
     "focusBorder": { "alias": "accent" },
     "selection": { "alias": "fillSelected" },
-    "brandInk": {
-      "kind": "fixedBrandArtwork",
-      "preview": { "light": "#111113", "dark": "#111113" }
-    },
-    "brandLight": {
-      "kind": "fixedBrandArtwork",
-      "preview": { "light": "#F5F2EA", "dark": "#F5F2EA" }
-    },
     "success": {
       "semantic": "systemGreen",
       "preview": { "light": "#34C759", "dark": "#30D158" }
@@ -141,8 +165,7 @@
   "radius": {
     "navigation": 8,
     "control": 8,
-    "card": 16,
-    "appIcon": 210
+    "card": 16
   },
   "icon": { "navigation": 14, "card": 20 },
   "shape": { "primaryCTA": "capsule" },
@@ -162,11 +185,49 @@
       "processingSeconds": 0.08,
       "controlDisclosureSeconds": 0.2,
       "controlOpacitySeconds": 0.1,
-      "behaviorChanged": false,
-      "processingColor": "macOSControlAccentColor"
+      "behaviorChanged": false
+    },
+    "mark": {
+      "cursorBlinkSeconds": 1.05,
+      "cursorBlinkCurve": "step",
+      "baselineDrawSeconds": 1.2,
+      "onboardingBlinkCount": 1,
+      "menuBar": {
+        "listeningFrameSeconds": 0.525,
+        "processingFrameSeconds": 0.15
+      }
     }
   },
-  "stroke": { "symbol": 7, "micro16": 7.5, "micro24": 7, "menuBar": 1.75 },
-  "symbolGrid": { "width": 80, "height": 64 },
-  "minimumSize": { "micro": 16, "symbol": 24, "horizontalLockupWidth": 96 }
+  "mark": {
+    "unit": "brandUnit",
+    "cursor": { "x": 0, "y": 0, "width": 10, "height": 46, "cornerRadius": 5 },
+    "gap": 6,
+    "baseline": { "x": 0, "y": 52, "width": 36, "height": 9, "cornerRadius": 4.5 },
+    "size": { "width": 36, "height": 61 },
+    "small": {
+      "belowPixelHeight": 32,
+      "cursorWidth": 13,
+      "baselineHeight": 12,
+      "gap": 5
+    },
+    "clearSpace": "cursorWidth",
+    "minimumHeightPixels": 12,
+    "minimumAppIconPixels": 16
+  },
+  "wordmark": {
+    "text": "Lerro",
+    "firstLetter": "mark",
+    "rest": { "text": "erro", "source": "Inter 4.1 SemiBold", "form": "outlinedPaths", "fontDistributed": false }
+  },
+  "menuBar": {
+    "pointSize": 18,
+    "template": true,
+    "frames": ["Idle", "Listening", "ListeningDim", "Processing1", "Processing2", "Processing3", "Processing4", "Error"],
+    "geometry": {
+      "cursor": { "x": 4, "y": 2, "width": 3, "height": 10, "cornerRadius": 1.5 },
+      "baseline": { "x": 4, "y": 13.5, "width": 10, "height": 2.5, "cornerRadius": 1.25 },
+      "errorCursor": { "x": 4, "y": 2, "width": 3, "height": 6.5, "cornerRadius": 1.5 },
+      "errorDot": { "cx": 5.5, "cy": 10.8, "r": 1.5 }
+    }
+  }
 }

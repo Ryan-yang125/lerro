@@ -97,4 +97,4 @@ v1.5 直接采用带 `detectSpeechEndpoint` 的 Speech 协议并移除旧签名�
 - `docs/privacy-security.md`
 - `docs/testing.md`
 - `docs/releases/v1.5.0.md`
-- `docs/releases/v1.3-v1.5-acceptance.md`
+- `docs/releases/v1.3-v1.6-acceptance.md`

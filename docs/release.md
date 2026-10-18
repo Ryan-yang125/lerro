@@ -196,7 +196,8 @@ Lerro.app/
     │   ├── PrivacyPolicy.html
     │   ├── TermsOfUse.html
     │   ├── ThirdPartyLicenses/
-    │   └── icon.icns
+    │   ├── AppIcon.icns
+    │   └── Assets.car
     └── _CodeSignature/
 ```
 
@@ -336,7 +337,7 @@ LERRO_LIVE_MODEL_OFFLINE=1 \
 ./script/test_live_remote.sh
 ```
 
-该入口使用产品 OpenAI-compatible runtime 完成固定连接探针、英文自我修正生成和生产七例
+该入口使用产品 OpenAI-compatible runtime 完成固定连接探针、英文自我修正生成和生产九例
 prompt 的中文噪声转写整理。发布记录
 保存 Provider、Model ID、延迟、合成输出结论和网络条件，排除 API Key、Authorization、
 请求 JSON 与真实用户上下文。完整通过条件见

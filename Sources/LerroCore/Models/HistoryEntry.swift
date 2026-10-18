@@ -29,21 +29,79 @@ public struct HistoryPhaseTimings: Codable, Equatable, Hashable, Sendable {
     public var transcription: TimeInterval
     public var processing: TimeInterval
     public var delivery: TimeInterval
+    /// Seconds from the hotkey press on the monotonic clock. Empty for
+    /// entries saved before capture tracing existed.
+    public var milestones: [CaptureMilestone: TimeInterval]
+    public var outcome: CaptureTraceOutcome?
 
     public init(
         recording: TimeInterval,
         transcription: TimeInterval,
         processing: TimeInterval,
-        delivery: TimeInterval
+        delivery: TimeInterval,
+        milestones: [CaptureMilestone: TimeInterval] = [:],
+        outcome: CaptureTraceOutcome? = nil
     ) {
         self.recording = recording
         self.transcription = transcription
         self.processing = processing
         self.delivery = delivery
+        self.milestones = milestones
+        self.outcome = outcome
+    }
+
+    /// Snapshot of an open trace at history-save time.
+    public init(trace: CaptureTrace, outcome: CaptureTraceOutcome) {
+        self.init(
+            recording: trace.duration(of: .recording) ?? 0,
+            transcription: trace.duration(of: .transcription) ?? 0,
+            processing: trace.duration(of: .processing) ?? 0,
+            delivery: trace.duration(of: .delivery) ?? 0,
+            milestones: trace.offsets,
+            outcome: outcome
+        )
     }
 
     public var total: TimeInterval {
         recording + transcription + processing + delivery
+    }
+
+    public func duration(of segment: CaptureTraceSegment) -> TimeInterval? {
+        guard let from = milestones[segment.from], let to = milestones[segment.to] else { return nil }
+        return to - from
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case recording, transcription, processing, delivery, milestones, outcome
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        recording = try container.decode(TimeInterval.self, forKey: .recording)
+        transcription = try container.decode(TimeInterval.self, forKey: .transcription)
+        processing = try container.decode(TimeInterval.self, forKey: .processing)
+        delivery = try container.decode(TimeInterval.self, forKey: .delivery)
+        let rawMilestones = try container.decodeIfPresent([String: TimeInterval].self, forKey: .milestones) ?? [:]
+        milestones = Dictionary(uniqueKeysWithValues: rawMilestones.compactMap { key, value in
+            CaptureMilestone(rawValue: key).map { ($0, value) }
+        })
+        outcome = try container.decodeIfPresent(String.self, forKey: .outcome)
+            .flatMap(CaptureTraceOutcome.init(rawValue:))
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(recording, forKey: .recording)
+        try container.encode(transcription, forKey: .transcription)
+        try container.encode(processing, forKey: .processing)
+        try container.encode(delivery, forKey: .delivery)
+        if !milestones.isEmpty {
+            try container.encode(
+                Dictionary(uniqueKeysWithValues: milestones.map { ($0.key.rawValue, $0.value) }),
+                forKey: .milestones
+            )
+        }
+        try container.encodeIfPresent(outcome, forKey: .outcome)
     }
 }
 

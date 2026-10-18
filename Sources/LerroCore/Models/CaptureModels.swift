@@ -4,40 +4,7 @@ public enum SidebarDestination: String, CaseIterable, Codable, Sendable {
     case home
     case history
     case dictionary
-    case personalization
-}
-
-public enum SettingsDestination: String, CaseIterable, Codable, Sendable {
-    case account
-    case settings
-    case intelligence
-    case personal
-    case about
-    case help
-    case releaseNotes
-}
-
-public enum SettingsEntryPoint: String, CaseIterable, Codable, Sendable {
-    case account
-    case settings
-    case intelligence
-    case personalization
-    case upgrade
-    case invitation
-    case recommendation
-
-    public var destination: SettingsDestination {
-        switch self {
-        case .account, .upgrade, .invitation, .recommendation:
-            .account
-        case .settings:
-            .settings
-        case .intelligence:
-            .intelligence
-        case .personalization:
-            .personal
-        }
-    }
+    case appTones
 }
 
 public enum CaptureMode: String, CaseIterable, Codable, Sendable, Identifiable {
@@ -75,6 +42,23 @@ public struct UTF16TextRange: Codable, Hashable, Sendable {
     }
 }
 
+public struct ScreenRect: Codable, Hashable, Sendable {
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
+
+    public init(x: Double, y: Double, width: Double, height: Double) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+
+    public var midX: Double { x + width / 2 }
+    public var midY: Double { y + height / 2 }
+}
+
 public struct CapturedContext: Codable, Hashable, Sendable {
     public static let maximumSelectedTextCharacters = 4_096
 
@@ -96,6 +80,7 @@ public struct CapturedContext: Codable, Hashable, Sendable {
     public var focusedElementFingerprint: Int?
     public var focusedValueFingerprint: Int?
     public var selectedRange: UTF16TextRange?
+    public var focusedElementScreenFrame: ScreenRect?
 
     public init(
         applicationName: String = "Unknown",
@@ -115,7 +100,8 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         focusedElementAvailable: Bool = false,
         focusedElementFingerprint: Int? = nil,
         focusedValueFingerprint: Int? = nil,
-        selectedRange: UTF16TextRange? = nil
+        selectedRange: UTF16TextRange? = nil,
+        focusedElementScreenFrame: ScreenRect? = nil
     ) {
         self.applicationName = applicationName
         self.processIdentifier = processIdentifier
@@ -136,6 +122,7 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         self.focusedElementFingerprint = focusedElementFingerprint
         self.focusedValueFingerprint = focusedValueFingerprint
         self.selectedRange = selectedRange
+        self.focusedElementScreenFrame = focusedElementScreenFrame
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -157,6 +144,7 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         case focusedElementFingerprint
         case focusedValueFingerprint
         case selectedRange
+        case focusedElementScreenFrame
     }
 
     public init(from decoder: any Decoder) throws {
@@ -197,6 +185,10 @@ public struct CapturedContext: Codable, Hashable, Sendable {
             forKey: .focusedValueFingerprint
         )
         selectedRange = try container.decodeIfPresent(UTF16TextRange.self, forKey: .selectedRange)
+        focusedElementScreenFrame = try container.decodeIfPresent(
+            ScreenRect.self,
+            forKey: .focusedElementScreenFrame
+        )
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -219,6 +211,7 @@ public struct CapturedContext: Codable, Hashable, Sendable {
         try container.encodeIfPresent(focusedElementFingerprint, forKey: .focusedElementFingerprint)
         try container.encodeIfPresent(focusedValueFingerprint, forKey: .focusedValueFingerprint)
         try container.encodeIfPresent(selectedRange, forKey: .selectedRange)
+        try container.encodeIfPresent(focusedElementScreenFrame, forKey: .focusedElementScreenFrame)
     }
 }
 
@@ -337,17 +330,29 @@ public struct HotkeyTrigger: Equatable, Sendable {
     public let activation: ShortcutActivation
     public let phase: HotkeyGesturePhase
     public let definitionID: String?
+    /// When the physical key event that started this gesture was received.
+    /// Diagnostics only, so it is excluded from equality.
+    public let pressedAt: ContinuousClock.Instant?
 
     public init(
         action: HotkeyAction,
         activation: ShortcutActivation,
         phase: HotkeyGesturePhase,
-        definitionID: String? = nil
+        definitionID: String? = nil,
+        pressedAt: ContinuousClock.Instant? = nil
     ) {
         self.action = action
         self.activation = activation.resolved
         self.phase = phase
         self.definitionID = definitionID
+        self.pressedAt = pressedAt
+    }
+
+    public static func == (lhs: HotkeyTrigger, rhs: HotkeyTrigger) -> Bool {
+        lhs.action == rhs.action
+            && lhs.activation == rhs.activation
+            && lhs.phase == rhs.phase
+            && lhs.definitionID == rhs.definitionID
     }
 }
 

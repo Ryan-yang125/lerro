@@ -30,7 +30,7 @@ func mergedApplicationDescriptors(
     installed: [ApplicationDescriptor],
     running: [ApplicationDescriptor]
 ) -> [ApplicationDescriptor] {
-    var byBundle = Dictionary(uniqueKeysWithValues: installed.map { ($0.bundleIdentifier, $0) })
+    var byBundle = Dictionary(installed.map { ($0.bundleIdentifier, $0) }, uniquingKeysWith: { first, _ in first })
     for application in running {
         if var existing = byBundle[application.bundleIdentifier] {
             existing.name = application.name
@@ -68,7 +68,8 @@ private func discoveredInstalledApplicationDescriptors() -> [ApplicationDescript
             guard url.pathExtension.caseInsensitiveCompare("app") == .orderedSame,
                   let bundle = Bundle(url: url),
                   let bundleIdentifier = bundle.bundleIdentifier,
-                  !bundleIdentifier.isEmpty else { continue }
+                  !bundleIdentifier.isEmpty,
+                  bundle.object(forInfoDictionaryKey: "LSBackgroundOnly") as? Bool != true else { continue }
             let name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
                 ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
                 ?? url.deletingPathExtension().lastPathComponent
@@ -87,7 +88,8 @@ private func discoveredInstalledApplicationDescriptors() -> [ApplicationDescript
 @MainActor
 private func runningApplicationDescriptors() -> [ApplicationDescriptor] {
     NSWorkspace.shared.runningApplications.compactMap { application -> ApplicationDescriptor? in
-        guard let bundleIdentifier = application.bundleIdentifier,
+        guard application.activationPolicy == .regular,
+              let bundleIdentifier = application.bundleIdentifier,
               let name = application.localizedName else { return nil }
         return ApplicationDescriptor(
             bundleIdentifier: bundleIdentifier,

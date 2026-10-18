@@ -48,7 +48,7 @@ struct OpenAICompatibleHTTPClientTests {
         #expect(body["model"] as? String == "gpt-test")
         #expect(body["temperature"] as? Double == 0)
         #expect(body["max_tokens"] as? Int == 321)
-        #expect(body["stream"] as? Bool == false)
+        #expect(body["stream"] == nil)
         #expect(body["thinking"] == nil)
         let messages = try #require(body["messages"] as? [[String: Any]])
         #expect(messages.count == 2)
@@ -124,60 +124,144 @@ struct OpenAICompatibleHTTPClientTests {
         #expect(!serialized.contains("window_title"))
     }
 
-    @Test("SSE comments are ignored and content deltas are yielded")
-    func serverSentEvents() async throws {
-        MockURLProtocol.install { _ in
-            .init(
-                statusCode: 200,
-                headers: ["Content-Type": "text/event-stream"],
-                data: Data(
-                    """
-                    : keep-alive
-
-                    data: {"choices":[{"delta":{"content":"你"}}]}
-
-                    data: {"choices":[{"delta":{"content":"好"}}]}
-
-                    data: [DONE]
-
-                    """.utf8
-                )
-            )
-        }
-        defer { MockURLProtocol.reset() }
-
-        let client = try makeClient()
-        let stream = try await client.stream(
-            messages: [.init(role: .user, content: "合成测试")],
-            maxTokens: 32
-        )
-        var output = ""
-        for try await chunk in stream {
-            output += chunk
-        }
-        #expect(output == "你好")
-    }
-
-    @Test("A provider that ignores streaming safely yields its JSON completion")
-    func streamJSONFallback() async throws {
+    @Test("OpenAI-style usage reports cached prompt tokens")
+    func openAIUsage() async throws {
         MockURLProtocol.install { _ in
             .json(
                 statusCode: 200,
-                object: ["choices": [["message": ["content": "fallback"]]]]
+                object: [
+                    "choices": [["message": ["content": "OK"]]],
+                    "usage": [
+                        "prompt_tokens": 120,
+                        "completion_tokens": 30,
+                        "prompt_tokens_details": ["cached_tokens": 100]
+                    ]
+                ]
             )
         }
         defer { MockURLProtocol.reset() }
 
         let client = try makeClient(providerIdentifier: "custom")
-        let stream = try await client.stream(
+        let result = try await client.complete(
             messages: [.init(role: .user, content: "Synthetic")],
             maxTokens: 32
         )
-        var chunks: [String] = []
-        for try await chunk in stream {
-            chunks.append(chunk)
+        #expect(result.tokens == AITokenUsage(
+            inputTokens: 120,
+            outputTokens: 30,
+            cachedInputTokens: 100
+        ))
+    }
+
+    @Test("DeepSeek-style usage reports prompt cache hits")
+    func deepSeekUsage() async throws {
+        MockURLProtocol.install { _ in
+            .json(
+                statusCode: 200,
+                object: [
+                    "choices": [["message": ["content": "OK"]]],
+                    "usage": [
+                        "prompt_tokens": 80,
+                        "completion_tokens": 12,
+                        "prompt_cache_hit_tokens": 64,
+                        "prompt_cache_miss_tokens": 16
+                    ]
+                ]
+            )
         }
-        #expect(chunks == ["fallback"])
+        defer { MockURLProtocol.reset() }
+
+        let client = try makeClient()
+        let result = try await client.complete(
+            messages: [.init(role: .user, content: "Synthetic")],
+            maxTokens: 32
+        )
+        #expect(result.tokens == AITokenUsage(
+            inputTokens: 80,
+            outputTokens: 12,
+            cachedInputTokens: 64
+        ))
+    }
+
+    @Test("A response without usage has nil tokens")
+    func missingUsage() async throws {
+        MockURLProtocol.install { _ in
+            .json(
+                statusCode: 200,
+                object: ["choices": [["message": ["content": "OK"]]]]
+            )
+        }
+        defer { MockURLProtocol.reset() }
+
+        let client = try makeClient()
+        let result = try await client.complete(
+            messages: [.init(role: .user, content: "Synthetic")],
+            maxTokens: 32
+        )
+        #expect(result.text == "OK")
+        #expect(result.tokens == nil)
+    }
+
+    @Test("A malformed usage object does not fail the completion")
+    func malformedUsage() async throws {
+        MockURLProtocol.install { _ in
+            .json(
+                statusCode: 200,
+                object: [
+                    "choices": [["message": ["content": "OK"]]],
+                    "usage": "x"
+                ]
+            )
+        }
+        defer { MockURLProtocol.reset() }
+
+        let client = try makeClient()
+        let result = try await client.complete(
+            messages: [.init(role: .user, content: "Synthetic")],
+            maxTokens: 32
+        )
+        #expect(result.text == "OK")
+        #expect(result.tokens == nil)
+    }
+
+    @Test("Remote runtime surfaces tokens for generation and connection tests")
+    func runtimeSurfacesTokens() async throws {
+        MockURLProtocol.install { _ in
+            .json(
+                statusCode: 200,
+                object: [
+                    "model": "deepseek-v4-flash",
+                    "choices": [["message": ["content": "OK"]]],
+                    "usage": [
+                        "prompt_tokens": 50,
+                        "completion_tokens": 5,
+                        "prompt_cache_hit_tokens": 40
+                    ]
+                ]
+            )
+        }
+        defer { MockURLProtocol.reset() }
+
+        let runtime = OpenAICompatibleRemoteLanguageModelRuntime(
+            protocolClasses: [MockURLProtocol.self]
+        )
+        let configuration = RemoteProviderConfiguration(
+            provider: .deepSeek,
+            apiKey: "test-only-key"
+        )
+        let expected = AITokenUsage(inputTokens: 50, outputTokens: 5, cachedInputTokens: 40)
+
+        let generation = try await runtime.generate(
+            configuration: configuration,
+            systemPrompt: "System",
+            userPrompt: "Synthetic input",
+            maxTokens: 32
+        )
+        #expect(generation.tokens == expected)
+
+        let outcome = try await runtime.testConnection(configuration: configuration)
+        #expect(outcome.succeeded)
+        #expect(outcome.tokens == expected)
     }
 
     @Test("Remote runtime conforms to the Core provider contract")
@@ -210,7 +294,9 @@ struct OpenAICompatibleHTTPClientTests {
             maxTokens: 96
         )
 
-        #expect(output == "云端结果")
+        #expect(output.text == "云端结果")
+        #expect(output.modelIdentifier == "deepseek-v4-flash")
+        #expect(output.tokens == nil)
         let request = try #require(recorder.request)
         let body = try JSONBody(request)
         let messages = try #require(body["messages"] as? [[String: Any]])
@@ -270,7 +356,7 @@ struct OpenAICompatibleHTTPClientTests {
         let probe = try await runtime.testConnection(configuration: probeConfiguration)
 
         #expect(probe.succeeded)
-        #expect(try await generation.value == "Primary result")
+        #expect(try await generation.value.text == "Primary result")
     }
 
     @Test(
@@ -510,12 +596,12 @@ struct OpenAICompatibleHTTPClientTests {
             systemPrompt: "Return polished text only. Preserve all facts.",
             userPrompt: "Um the synthetic release is Tuesday. Actually make that Wednesday.",
             maxTokens: 80
-        )
+        ).text
 
         print("LERRO_LIVE_REMOTE_LATENCY_MS=\(outcome.latencyMilliseconds ?? -1)")
         print("LERRO_LIVE_REMOTE_GENERATION=passed")
         #expect(outcome.succeeded)
-        #expect(outcome.modelIdentifier == "deepseek-v4-flash")
+        #expect(outcome.modelIdentifier == RemoteProviderKind.deepSeek.defaultModelIdentifier)
         #expect(!output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         #expect(output.localizedCaseInsensitiveContains("Wednesday"))
         #expect(!output.localizedCaseInsensitiveContains("Tuesday"))
@@ -552,7 +638,7 @@ struct OpenAICompatibleHTTPClientTests {
             systemPrompt: prompts.system,
             userPrompt: prompts.user,
             maxTokens: 320
-        )
+        ).text
 
         print("LERRO_LIVE_REMOTE_PRODUCT_PROMPT=passed")
         #expect(output.contains("周三"))

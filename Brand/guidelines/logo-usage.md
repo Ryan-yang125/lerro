@@ -2,63 +2,74 @@
 
 ## 组成
 
-Lerro 标志由三段连续语义组成：
-
-1. 左侧竖笔与圆角转折形成 `L`，表示输入起点。
-2. 中部两个圆拱压缩双 `rr`，表示连续语音节奏。
-3. 右侧开放 `o` 形成光标切口，表示可编辑文字已经落位。
-
-## 版本
-
-| 版本 | 用途 |
+| 元素 | 说明 |
 | --- | --- |
-| Symbol | App 内品牌入口、头像、较大图形 |
-| Micro 16 | 菜单、紧凑工具栏、16 pt 环境 |
-| Micro 24 | 工具栏、状态面板、24 pt 环境 |
-| Horizontal lockup | README、网站、发布页 |
-| Vertical lockup | 方形版面、社交图、启动画面 |
-| Monochrome | 单色印刷、模板渲染、低色彩环境 |
-| Reversed | 深色或高对比背景 |
+| 标志（mark） | 光标加基线，36 × 61 品牌单位，两个图形之间留缝 6 |
+| 字标（wordmark） | 大写 `Lerro`：`L` 是标志，`erro` 是 Inter SemiBold 轮廓 |
+| 横向组合（lockup） | App Icon 加 `Lerro` 文字，用于官网导航与 GitHub |
+| App Icon | 墨黑底板、墨水蓝光标、纸白基线 |
+
+字标中的 `erro` 以路径保存，仓库不分发字体文件。Inter 4.1 的来源与许可见
+[`ASSET-LICENSES.json`](../licenses/ASSET-LICENSES.json) 和
+[`Inter-OFL.txt`](../licenses/Inter-OFL.txt)。
+
+## 版本与文件
+
+| 版本 | 文件 | 用途 |
+| --- | --- | --- |
+| Mark | `lerro-mark.svg` | 浅底，光标墨水蓝，基线墨黑 |
+| Mark reversed | `lerro-mark-reversed.svg` | 深底，光标深底墨水蓝，基线纸白 |
+| Mark mono | `lerro-mark-mono.svg` | 单色印刷与模板渲染 |
+| Wordmark | `lerro-wordmark.svg`、`lerro-wordmark-reversed.svg` | 侧栏、页眉、文档 |
+| Horizontal lockup | `lerro-lockup-horizontal.svg`、`lerro-lockup-horizontal-dark.svg` | README、官网导航、发布页 |
+| Construction | `lerro-construction.svg` | 比例与留白参考 |
 
 ## 留白
 
-以 full symbol 的主笔画宽度 `x` 为单位，四周保留至少 `2x`。横向组合中，symbol 与
-wordmark 的间距为 `3x`。周围图标、文字与边缘均位于留白范围之外。
+四周留白等于光标宽度（10 个品牌单位）。周围图标、文字与边缘均位于留白范围之外。
 
 ## 最小尺寸
 
-- Micro Mark：16 × 16 pt
-- Full Symbol：24 × 24 pt
-- Horizontal lockup：96 pt 宽
-- Vertical lockup：72 pt 宽
-- App Icon：从 16 px 到 1024 px 使用同一主轮廓，并按像素尺寸调整细节
+- 标志：屏幕上高度 12 px。
+- 标志低于 32 px 高时使用小尺寸比例：光标宽 13，基线高 12，缝 5。
+- 字标与横向组合：`L` 的高度同样不低于 12 px。
+- App Icon：16 px 到 1024 px，16 px 仍可辨认光标和基线两段。
+- 菜单栏：18 × 18 pt template image。
 
 ## 颜色
 
-- App Icon：Ink Black `#111113` + Soft White `#F5F2EA`
-- 浅色画布：Ink Black symbol + Label wordmark
-- 深色画布：White symbol + White wordmark
-- 单色：100% Black 或 100% White
-- 菜单栏：100% Black template source，由 macOS 自动着色
-- App 内 inline mark：按界面层级使用 `label` 或 `secondaryLabel`
-- App 内品牌 badge：Ink Black 承载面 + Soft White symbol
+| 背景 | 光标 | 基线 / 字母 |
+| --- | --- | --- |
+| 纸白、白色、浅色画布 | 墨水蓝 `#2F5BFF` | 墨黑 `#15161A` |
+| 墨黑、深色画布 | 深底墨水蓝 `#4A6BFF` | 纸白 `#F6F4EF` |
+| 单色 | 与基线同色 | 100% 黑或 100% 白 |
+| 菜单栏 | 与基线同色 | template image，由 macOS 着色 |
 
-## 形态纪律
+## 使用规则
 
-- 保持原始横纵比例、线宽与圆角端点。
-- 保持 `L`、双拱、开放 `o` 和光标切口的相对位置。
-- App Icon 保持纯平面黑底白形，不添加渐变、纹理、浮雕或投影。
-- 使用提供的深浅色与单色版本。
-- 复杂背景上先建立系统 material 或纯色承载面。
-- 小于 24 pt 时选用 Micro Mark。
+- 保持原始比例、缝宽与圆角端点。
+- 光标与基线保持分离，缝宽按构造图执行。
+- 光标使用墨水蓝，基线和字母使用墨黑或纸白。
+- 复杂背景上先放置纯色承载面，再放标志。
+- 使用提供的 SVG 导出文件，不重新绘制或重新排版字标。
+
+## 禁用
+
+- 把光标与基线连成一笔。
+- 把基线改成蓝色，或把光标改成非品牌色。
+- 给标志添加描边、轮廓线、渐变、投影、浮雕。
+- 旋转、倾斜、拉伸或镜像标志。
+- 用 SF Pro 或其他字体重新排 `erro`。
+- 在低于最小尺寸的位置使用标志。
 
 ## 菜单栏状态
 
-| 状态 | 图形信号 | 可访问标签 |
-| --- | --- | --- |
-| idle | 安静 `L` 与开放 `o` | `Lerro，空闲` |
-| listening | 完整 `L + rr + open o` | `Lerro，正在听写` |
-| processing | 三个节奏点进入开放 `o` | `Lerro，正在处理` |
-| error | `L` 基线与感叹落点 | `Lerro，需要处理` |
+| 状态 | 帧 | 图形信号 | 可访问标签 |
+| --- | --- | --- | --- |
+| idle | `Idle` | 完整的光标与基线 | `Lerro，空闲` |
+| listening | `Listening`、`ListeningDim` | 光标闪烁，基线变淡 | `Lerro，正在听写` |
+| processing | `Processing1`–`Processing4` | 光标变淡，基线从左向右画出 | `Lerro，正在处理` |
+| error | `Error` | 光标变成「!」 | `Lerro，需要处理` |
 
 图像接入 `NSImage` 后设置 `isTemplate = true`，菜单标题与 VoiceOver 标签同步更新。
+动画时序见 [`motion.md`](motion.md)。

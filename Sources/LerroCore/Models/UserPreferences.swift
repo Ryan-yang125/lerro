@@ -79,11 +79,15 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     public var remoteProvider: RemoteProviderConfiguration
     public var hotkeys: [HotkeyDefinition]
     public var appToneProfiles: [AppToneProfile]
+    public var defaultToneInstruction: String
     public var automaticDictionaryLearningEnabled: Bool
     public var quickDictateEnabled: Bool
     public var hasApprovedModelDownload: Bool
     public var hasCompletedOnboarding: Bool
     public var onboardingStepIndex: Int?
+    public var handsFreeStopHintUseCount: Int
+    /// User price overrides; they take precedence over `AIModelPrice.builtIn`.
+    public var modelPrices: [AIModelPrice]
 
     public var shouldSaveCaptureAudio: Bool {
         saveAudio && historyRetention != .never
@@ -112,11 +116,14 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         remoteProvider: RemoteProviderConfiguration = RemoteProviderConfiguration(),
         hotkeys: [HotkeyDefinition] = UserPreferences.defaultHotkeys,
         appToneProfiles: [AppToneProfile] = [],
+        defaultToneInstruction: String = "",
         automaticDictionaryLearningEnabled: Bool = true,
         quickDictateEnabled: Bool = false,
         hasApprovedModelDownload: Bool = false,
         hasCompletedOnboarding: Bool = false,
-        onboardingStepIndex: Int? = nil
+        onboardingStepIndex: Int? = nil,
+        handsFreeStopHintUseCount: Int = 0,
+        modelPrices: [AIModelPrice] = []
     ) {
         self.localProfileEmail = localProfileEmail
         self.localInvitationCode = localInvitationCode
@@ -137,11 +144,14 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         self.remoteProvider = remoteProvider
         self.hotkeys = hotkeys
         self.appToneProfiles = appToneProfiles
+        self.defaultToneInstruction = defaultToneInstruction
         self.automaticDictionaryLearningEnabled = automaticDictionaryLearningEnabled
         self.quickDictateEnabled = quickDictateEnabled
         self.hasApprovedModelDownload = hasApprovedModelDownload
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.onboardingStepIndex = onboardingStepIndex
+        self.handsFreeStopHintUseCount = handsFreeStopHintUseCount
+        self.modelPrices = modelPrices
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -163,11 +173,14 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         case remoteProvider
         case hotkeys
         case appToneProfiles
+        case defaultToneInstruction
         case automaticDictionaryLearningEnabled
         case quickDictateEnabled
         case hasApprovedModelDownload
         case hasCompletedOnboarding
         case onboardingStepIndex
+        case handsFreeStopHintUseCount
+        case modelPrices
     }
 
     public init(from decoder: any Decoder) throws {
@@ -250,6 +263,10 @@ public struct UserPreferences: Codable, Equatable, Sendable {
                 [AppToneProfile].self,
                 forKey: .appToneProfiles
             ) ?? defaults.appToneProfiles,
+            defaultToneInstruction: try container.decodeIfPresent(
+                String.self,
+                forKey: .defaultToneInstruction
+            ) ?? defaults.defaultToneInstruction,
             automaticDictionaryLearningEnabled: try container.decodeIfPresent(
                 Bool.self,
                 forKey: .automaticDictionaryLearningEnabled
@@ -269,7 +286,15 @@ public struct UserPreferences: Codable, Equatable, Sendable {
             onboardingStepIndex: try container.decodeIfPresent(
                 Int.self,
                 forKey: .onboardingStepIndex
-            )
+            ),
+            handsFreeStopHintUseCount: try container.decodeIfPresent(
+                Int.self,
+                forKey: .handsFreeStopHintUseCount
+            ) ?? defaults.handsFreeStopHintUseCount,
+            modelPrices: try container.decodeIfPresent(
+                [AIModelPrice].self,
+                forKey: .modelPrices
+            ) ?? defaults.modelPrices
         )
     }
 

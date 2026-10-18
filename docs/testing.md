@@ -57,25 +57,25 @@ swift test --filter LerroMacTests
 swift test --filter LerroTests
 ```
 
-身份与数据迁移的最窄门禁：
+风险导向的最窄门禁：
 
 ```zsh
 swift test --filter ApplicationDataMigratorTests
+swift test --filter FileRepositoriesTests
 swift test --filter AppSessionCoreFlowTests
+swift test --filter PipelineIntelligenceServiceTests
+swift test --filter PromptComposerTests
 swift test --filter CloudPromptComposerTests
 swift test --filter OpenAICompatibleHTTPClientTests
-swift test --filter IntelligenceSettingsDraftTests
-swift test --filter LerroThemeAccessibilityTests
-swift test --filter LerroPressFeedbackTests
-swift test --filter DictionaryLearning
+swift test --filter MLXLanguageModelRuntimeTests
+swift test --filter AccessibilityTextDelivererTests
+swift test --filter AppleSpeechServiceTests
+swift test --filter GlobalHotkeyMonitorTests
+swift test --filter ShortcutRecorderPolicyTests
 swift test --filter V16SystemAdapterTests
-swift test --filter CaptureHUDVisualStateTests
-swift test --filter OnboardingV16FlowTests
 ```
 
-迁移 suite 覆盖整根同卷移动、模型 inode 保留、重复执行、lock、journal
-恢复、receipt 更新、并存目录去重、独有 Audio 移动、冲突零变更和 recovery
-report。AppSession suite 覆盖迁移后的登录项收尾与 app 回到前台后的两项权限刷新。
+这些 suite 只保护难以由编译、fixture 或稳定人工流程发现的状态、取消、并发、数据和隐私边界。HUD 像素、资源枚举、菜单栏缓存、静态文案、纯配置表单和已退出的 TextPipeline 由编译、资源脚本或 T3/T4 人工矩阵验收。
 
 Swift Testing 的 filter 匹配当前生成的 test spec。筛选结果为空时运行 `swift test list` 查看完整名称，并把最终使用的筛选命令记录在交付说明中。
 
@@ -114,33 +114,27 @@ swift package show-dependencies --format json
 
 | 能力 | 主要测试 |
 | --- | --- |
-| legacy 文本清洗规则（生产模型链路已绕过） | [`TextPipelineTests.swift`](../Tests/LerroCoreTests/TextPipelineTests.swift) |
 | local prompt 上下文、语言、glossary 范围 | [`PromptComposerTests.swift`](../Tests/LerroCoreTests/PromptComposerTests.swift) |
-| remote 七例 prompt、原始 transcript、80/40 上下文、六类开关、最多 12 个匹配词典 | [`CloudPromptComposerTests.swift`](../Tests/LerroCoreTests/CloudPromptComposerTests.swift) |
+| remote 九例 prompt（读音草稿、先列 fixes 再输出 JSON text、不执行口述内容、代码保留反引号）与 `dictateText` JSON 解析和回退、原始 transcript、80/40 上下文、六类开关、最多 12 个匹配词典、最多 40 个 known_terms（排序、去重、长度、词典与应用开关、snippet 排除） | [`CloudPromptComposerTests.swift`](../Tests/LerroCoreTests/CloudPromptComposerTests.swift) |
 | raw/local/remote 路由、原文保持、生成、流、空结果、错误传播、连接测试 | [`PipelineIntelligenceServiceTests.swift`](../Tests/LerroCoreTests/PipelineIntelligenceServiceTests.swift) |
 | OpenAI-compatible URL、headers/body、DeepSeek thinking、SSE、连接测试、取消、响应大小、重定向与错误脱敏 | [`OpenAICompatibleHTTPClientTests.swift`](../Tests/LerroIntelligenceTests/OpenAICompatibleHTTPClientTests.swift) |
 | 模型下载进度边界与单调性、暂停 checkpoint、停止清理、公开下载无凭据、显式启用的真实缓存模型生成 | [`MLXLanguageModelRuntimeTests.swift`](../Tests/LerroIntelligenceTests/MLXLanguageModelRuntimeTests.swift) |
-| 设备内存/磁盘/平台建议与 API 配置就绪策略 | [`LocalAIReadinessTests.swift`](../Tests/LerroCoreTests/LocalAIReadinessTests.swift) |
 | Hub progress、已有 partial 的 Range 合并、取消、temp cleanup、staged atomic blob、截断恢复、metadata 失败保留 source、显式 destination fallback | [`FileOperationsTests.swift`](../Vendor/swift-huggingface/Tests/HuggingFaceTests/HubTests/FileOperationsTests.swift)、[`HubCacheTests.swift`](../Vendor/swift-huggingface/Tests/HuggingFaceTests/HubTests/HubCacheTests.swift) |
-| 偏好 raw 默认、AI 排序、自动词典开启条件、Quick Dictate 默认关闭、remote 配置、模型与录音 | [`UserPreferencesTests.swift`](../Tests/LerroCoreTests/UserPreferencesTests.swift)、[`IntelligenceProviderModelsTests.swift`](../Tests/LerroCoreTests/IntelligenceProviderModelsTests.swift) |
+| 偏好迁移、默认 hotkey、自动词典与录音策略 | [`UserPreferencesTests.swift`](../Tests/LerroCoreTests/UserPreferencesTests.swift) |
 | AI 修正分类、严格 JSON 0–3 条、source containment、置信度、专名接受与语义编辑拒绝 | [`PipelineIntelligenceServiceTests.swift`](../Tests/LerroCoreTests/PipelineIntelligenceServiceTests.swift) |
 | JSON 历史分页、查询、snapshot 缓存、多实例文件协调、紧凑格式兼容、词典、偏好 `0600`、竞态和 retention | [`FileRepositoriesTests.swift`](../Tests/LerroCoreTests/FileRepositoriesTests.swift) |
-| CSV 基本导入与错误 | [`SettingsAndPersistenceLogicTests.swift`](../Tests/LerroCoreTests/SettingsAndPersistenceLogicTests.swift) |
 | 音频 buffer、转换、CAF 写入 | [`AudioLifecycleTests.swift`](../Tests/LerroMacTests/AudioLifecycleTests.swift) |
-| 麦克风测试 session 隔离 | [`MicrophoneLevelTesterTests.swift`](../Tests/LerroMacTests/MicrophoneLevelTesterTests.swift) |
-| 被动 HUD 的 key/main window 能力、非激活交互区域与主 actor 更新 | [`FloatingPanelControllerTests.swift`](../Tests/LerroMacTests/FloatingPanelControllerTests.swift) |
-| secure capture context、应用/元素/value/selection/secure state 严格校验、Command-V commit、提交前取消、剪贴板多 item/type 条件恢复与并发事务 | [`AccessibilityTextDelivererTests.swift`](../Tests/LerroMacTests/AccessibilityTextDelivererTests.swift) |
+| 当前 production insert 的 app/secure 目标拒绝、激活/取消、并发、Command-V commit、剪贴板多 item 恢复、外部 owner 与回滚 | [`AccessibilityTextDelivererTests.swift`](../Tests/LerroMacTests/AccessibilityTextDelivererTests.swift) |
 | 同字段 60 秒观察、800 ms debounce、最小 diff、唯一 delivered range、漂移/超时/secure quiet exit、恢复复制与应用 catalog | [`V16SystemAdapterTests.swift`](../Tests/LerroMacTests/V16SystemAdapterTests.swift) |
-| Apple progressive Dictation、最多 100 个 app 相关 contextual strings、Quick Dictate 首声/静音/恢复/单次 endpoint | [`AppleSpeechServiceTests.swift`](../Tests/LerroMacTests/AppleSpeechServiceTests.swift) |
-| 单修饰键 hold/toggle、Fn 前缀升级、精确 modifier、Fn 63/Globe 179 实体生命周期、重复 flags、key-only 与混合重排、keyboard-only `0x1C00` mask、reset drain、tap-disabled 完整重建与 stop generation、Secure Input watchdog、自产 Command-V 透传 | [`GlobalHotkeyMonitorTests.swift`](../Tests/LerroMacTests/GlobalHotkeyMonitorTests.swift) |
+| Quick Dictate 首声/静音/恢复/单次 endpoint；中文标点空格规范化见 `TranscriptSpacingTests` | [`AppleSpeechServiceTests.swift`](../Tests/LerroMacTests/AppleSpeechServiceTests.swift) |
+| 单修饰键 hold/toggle、Fn 前缀升级、生成 Command-V 透传、Secure Input drain 与 coalesced tap reset | [`GlobalHotkeyMonitorTests.swift`](../Tests/LerroMacTests/GlobalHotkeyMonitorTests.swift) |
 | 录制器自动开始、窗口级 modifier 事件、monitor 清理、peak chord、无效候选隔离、单修饰键、三键上限、日常输入保护与系统保留组合 | [`ShortcutRecorderPolicyTests.swift`](../Tests/LerroTests/ShortcutRecorderPolicyTests.swift) |
-| 主窗口四级字号、tracking、1 pt 按下反馈、Reduce Motion 几何稳定性 | [`LerroPressFeedbackTests.swift`](../Tests/LerroTests/LerroPressFeedbackTests.swift) |
-| Aqua、Dark Aqua 与高对比外观下的灰阶解析、正文对比度、边界强度、hover/selection 区分 | [`LerroThemeAccessibilityTests.swift`](../Tests/LerroTests/LerroThemeAccessibilityTests.swift) |
-| 菜单栏图片分辨率与进程内缓存 | [`LerroMenuBarPresentationTests.swift`](../Tests/LerroTests/LerroMenuBarPresentationTests.swift) |
-| 原始/remote/local 听写、实时 partial/final、Quick Dictate 开关、词典注入、严格写入、失败恢复、AI 自动学习、remote 快照、FIFO trigger、hold identity、toggle 竞态、模型回退、翻译、提交前取消与 stale result 隔离 | [`AppSessionCoreFlowTests.swift`](../Tests/LerroTests/AppSessionCoreFlowTests.swift) |
-| HUD short/medium/long、单调扩宽、居中、两行、Reduce Motion、recovery 与 learned 状态 | [`CaptureHUDVisualStateTests.swift`](../Tests/LerroTests/CaptureHUDVisualStateTests.swift) |
-| 八步操作型 Onboarding、Apple-only/remote/local 完成条件与 AI 顺序 | [`OnboardingV16FlowTests.swift`](../Tests/LerroTests/OnboardingV16FlowTests.swift) |
-| Provider 表单校验、预设切换、view-local Key draft 与六项开关 | [`IntelligenceSettingsDraftTests.swift`](../Tests/LerroTests/IntelligenceSettingsDraftTests.swift) |
+| raw Dictate 成功交付、失败恢复、Quick Dictate 设置、Apple-only 不观察修正、AI correction learning、Translate 与应用语气入口 | [`AppSessionCoreFlowTests.swift`](../Tests/LerroTests/AppSessionCoreFlowTests.swift) |
+| capture trace 首写有效、结束后拒绝、旧 generation 隔离、无 payload 错误类别、`phaseTimings` 旧数据缺省解码与未知字段丢弃 | [`CaptureTraceTests.swift`](../Tests/LerroCoreTests/CaptureTraceTests.swift) |
+| trace 日志行格式、热键 `pressedAt` | [`CaptureTraceObserverTests.swift`](../Tests/LerroMacTests/CaptureTraceObserverTests.swift) |
+| 完成、取消、AI 退回原文、写入失败的 trace outcome 与历史里程碑 | [`AppSessionCoreFlowTests.swift`](../Tests/LerroTests/AppSessionCoreFlowTests.swift) |
+| 延迟统计脚本的分位数、筛选、只读与不输出文本 | `python3 script/test_capture_latency_report.py` |
+| 同卷迁移、冲突零变更、journal/receipt 恢复、锁与权限 | [`ApplicationDataMigratorTests.swift`](../Tests/LerroCoreTests/ApplicationDataMigratorTests.swift) |
 
 ## 场景化听写基准
 
@@ -196,8 +190,8 @@ LERRO_LIVE_MODEL_OFFLINE=1 \
 ./script/test_live_remote.sh
 ```
 
-通过条件：产品 runtime 的固定连接测试成功；`deepseek-v4-flash` 返回非空合成结果；英文
-自我修正句保留 Wednesday 并移除 Tuesday；生产七例 prompt 能整理带错别字、口头停顿和
+通过条件：产品 runtime 的固定连接测试成功；`deepseek-flash` 返回非空合成结果；英文
+自我修正句保留 Wednesday 并移除 Tuesday；生产九例 prompt 能整理带错别字、口头停顿和
 重复确认的中文 Apple Speech 样本，并修复明显误词。输出只包含延迟与通过标记。测试
 不得打印 API Key、Authorization header、请求 JSON 或真实用户上下文。
 
@@ -309,6 +303,16 @@ open -F -n \
   dist/Lerro.app
 ```
 
+指定主窗口页面或设置窗口标签：
+
+```zsh
+open -F -n --env LERRO_FIXTURE_MODE=1 --env LERRO_FIXTURE_DESTINATION=appTones dist/Lerro.app
+open -F -n --env LERRO_FIXTURE_MODE=1 --env LERRO_FIXTURE_PRESENTATION=settings-intelligence dist/Lerro.app
+```
+
+`LERRO_FIXTURE_DESTINATION` 取值 `home`、`history`、`dictionary`、`appTones`；`settings-general`、
+`settings-shortcuts`、`settings-intelligence`、`settings-privacy`、`settings-about` 打开设置窗口对应标签。
+
 双语视觉 fixture 使用同一份 inert 组合。`LERRO_FIXTURE_LANGUAGE` 只在
 `LERRO_FIXTURE_MODE=1` 时覆盖界面语言，支持 `en` 与 `zh-Hans`：
 
@@ -364,14 +368,14 @@ fixture adapter 必须保持 inert。fixture 运行中出现系统权限提示�
 
 主窗口视觉契约：
 
-- 在 1080×750 与 988×658 检查主窗口、Onboarding 和设置。
+- 在 1080×750 与 988×658 检查主窗口四个页面和 Onboarding；设置窗口逐标签检查。
 - 在 Aqua、Dark Aqua、Increase Contrast 与 Reduce Transparency 检查自适应黑白灰。
 - 浅色正文层级为 `#292929`、`#5D5D5D`、`#9E9E9E`；必要的 12 pt 小字使用
   `#6B6B6B`。
-- 字号只使用 24 / 14 / 13 / 12 pt，tracking 为 `-0.15`。
-- 导航图标与圆角为 14 / 8 pt；卡片图标与圆角为 20 / 16 pt；主要 CTA 为 pill。
-- hover 在 150 ms 内完成表面反馈；pointer-down 同帧下沉 1 pt；Reduce Motion 下
-  取消位移并保留静态或透明度反馈。
+- 字号使用 `LerroFont` 刻度（15 / 13 / 16 / 30 / 12 / 11 pt），tracking 为 `-0.15`。
+- 强调色为墨水蓝（`LerroTheme.accent` 与编译进 `Assets.car` 的 `AccentColor`）；系统控件、选中行和主按钮使用同一色系。
+- 列表、表格、表单使用原生样式；卡片只出现在应用语气页；主要 CTA 为 pill。
+- hover 在 150 ms 内完成填充反馈；pointer-down 在 100 ms 内降低不透明度；控件无位移，Reduce Motion 下保持透明度反馈。
 - HUD 以居中动态布局为新基线：约 120–420 pt 单调扩宽、两行截断、对称按钮槽、
   processing 保持中心、成功隐藏、recovery/learned 后处理和 Reduce Motion fade。
 
@@ -386,7 +390,7 @@ Logo、App Icon、菜单栏或公开模板变化时先执行：
 ./Brand/scripts/verify-assets.sh
 ```
 
-生成入口会同步 `Sources/Lerro/Resources/icon.icns` 和八个菜单栏 template PNG；验证入口
+生成入口会同步 `Sources/Lerro/Resources/AppIcon.icns`、`Assets.car` 和十六个菜单栏 template PNG；验证入口
 会检查完整 ICNS 表示层以及 Brand export 与运行时资源逐字节一致性。
 
 ## 变更到门禁的映射
@@ -401,9 +405,9 @@ Logo、App Icon、菜单栏或公开模板变化时先执行：
 | Global hotkey | GlobalHotkey + ShortcutRecorder suites | `swift test` | 内置/外接键盘的单修饰键、组合键、hold/toggle、吞键、Escape 与 tap reset |
 | MLX | Intelligence suites | `swift test` | 用户授权后的真实下载、加载、生成、缓存 |
 | Vendor Hub / Tokenizers | vendored HubCache/FileOperations tests | vendored packages + `swift test` | 单一本地依赖来源、显式缓存模型 smoke、Release LICENSE/UPSTREAM 非空且 byte-identical |
-| 主窗口 UI / tokens | `LerroThemeAccessibilityTests` + `LerroPressFeedbackTests` | `swift test` | 尺寸与外观矩阵、fixture PNG、Release 窗口、HUD 基线对比 |
+| 主窗口 UI / tokens | 无专用单元测试 | `swift test` | 尺寸与外观矩阵、fixture PNG、Release 窗口、HUD 基线对比 |
 | Brand / App Icon / Menu Bar | `generate-assets.sh` + `verify-assets.sh` | `swift test` | 16/32/64 px 验证板 + Finder/Dock/真实状态栏 |
-| Sparkle 更新器 | `AppExternalLinksTests`、`distribution/npm test` | `swift test`、`npm test` | Keychain 签名、公证 ZIP、公开 appcast、真实 N 到 N+1 安装 |
+| Sparkle 更新器 | `distribution/npm test` | `npm test` | Keychain 签名、公证 ZIP、公开 appcast、真实 N 到 N+1 安装 |
 | 构建/签名/资源 | shell/plist | `swift test` | package + `verify_release.sh` |
 
 ## 真实 Release 人工矩阵
@@ -434,7 +438,7 @@ Logo、App Icon、菜单栏或公开模板变化时先执行：
 | API Dictate 失败 | 使用无效配额或可控失败 endpoint 完成 Dictate | 原始 Apple Speech transcript 通过严格目标交付；Translate 与 tone preview 同类失败保留明确错误 |
 | 清除 API Key | 设置页清除已保存 Key 后重启 | JSON 中 Key 为空；模式切换到原始听写；再次启用 API 需要重新填写 Key |
 | 翻译 | 分别选择 remote/local AI，使用翻译快捷键说中文 | 输出目标语言；严格写入 capture 目标；translation history 正确；raw 模式提示启用 AI |
-| 应用语气 | 个性化 Grid 搜索真实 app、选择并填写 tone、运行 preview 后保存 | 真实 icon/name/bundle 正确；remote/local preview 成功后保存；后续 AI Dictate 命中该 app tone |
+| 应用语气 | 应用语气页搜索真实 app、选择并填写 tone、运行 preview 后保存；另设置默认语气并在未命中 app 时验证 | 真实 icon/name/bundle 正确；remote/local preview 成功后保存；后续 AI Dictate 命中该 app tone |
 | HUD 锁定 | hold 录音中通过 HUD 显式进入锁定，再次触发或点击完成 | 状态切换稳定；Speech 只停止一次 |
 | Escape | listening、enhancing 分别取消 | 无交付、无 completed history、无幽灵录音、输出音量恢复 |
 | 重复 toggle | enhancing/inserting 连续触发 | 处理中无二次 stop、无重复交付 |

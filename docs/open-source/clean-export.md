@@ -50,8 +50,7 @@ The scanner checks:
   such as icons and images remain allowed in their designated directories,
   including first-party website assets under `site/public/`.
 - Website source under `site/` is present while `.git`, `node_modules`, `dist`,
-  `out`, `.wrangler`, `.next`, `.vinext`, `coverage`, `outputs`, and `work` are
-  absent.
+  `.astro`, `.wrangler`, `coverage`, `outputs`, and `work` are absent.
 - Private Wrangler configuration files named `wrangler.toml` are absent. Public
   deployment structure is represented by committed `wrangler.toml.example` or
   `wrangler.jsonc` files only.
@@ -59,8 +58,6 @@ The scanner checks:
   placeholders for local paths and Keychain labels.
 - Project-level `AGENTS.md`, `CLAUDE.md`, `.agents/skills`, and `.claude/skills`
   are present as regular text files; symbolic links remain excluded.
-- Generated website type declarations such as `next-env.d.ts` are recreated by
-  the website build and stay outside the clean source export.
 - The new repository has no commits, no remotes, and no inherited Git objects.
 
 Run the same scanner directly at any time:

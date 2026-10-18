@@ -2,104 +2,25 @@ import AppKit
 import SwiftUI
 import LerroCore
 
-enum CaptureHUDVisualState: Equatable {
-    case idleHidden
-    case waiting
+private enum HUDContent: Hashable {
+    case flat
+    case preparingSpeech
     case listening
-    case handsFree
-    case processing
+    case liveText
+    case silence
+    case polishing
+    case deliveredRawFallback
     case error
     case recovery
     case dictionaryLearned
-
-    var size: CGSize {
-        switch self {
-        case .idleHidden: CGSize(width: 40, height: 6)
-        case .waiting, .listening, .processing, .handsFree:
-            CGSize(width: HUDTranscriptLayout.minimumWidth, height: 34)
-        case .error:
-            CGSize(width: 260, height: 54)
-        case .recovery:
-            CGSize(width: 420, height: 92)
-        case .dictionaryLearned:
-            CGSize(width: 380, height: 72)
-        }
-    }
-
-    func interactionSize(countdownVisible: Bool) -> CGSize {
-        var result = size
-        if countdownVisible, self == .listening || self == .handsFree {
-            result.width += 40
-        }
-        result.width = max(result.width, LerroTheme.hudMinimumInteractionSize.width)
-        result.height = max(result.height, LerroTheme.hudMinimumInteractionSize.height)
-        return result
-    }
-
-    static func resolve(
-        phase: CapturePhase,
-        isStartingCapture: Bool,
-        isHandsFreeCapture: Bool,
-        hasRecoveryPresentation: Bool = false,
-        hasDictionaryLearningToast: Bool = false,
-        isSuppressed: Bool = false
-    ) -> Self {
-        if hasRecoveryPresentation { return .recovery }
-        if hasDictionaryLearningToast { return .dictionaryLearned }
-        if isSuppressed { return .idleHidden }
-        if isStartingCapture {
-            return isHandsFreeCapture ? .handsFree : .waiting
-        }
-
-        switch phase {
-        case .idle:
-            return .idleHidden
-        case .listening:
-            return isHandsFreeCapture ? .handsFree : .listening
-        case .transcribing, .enhancing, .inserting:
-            return .processing
-        case .failed:
-            return .error
-        case .success, .cancelled:
-            return .idleHidden
-        }
-    }
-
 }
 
-enum CaptureHUDAnnouncement {
-    static func message(
-        from previous: CaptureHUDVisualState,
-        to current: CaptureHUDVisualState,
-        phase: CapturePhase,
-        mode: CaptureMode,
-        isStartingCapture: Bool = false,
-        errorMessage: String? = nil
-    ) -> String? {
-        switch current {
-        case .waiting: "正在准备麦克风"
-        case .listening: "正在听写"
-        case .handsFree where isStartingCapture: "已锁定，正在准备麦克风"
-        case .handsFree:
-            switch mode {
-            case .dictation: "已锁定，免按住听写进行中"
-            case .translation: "已锁定，免按住翻译进行中"
-            case .ask: "已锁定，免按住指令进行中"
-            }
-        case .processing:
-            switch mode {
-            case .dictation: "正在处理听写"
-            case .translation: "正在处理翻译"
-            case .ask: "正在处理指令"
-            }
-        case .error: errorMessage ?? "听写失败，可以重试"
-        case .recovery: "写入失败，内容已复制到剪贴板"
-        case .dictionaryLearned: "已将修正加入词典"
-        case .idleHidden where phase == .cancelled: "听写已取消"
-        case .idleHidden where previous == .processing: "听写完成"
-        case .idleHidden: nil
-        }
-    }
+private struct HUDLayoutKey: Equatable {
+    var content: HUDContent
+    var showsTimer: Bool
+    var showsHint: Bool
+    var showsCancel: Bool
+    var liveText: String
 }
 
 struct CaptureHUDView: View {
@@ -108,291 +29,360 @@ struct CaptureHUDView: View {
     @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
     @Environment(\.colorSchemeContrast) private var systemContrast
     @Environment(\.locale) private var locale
-    @State private var expandedTranscriptWidth = HUDTranscriptLayout.minimumWidth
     @State private var transcriptAnnouncementTask: Task<Void, Never>?
 
     var body: some View {
-        hudControl
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .padding(.bottom, LerroTheme.hudContentBottomInset)
-            .onTapGesture(count: 2) {
-                guard visualState != .recovery,
-                      visualState != .dictionaryLearned else { return }
-                session.enterHandsFreeCapture(session.activeMode)
-            }
-            .accessibilityElement(children: .contain)
-            .accessibilityHidden(visualState == .idleHidden)
-            .accessibilityLabel(localized(accessibilityLabel))
-            .accessibilityActions {
-                if session.phase == .listening, !session.isHandsFreeCapture {
-                    Button("进入免按住模式") {
-                        session.enterHandsFreeCapture(session.activeMode)
-                    }
-                }
-            }
-            .onChange(of: visualState) { previous, current in
-                announceTransition(from: previous, to: current)
-            }
-            .onChange(of: session.isStartingCapture) { wasStarting, isStarting in
-                guard wasStarting,
-                      !isStarting,
-                      visualState == .handsFree,
-                      session.phase == .listening else { return }
-                announceTransition(from: .handsFree, to: .handsFree)
-            }
-            .onChange(of: session.partialTranscript, initial: true) { _, transcript in
-                updateExpandedWidth(for: transcript)
-                scheduleTranscriptAnnouncement(transcript)
-            }
-            .onDisappear { transcriptAnnouncementTask?.cancel() }
-            .onChange(of: session.phase) { _, phase in
-                if phase == .idle || phase == .cancelled || phase == .failed {
-                    expandedTranscriptWidth = HUDTranscriptLayout.minimumWidth
-                }
-            }
-    }
-
-    private var hudControl: some View {
-        Group {
-            switch visualState {
-            case .recovery:
-                recoveryContent
-            case .dictionaryLearned:
-                dictionaryLearningContent
-            case .idleHidden, .waiting, .listening, .handsFree, .processing, .error:
-                captureContent
+        ZStack(alignment: .bottom) {
+            if visualState != .idleHidden {
+                capsule
+                    .transition(presenceTransition)
             }
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, visualState == .recovery || visualState == .dictionaryLearned ? 12 : 6)
-        .padding(.vertical, visualState == .idleHidden ? 0 : 4)
-        .frame(width: targetSize.width, height: targetSize.height)
-        .background(background)
-        .clipShape(RoundedRectangle(
-            cornerRadius: usesCardShape ? 16 : targetSize.height / 2,
-            style: .continuous
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .padding(.bottom, LerroTheme.hudContentBottomInset)
+        .animation(presenceAnimation, value: visualState == .idleHidden)
+        .environment(\.colorScheme, .dark)
+        .accessibilityElement(children: .contain)
+        .accessibilityHidden(visualState == .idleHidden)
+        .accessibilityLabel(localized(accessibilityLabel))
+        .accessibilityActions {
+            if canEnterHandsFree {
+                Button("进入免按住模式") {
+                    session.enterHandsFreeCapture(session.activeMode)
+                }
+            }
+        }
+        .onChange(of: visualState) { previous, current in
+            announceTransition(from: previous, to: current)
+        }
+        .onChange(of: session.partialTranscript, initial: true) { _, transcript in
+            scheduleTranscriptAnnouncement(transcript)
+        }
+        .onDisappear { transcriptAnnouncementTask?.cancel() }
+    }
+
+    private var capsule: some View {
+        ZStack {
+            contentView
+                .id(content)
+                .transition(.opacity)
+        }
+        .padding(.horizontal, LerroTheme.hudHorizontalPadding)
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(height: LerroTheme.hudCapsuleHeight)
+        .modifier(HUDSurface(
+            reduceTransparency: reduceTransparency,
+            increaseContrast: increaseContrast
         ))
-        .overlay {
-            RoundedRectangle(
-                cornerRadius: usesCardShape ? 16 : targetSize.height / 2,
-                style: .continuous
-            )
-            .stroke(
-                Color.white.opacity(increaseContrast ? 0.68 : 0.32),
-                lineWidth: increaseContrast ? 1.5 : 1
-            )
-            .opacity(visualState == .idleHidden ? 0 : 1)
+        .animation(layoutAnimation, value: layoutKey)
+        .onHover { isHovering in
+            guard visualState == .dictionaryLearned else { return }
+            session.setDictionaryLearningToastHoverPaused(isHovering)
         }
-        .shadow(color: .black.opacity(0.24), radius: 12, y: 6)
-        .opacity(visualState == .idleHidden ? 0 : 1)
-        .animation(surfaceAnimation, value: visualState)
-        .animation(surfaceAnimation, value: targetSize)
-    }
-
-    private var captureContent: some View {
-        VStack(alignment: .center, spacing: showsLiveTranscript ? 5 : 0) {
-            if showsLiveTranscript {
-                liveTranscript
-                    .transition(.opacity)
-            }
-            HStack(spacing: 4) {
-            hudButtonSlot(
-                "xmark",
-                label: visualState == .processing ? "取消处理" : "取消当前听写",
-                isVisible: showsCancelButton
-            ) {
-                session.cancelCapture()
-            }
-
-            ZStack {
-                if let waveformMode {
-                    HStack(spacing: 4) {
-                        HUDWaveform(
-                            level: waveformLevel,
-                            mode: waveformMode,
-                            reduceMotion: reduceMotion,
-                            increaseContrast: increaseContrast
-                        )
-                        countdownLabel
-                        toneProfileLabel
-                    }
-                    .transition(.opacity)
-                }
-
-                if visualState == .processing {
-                    HStack(spacing: 5) {
-                        HUDProcessingIndicator(
-                            reduceMotion: reduceMotion,
-                            increaseContrast: increaseContrast
-                        )
-                        toneProfileLabel
-                    }
-                        .accessibilityHidden(true)
-                        .transition(.opacity)
-                }
-
-                if visualState == .error {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color(nsColor: .systemRed))
-                        if let errorText = session.captureError {
-                            Text(verbatim: errorText)
-                                .font(LerroTheme.font(10, weight: .medium))
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .foregroundStyle(.white)
-                        }
-                        Button("重试") { session.toggleCapture(session.activeMode) }
-                            .buttonStyle(LerroPressButtonStyle())
-                            .font(LerroTheme.font(10, weight: .medium))
-                    }
-                    .transition(.opacity)
-                }
-            }
-            .animation(crossfadeAnimation, value: visualState)
-
-            hudButtonSlot(
-                "checkmark",
-                label: "完成并处理听写",
-                isVisible: visualState == .handsFree
-            ) {
-                session.toggleCapture(session.activeMode)
-            }
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
+        .onTapGesture(count: 2) {
+            guard canEnterHandsFree else { return }
+            session.enterHandsFreeCapture(session.activeMode)
         }
     }
 
-    private var liveTranscript: some View {
-        VStack(alignment: .center, spacing: 2) {
-            if let applicationName = session.activeCaptureApplicationName {
-                Text(verbatim: applicationName)
-                    .font(LerroTheme.font(10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(increaseContrast ? 1 : 0.72))
+    @ViewBuilder
+    private var contentView: some View {
+        switch content {
+        case .flat:
+            HStack(spacing: LerroTheme.hudContentSpacing) {
+                directionChip
+                HUDCursor(blinks: false, reduceMotion: reduceMotion)
+                HUDFlatWaveform(increaseContrast: increaseContrast)
+            }
+        case .preparingSpeech:
+            HStack(spacing: LerroTheme.hudContentSpacing) {
+                directionChip
+                HUDCursor(blinks: false, reduceMotion: reduceMotion)
+                HUDFlatWaveform(increaseContrast: increaseContrast)
+                Text(verbatim: localized("正在准备语音资源"))
+                    .font(LerroTheme.font(13))
+                    .foregroundStyle(secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 260, alignment: .leading)
+            }
+        case .listening:
+            HStack(spacing: LerroTheme.hudContentSpacing) {
+                directionChip
+                HUDCursor(blinks: true, reduceMotion: reduceMotion)
+                HUDWaveform(
+                    level: session.audioLevel,
+                    reduceMotion: reduceMotion,
+                    increaseContrast: increaseContrast
+                )
+                listeningAccessories
+            }
+        case .liveText:
+            HStack(spacing: LerroTheme.hudContentSpacing) {
+                HUDApplicationIconView(bundleIdentifier: session.activeCaptureBundleIdentifier)
+                HUDLiveText(
+                    text: liveTranscript,
+                    isStable: session.partialTranscriptIsStable,
+                    maximumWidth: liveTextMaximumWidth,
+                    reduceMotion: reduceMotion
+                )
+                listeningAccessories
+            }
+        case .silence:
+            HStack(spacing: LerroTheme.hudContentSpacing) {
+                HUDCursor(blinks: false, reduceMotion: reduceMotion)
+                HUDFlatWaveform(increaseContrast: increaseContrast)
+                Text(verbatim: silenceText)
+                    .font(LerroTheme.font(13))
+                    .foregroundStyle(secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 260, alignment: .leading)
+                listeningAccessories
+            }
+        case .polishing:
+            HStack(spacing: LerroTheme.hudContentSpacing) {
+                HUDApplicationIconView(bundleIdentifier: session.activeCaptureBundleIdentifier)
+                HUDShimmerText(
+                    text: localized(session.activeMode == .translation ? "翻译中…" : "AI 润色中…"),
+                    reduceMotion: reduceMotion
+                )
+                if session.isCaptureCancellationAvailable {
+                    HUDCircleButton(
+                        systemName: "xmark",
+                        label: localized("取消处理"),
+                        increaseContrast: increaseContrast
+                    ) { session.cancelCapture() }
+                }
+            }
+        case .deliveredRawFallback:
+            HStack(spacing: LerroTheme.hudContentSpacing) {
+                HUDDot(color: LerroTheme.hudWarning)
+                Text(localized("已写入原文 · AI 未响应"))
+                    .font(LerroTheme.font(13))
+                    .foregroundStyle(secondaryText)
                     .lineLimit(1)
             }
-            Text(verbatim: session.partialTranscript)
-                .font(LerroTheme.font(12, weight: session.partialTranscriptIsStable ? .medium : .regular))
-                .foregroundStyle(.white.opacity(session.partialTranscriptIsStable ? 1 : 0.78))
-                .lineLimit(2)
-                .truncationMode(.head)
-                .multilineTextAlignment(.center)
+        case .error:
+            HStack(spacing: LerroTheme.hudContentSpacing) {
+                HUDDot(color: LerroTheme.hudError)
+                Text(verbatim: session.captureError ?? localized("没有听到声音"))
+                    .font(LerroTheme.font(14))
+                    .foregroundStyle(LerroTheme.hudPaper)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 260, alignment: .leading)
+                HUDPillButton(title: localized("重试"), increaseContrast: increaseContrast) {
+                    session.toggleCapture(session.activeMode)
+                }
+            }
+        case .recovery:
+            recoveryContent
+        case .dictionaryLearned:
+            dictionaryLearnedContent
         }
-        .frame(maxWidth: .infinity, alignment: .center)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(localized("实时转写"))
-        .accessibilityValue(Text(verbatim: session.partialTranscript))
+    }
+
+    @ViewBuilder
+    private var directionChip: some View {
+        if let label = session.activeTranslationDirectionLabel {
+            Text(verbatim: label)
+                .font(LerroTheme.font(11, weight: .medium))
+                .foregroundStyle(LerroTheme.hudPaper.opacity(0.8))
+                .padding(.horizontal, 7)
+                .frame(height: 20)
+                .background(LerroTheme.hudPaper.opacity(increaseContrast ? 0.24 : 0.14), in: Capsule())
+        }
+    }
+
+    @ViewBuilder
+    private var listeningAccessories: some View {
+        if let timer {
+            Text(verbatim: timer.text)
+                .font(LerroTheme.font(13))
+                .monospacedDigit()
+                .foregroundStyle(timer.isWarning ? LerroTheme.hudWarning : secondaryText)
+                .transition(.opacity)
+        }
+        if showsHandsFreeHint, let label = session.handsFreeStopKeyLabel {
+            Text(verbatim: label)
+                .font(LerroTheme.font(11))
+                .foregroundStyle(LerroTheme.hudPaper.opacity(0.7))
+                .frame(minWidth: 18, minHeight: 18)
+                .padding(.horizontal, 3)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .strokeBorder(LerroTheme.hudPaper.opacity(0.3), lineWidth: 1)
+                }
+                .accessibilityHidden(true)
+                .transition(.opacity)
+        }
     }
 
     @ViewBuilder
     private var recoveryContent: some View {
         if let recovery = session.recoveryPresentation {
-            HStack(spacing: 10) {
-                Image(systemName: "doc.on.clipboard.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(nsColor: .systemOrange))
-                    .frame(width: 20)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: LerroInterfaceLocalization.format(
-                        "未能写入 %@",
-                        locale: locale,
-                        arguments: recovery.applicationName
-                    ))
-                        .font(LerroTheme.font(11, weight: .semibold))
-                        .lineLimit(1)
-                    Text(verbatim: recovery.message)
-                        .font(LerroTheme.font(10))
-                        .foregroundStyle(.white.opacity(increaseContrast ? 1 : 0.72))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+            HStack(spacing: LerroTheme.hudContentSpacing) {
+                HUDDot(color: LerroTheme.hudWarning)
+                Text(verbatim: LerroInterfaceLocalization.format(
+                    "未能写入 %@，已复制",
+                    locale: locale,
+                    arguments: recovery.applicationName
+                ))
+                .font(LerroTheme.font(14))
+                .foregroundStyle(LerroTheme.hudPaper)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: 280, alignment: .leading)
+                HUDPillButton(title: localized("再次复制"), increaseContrast: increaseContrast) {
+                    session.recopyRecoveryText()
                 }
-                Spacer(minLength: 4)
-                cardButton("再次复制") { session.recopyRecoveryText() }
-                cardDismissButton(label: "关闭恢复提示") { session.dismissRecovery() }
+                HUDCircleButton(
+                    systemName: "xmark",
+                    label: localized("关闭恢复提示"),
+                    increaseContrast: increaseContrast
+                ) { session.dismissRecovery() }
             }
         }
     }
 
     @ViewBuilder
-    private var dictionaryLearningContent: some View {
+    private var dictionaryLearnedContent: some View {
         if let toast = session.dictionaryLearningToast {
-            HStack(spacing: 10) {
-                Image(systemName: "character.book.closed.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(nsColor: .systemGreen))
-                    .frame(width: 20)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: toast.count > 1
-                        ? "已学会 \(toast.count) 项修正"
-                        : "已学会：\(toast.phrase) → \(toast.replacement)")
-                        .font(LerroTheme.font(11, weight: .semibold))
-                        .lineLimit(1)
-                    Text(verbatim: toast.applicationName)
-                        .font(LerroTheme.font(10))
-                        .foregroundStyle(.white.opacity(increaseContrast ? 1 : 0.72))
-                        .lineLimit(1)
+            HStack(spacing: LerroTheme.hudContentSpacing) {
+                Text(verbatim: "+")
+                    .font(LerroTheme.font(16, weight: .bold))
+                    .foregroundStyle(LerroTheme.hudCursor)
+                    .accessibilityHidden(true)
+                if toast.count > 1 {
+                    Text(verbatim: LerroInterfaceLocalization.format(
+                        "已学会 %d 项修正",
+                        locale: locale,
+                        arguments: Int32(toast.count)
+                    ))
+                    .font(LerroTheme.font(14))
+                    .foregroundStyle(LerroTheme.hudPaper)
+                    .lineLimit(1)
+                } else {
+                    HStack(spacing: 0) {
+                        Text(verbatim: "\(toast.phrase) → ")
+                            .font(LerroTheme.font(14))
+                            .foregroundStyle(LerroTheme.hudPaper.opacity(0.7))
+                        Text(verbatim: toast.replacement)
+                            .font(LerroTheme.font(14, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 300, alignment: .leading)
                 }
-                Spacer(minLength: 4)
-                cardButton("撤销") { session.undoDictionaryLearning() }
-                cardDismissButton(label: "关闭词典提示") {
-                    session.dismissDictionaryLearningToast()
+                HUDPillButton(title: localized("撤销"), increaseContrast: increaseContrast) {
+                    session.undoDictionaryLearning()
                 }
             }
         }
     }
 
-    private var waveformMode: HUDWaveformMode? {
+    private var visualState: CaptureHUDVisualState {
+        session.currentHUDVisualState
+    }
+
+    private var content: HUDContent {
         switch visualState {
-        case .waiting: .waiting
-        case .handsFree where session.isStartingCapture: .arming
-        case .listening, .handsFree: .listening
-        case .idleHidden, .processing, .error, .recovery, .dictionaryLearned: nil
+        case .idleHidden:
+            .flat
+        case .arming:
+            session.isWaitingForSpeechResources ? .preparingSpeech : .flat
+        case .listening:
+            if session.isSilenceWarningVisible { .silence }
+            else if hasLiveText { .liveText }
+            else { .listening }
+        case .processing:
+            session.activeCaptureUsesAI ? .polishing : .flat
+        case .deliveredRawFallback: .deliveredRawFallback
+        case .error: .error
+        case .recovery: .recovery
+        case .dictionaryLearned: .dictionaryLearned
         }
     }
 
-    private var waveformLevel: Float {
-        waveformMode == .listening ? session.audioLevel : 0
-    }
-
-    private var showsCancelButton: Bool {
-        visualState == .handsFree
-            || (visualState == .processing && session.isCaptureCancellationAvailable)
-    }
-
-    private var surfaceAnimation: Animation? {
-        guard !reduceMotion else { return nil }
-        return .interpolatingSpring(
-            mass: 0.9,
-            stiffness: 420,
-            damping: 36,
-            initialVelocity: 0
+    private var layoutKey: HUDLayoutKey {
+        HUDLayoutKey(
+            content: content,
+            showsTimer: timer != nil,
+            showsHint: showsHandsFreeHint,
+            showsCancel: content == .polishing && session.isCaptureCancellationAvailable,
+            liveText: content == .liveText ? liveTranscript : ""
         )
     }
 
-    private var crossfadeAnimation: Animation? {
-        guard !reduceMotion else { return nil }
-        if visualState == .processing {
-            return .timingCurve(0.23, 1, 0.32, 1, duration: 0.08)
+    private var liveTranscript: String {
+        session.partialTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var hasLiveText: Bool {
+        !liveTranscript.isEmpty
+    }
+
+    private var showsHandsFreeHint: Bool {
+        visualState == .listening
+            && session.showsHandsFreeStopHint
+            && session.handsFreeStopKeyLabel != nil
+    }
+
+    private var liveTextMaximumWidth: CGFloat {
+        var width = LerroTheme.hudLiveTextMaximumWidth
+        if timer != nil { width -= 48 }
+        if showsHandsFreeHint { width -= 32 }
+        return width
+    }
+
+    private var timer: (text: String, isWarning: Bool)? {
+        guard visualState == .listening, session.captureElapsed >= 5 else { return nil }
+        let elapsed = Int(session.captureElapsed)
+        if elapsed >= 8 * 60 {
+            let remaining = max(0, 9 * 60 - elapsed)
+            return (String(format: "%d:%02d", remaining / 60, remaining % 60), true)
         }
-        return .interpolatingSpring(
-            mass: 0.8,
-            stiffness: 260,
-            damping: 34,
-            initialVelocity: 0
+        return (String(format: "%d:%02d", elapsed / 60, elapsed % 60), false)
+    }
+
+    private var silenceText: String {
+        guard let device = session.silenceWarningDeviceName else {
+            return localized("没有听到声音")
+        }
+        return LerroInterfaceLocalization.format(
+            "%@ · 没有听到声音",
+            locale: locale,
+            arguments: device
         )
     }
 
-    private var controlDisclosureAnimation: Animation? {
-        reduceMotion ? nil : .timingCurve(0.05, 0.6, 0.4, 0.95, duration: 0.2)
+    private var canEnterHandsFree: Bool {
+        visualState == .listening && !session.isHandsFreeCapture
     }
 
-    private var controlOpacityAnimation: Animation? {
-        reduceMotion ? nil : .easeOut(duration: 0.1)
+    private var secondaryText: Color {
+        increaseContrast ? LerroTheme.hudPaper.opacity(0.85) : LerroTheme.hudSecondaryText
     }
 
-    private var background: Color {
-        Color.black.opacity(reduceTransparency ? 1 : 0.94)
+    private var presenceTransition: AnyTransition {
+        if reduceMotion { return .opacity }
+        return .asymmetric(
+            insertion: .scale(scale: 0.92, anchor: .bottom).combined(with: .opacity),
+            removal: .modifier(active: HUDHiddenEffect(isHidden: true), identity: HUDHiddenEffect(isHidden: false))
+        )
+    }
+
+    private var presenceAnimation: Animation {
+        if reduceMotion { return .easeInOut(duration: 0.15) }
+        return .easeOut(duration: visualState == .idleHidden ? 0.2 : 0.18)
+    }
+
+    private var layoutAnimation: Animation {
+        reduceMotion
+            ? .easeInOut(duration: 0.15)
+            : .spring(response: 0.35, dampingFraction: 0.8)
     }
 
     private var reduceMotion: Bool {
@@ -407,132 +397,27 @@ struct CaptureHUDView: View {
         systemContrast == .increased || session.visualFixtureIncreaseContrast
     }
 
-    private var visualState: CaptureHUDVisualState {
-        CaptureHUDVisualState.resolve(
-            phase: session.phase,
-            isStartingCapture: session.isStartingCapture,
-            isHandsFreeCapture: session.isHandsFreeCapture,
-            hasRecoveryPresentation: session.recoveryPresentation != nil,
-            hasDictionaryLearningToast: session.dictionaryLearningToast != nil,
-            isSuppressed: session.isHUDSuppressed
-        )
-    }
-
-    private var targetSize: CGSize {
-        if showsLiveTranscript {
-            return CGSize(width: expandedTranscriptWidth, height: 84)
-        }
-        var size = visualState.size
-        if isCountdownVisible { size.width += 40 }
-        if session.activeToneProfileApplicationName != nil,
-           visualState == .waiting || visualState == .listening
-               || visualState == .handsFree || visualState == .processing {
-            size.width += 78
-        }
-        return size
-    }
-
-    private var usesCardShape: Bool {
-        showsLiveTranscript || visualState == .recovery || visualState == .dictionaryLearned
-    }
-
-    private func updateExpandedWidth(for transcript: String) {
-        let measured = HUDTranscriptLayout.requiredWidth(
-            applicationName: session.activeCaptureApplicationName,
-            transcript: transcript
-        )
-        expandedTranscriptWidth = max(expandedTranscriptWidth, measured)
-    }
-
-    private var showsLiveTranscript: Bool {
-        !session.partialTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && (visualState == .listening
-                || visualState == .handsFree
-                || visualState == .processing)
-    }
-
-    private var isCountdownVisible: Bool {
-        session.phase == .listening && session.captureElapsed >= 8 * 60
-    }
-
-    @ViewBuilder
-    private var countdownLabel: some View {
-        if isCountdownVisible {
-            Text(verbatim: timeRemaining)
-                .font(LerroTheme.font(9, weight: .semibold))
-                .monospacedDigit()
-                .foregroundStyle(.white.opacity(increaseContrast ? 1 : 0.84))
-        }
-    }
-
-    @ViewBuilder
-    private var toneProfileLabel: some View {
-        if let applicationName = session.activeToneProfileApplicationName {
-            Text(verbatim: applicationName)
-                .font(LerroTheme.font(9, weight: .medium))
-                .foregroundStyle(.white.opacity(increaseContrast ? 1 : 0.82))
-                .lineLimit(1)
-                .frame(maxWidth: 70)
-        }
-    }
-
-    private var timeRemaining: String {
-        let remaining = max(0, 9 * 60 - Int(session.captureElapsed))
-        return String(format: "%d:%02d", remaining / 60, remaining % 60)
-    }
-
-    private var modeIcon: String {
-        switch session.activeMode {
-        case .dictation: "waveform"
-        case .translation: "character.bubble"
-        case .ask: "sparkles"
-        }
-    }
-
     private var accessibilityLabel: String {
         switch visualState {
         case .idleHidden: "Lerro 已就绪"
-        case .waiting: "正在准备麦克风"
-        case .listening: "正在听写"
-        case .handsFree: session.isStartingCapture
-            ? "已锁定，正在准备麦克风"
-            : handsFreeAccessibilityLabel
+        case .arming:
+            session.isWaitingForSpeechResources ? "正在准备语音资源" : "正在准备麦克风"
+        case .listening:
+            if session.isSilenceWarningVisible { "没有听到声音" }
+            else if session.isHandsFreeCapture { handsFreeAccessibilityLabel }
+            else if session.activeMode == .translation { "正在翻译" }
+            else { "正在听写" }
         case .processing:
             switch session.activeMode {
             case .dictation: "正在处理听写"
-            case .translation: "正在处理翻译"
-            case .ask: "正在处理指令"
+            case .translation: "正在翻译"
+            case .ask: "正在处理"
             }
+        case .deliveredRawFallback: "AI 未响应，已写入原文"
         case .error: session.captureError ?? "听写失败，可以重试"
-        case .recovery: session.recoveryPresentation.map {
-            "未能写入 \($0.applicationName)，内容已复制到剪贴板"
-        } ?? "写入失败，内容已复制到剪贴板"
+        case .recovery: "写入失败，内容已复制到剪贴板"
         case .dictionaryLearned: "已将修正加入词典"
         }
-    }
-
-    private func cardButton(
-        _ title: String,
-        prominent: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(LocalizedStringKey(title), action: action)
-            .buttonStyle(LerroPressButtonStyle())
-            .font(LerroTheme.font(10, weight: .semibold))
-            .padding(.horizontal, 8)
-            .frame(height: 26)
-            .background(Color.white.opacity(prominent ? 0.24 : 0.12))
-            .clipShape(Capsule())
-    }
-
-    private func cardDismissButton(label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .bold))
-                .frame(width: 24, height: 24)
-        }
-        .buttonStyle(LerroPressButtonStyle())
-        .accessibilityLabel(localized(label))
     }
 
     private var handsFreeAccessibilityLabel: String {
@@ -543,35 +428,6 @@ struct CaptureHUDView: View {
         }
     }
 
-    private func hudButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 10, weight: .bold))
-                .frame(width: 24, height: 24)
-                .background(Color.white.opacity(increaseContrast ? 0.26 : 0.13))
-                .clipShape(Circle())
-        }
-        .buttonStyle(LerroPressButtonStyle())
-        .accessibilityLabel(localized(label))
-    }
-
-    private func hudButtonSlot(
-        _ icon: String,
-        label: String,
-        isVisible: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        hudButton(icon, label: label, action: action)
-            .opacity(isVisible ? 1 : 0)
-            .animation(controlOpacityAnimation, value: isVisible)
-            .frame(width: 28, height: 24)
-            .scaleEffect(isVisible ? 1 : 0.01)
-            .clipped()
-            .allowsHitTesting(isVisible)
-            .accessibilityHidden(!isVisible)
-            .animation(controlDisclosureAnimation, value: isVisible)
-    }
-
     private func announceTransition(
         from previous: CaptureHUDVisualState,
         to current: CaptureHUDVisualState
@@ -579,9 +435,8 @@ struct CaptureHUDView: View {
         guard let message = CaptureHUDAnnouncement.message(
             from: previous,
             to: current,
-            phase: session.phase,
             mode: session.activeMode,
-            isStartingCapture: session.isStartingCapture,
+            phase: session.phase,
             errorMessage: session.captureError
         ) else { return }
         NSAccessibility.post(
@@ -597,10 +452,10 @@ struct CaptureHUDView: View {
     private func scheduleTranscriptAnnouncement(_ transcript: String) {
         transcriptAnnouncementTask?.cancel()
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, showsLiveTranscript else { return }
+        guard !trimmed.isEmpty, visualState == .listening else { return }
         transcriptAnnouncementTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(800))
-            guard !Task.isCancelled, showsLiveTranscript else { return }
+            guard !Task.isCancelled, visualState == .listening else { return }
             NSAccessibility.post(
                 element: NSApplication.shared,
                 notification: .announcementRequested,
@@ -617,102 +472,260 @@ struct CaptureHUDView: View {
     }
 }
 
-enum HUDTranscriptLayout {
-    static let minimumWidth: CGFloat = 120
-    static let maximumWidth: CGFloat = 420
+private struct HUDHiddenEffect: ViewModifier {
+    let isHidden: Bool
 
-    static func requiredWidth(applicationName: String?, transcript: String) -> CGFloat {
-        let applicationWidth = estimatedTextWidth(applicationName ?? "", pointSize: 10)
-        let transcriptWidth = estimatedTextWidth(transcript, pointSize: 12)
-        let contentWidth = max(applicationWidth, transcriptWidth) + 36
-        return min(maximumWidth, max(minimumWidth, ceil(contentWidth)))
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isHidden ? 0.92 : 1, anchor: .bottom)
+            .opacity(isHidden ? 0 : 1)
+            .offset(y: isHidden ? 6 : 0)
+    }
+}
+
+private struct HUDSurface: ViewModifier {
+    let reduceTransparency: Bool
+    let increaseContrast: Bool
+
+    func body(content: Content) -> some View {
+        surface(content)
+            .overlay {
+                Capsule().strokeBorder(
+                    increaseContrast
+                        ? LerroTheme.hudPaper.opacity(0.3)
+                        : Color.white.opacity(0.1),
+                    lineWidth: increaseContrast ? 1 : 0.5
+                )
+            }
+            .shadow(color: .black.opacity(0.25), radius: 15, y: 8)
     }
 
-    private static func estimatedTextWidth(_ text: String, pointSize: CGFloat) -> CGFloat {
-        text.reduce(CGFloat.zero) { width, character in
-            let scalar = character.unicodeScalars.first?.value ?? 0
-            let isWide = scalar >= 0x2E80 || character == "Ｍ"
-            return width + (isWide ? pointSize : pointSize * 0.56)
+    @ViewBuilder
+    private func surface(_ content: Content) -> some View {
+        if reduceTransparency {
+            content.background(LerroTheme.hudInk, in: Capsule())
+        } else {
+            content
+                .glassEffect(.regular.tint(LerroTheme.hudInk), in: Capsule())
+                .background(LerroTheme.hudInk.opacity(0.86), in: Capsule())
         }
     }
 }
 
-struct HUDProcessingPulse: Equatable {
-    static let dotCount = 3
-    static let cycleDuration: TimeInterval = 0.72
-
-    let energies: [CGFloat]
-
-    init(elapsed: TimeInterval, reduceMotion: Bool) {
-        if reduceMotion {
-            energies = [0.18, 1, 0.18]
-            return
-        }
-
-        let cycle = elapsed.truncatingRemainder(dividingBy: Self.cycleDuration)
-            / Self.cycleDuration
-        energies = (0..<Self.dotCount).map { index in
-            let peak = Double(index) / Double(Self.dotCount)
-            let directDistance = abs(cycle - peak)
-            let wrappedDistance = min(directDistance, 1 - directDistance)
-            return CGFloat(max(0, 1 - wrappedDistance / 0.34))
-        }
-    }
-}
-
-enum HUDProcessingIndicatorStyle {
-    static let usesSystemAccent = true
-    static let dotColor = LerroTheme.accent
-}
-
-private struct HUDProcessingIndicator: View {
+private struct HUDCursor: View {
+    let blinks: Bool
     let reduceMotion: Bool
+    var height: CGFloat = 18
+
+    var body: some View {
+        if blinks, !reduceMotion {
+            TimelineView(.periodic(
+                from: Date(timeIntervalSinceReferenceDate: 0),
+                by: 0.525
+            )) { context in
+                let step = Int(context.date.timeIntervalSinceReferenceDate / 0.525)
+                bar.opacity(step.isMultiple(of: 2) ? 1 : 0.12)
+            }
+        } else {
+            bar
+        }
+    }
+
+    private var bar: some View {
+        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+            .fill(LerroTheme.hudCursor)
+            .frame(width: 3, height: height)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct HUDDot: View {
+    let color: Color
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 8, height: 8)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct HUDPillButton: View {
+    let title: String
+    let increaseContrast: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(LerroTheme.font(13, weight: .medium))
+                .foregroundStyle(LerroTheme.hudPaper)
+                .padding(.horizontal, 11)
+                .frame(height: 26)
+                .background(
+                    LerroTheme.hudPaper.opacity(increaseContrast ? 0.26 : 0.16),
+                    in: Capsule()
+                )
+                .contentShape(Capsule())
+        }
+        .buttonStyle(LerroPressButtonStyle())
+    }
+}
+
+private struct HUDCircleButton: View {
+    let systemName: String
+    let label: String
+    let increaseContrast: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(LerroTheme.hudPaper)
+                .frame(width: 22, height: 22)
+                .background(
+                    LerroTheme.hudPaper.opacity(increaseContrast ? 0.26 : 0.14),
+                    in: Circle()
+                )
+                .contentShape(Circle())
+        }
+        .buttonStyle(LerroPressButtonStyle())
+        .accessibilityLabel(label)
+    }
+}
+
+@MainActor
+private enum HUDApplicationIconCache {
+    private static var images: [String: NSImage] = [:]
+
+    static func image(for bundleIdentifier: String?) -> NSImage? {
+        guard let bundleIdentifier else { return nil }
+        if let cached = images[bundleIdentifier] { return cached }
+        guard let url = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: bundleIdentifier
+        ) else { return nil }
+        let image = NSWorkspace.shared.icon(forFile: url.path)
+        images[bundleIdentifier] = image
+        return image
+    }
+}
+
+private struct HUDApplicationIconView: View {
+    let bundleIdentifier: String?
+
+    var body: some View {
+        if let image = HUDApplicationIconCache.image(for: bundleIdentifier) {
+            Image(nsImage: image)
+                .resizable()
+                .frame(width: 20, height: 20)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+private struct HUDLiveText: View {
+    let text: String
+    let isStable: Bool
+    let maximumWidth: CGFloat
+    let reduceMotion: Bool
+    @Environment(\.locale) private var locale
+    @State private var naturalWidth: CGFloat = 0
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(verbatim: text)
+                .font(LerroTheme.font(14))
+                .foregroundStyle(LerroTheme.hudPaper.opacity(isStable ? 1 : 0.85))
+                .lineLimit(1)
+                .fixedSize()
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: {
+                    naturalWidth = $0
+                }
+            HUDCursor(blinks: true, reduceMotion: reduceMotion, height: 16)
+        }
+        .frame(maxWidth: maximumWidth, alignment: .trailing)
+        .clipped()
+        .mask(alignment: .leading) {
+            HStack(spacing: 0) {
+                LinearGradient(
+                    colors: [.clear, .black],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: naturalWidth + 6 > maximumWidth ? 36 : 0)
+                Rectangle()
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(LerroInterfaceLocalization.string("实时转写", locale: locale))
+        .accessibilityValue(Text(verbatim: text))
+    }
+}
+
+private struct HUDShimmerText: View {
+    let text: String
+    let reduceMotion: Bool
+
+    var body: some View {
+        if reduceMotion {
+            label.foregroundStyle(LerroTheme.hudPaper.opacity(0.7))
+        } else {
+            TimelineView(.animation) { context in
+                let phase = context.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: 1.6) / 1.6
+                label
+                    .foregroundStyle(LerroTheme.hudPaper.opacity(0.6))
+                    .overlay {
+                        label
+                            .foregroundStyle(LerroTheme.hudPaper)
+                            .mask {
+                                GeometryReader { proxy in
+                                    LinearGradient(
+                                        colors: [.clear, .white, .clear],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                    .frame(width: proxy.size.width * 0.4)
+                                    .offset(x: (phase * 1.4 - 0.4) * proxy.size.width)
+                                }
+                            }
+                    }
+            }
+        }
+    }
+
+    private var label: some View {
+        Text(text)
+            .font(LerroTheme.font(14))
+            .lineLimit(1)
+    }
+}
+
+private struct HUDFlatWaveform: View {
     let increaseContrast: Bool
 
     var body: some View {
-        TimelineView(.animation(
-            minimumInterval: 1.0 / 30.0,
-            paused: reduceMotion
-        )) { context in
-            let pulse = HUDProcessingPulse(
-                elapsed: context.date.timeIntervalSinceReferenceDate,
-                reduceMotion: reduceMotion
-            )
-
-            HStack(spacing: 3) {
-                ForEach(pulse.energies.indices, id: \.self) { index in
-                    let energy = pulse.energies[index]
-                    Circle()
-                        .fill(HUDProcessingIndicatorStyle.dotColor.opacity(
-                            dotOpacity(for: energy)
-                        ))
-                        .frame(width: 4, height: 4)
-                        .scaleEffect(0.78 + energy * 0.28)
-                }
+        HStack(alignment: .center, spacing: 3) {
+            ForEach(0..<HUDWaveformResponse.barCount, id: \.self) { _ in
+                Capsule()
+                    .fill(LerroTheme.hudPaper.opacity(increaseContrast ? 0.6 : 0.35))
+                    .frame(width: 3, height: 3)
             }
         }
-        .frame(width: 26, height: 22)
+        .frame(height: HUDWaveformResponse.maximumBarHeight)
+        .accessibilityHidden(true)
     }
-
-    private func dotOpacity(for energy: CGFloat) -> Double {
-        let minimumOpacity = increaseContrast ? 0.62 : 0.36
-        return minimumOpacity + Double(energy) * (1 - minimumOpacity)
-    }
-}
-
-enum HUDWaveformMode: Hashable {
-    case arming
-    case waiting
-    case listening
 }
 
 struct HUDWaveformResponse: Equatable {
-    static let barCount = 10
-    static let maximumBarHeight: CGFloat = 21
-    static let minimumBarHeight: CGFloat = 3
+    static let barCount = 9
+    static let maximumBarHeight: CGFloat = 18
+    static let minimumBarHeight: CGFloat = 4
 
     private static let reducedMotionFactors: [CGFloat] = [
-        0.32, 0.62, 0.86, 0.5, 1, 0.72, 0.4, 0.9, 0.56, 0.76
+        0.32, 0.62, 0.86, 0.5, 1, 0.72, 0.4, 0.9, 0.56
     ]
 
     private(set) var normalizedBars: [CGFloat]
@@ -731,29 +744,15 @@ struct HUDWaveformResponse: Equatable {
         self.seed = seed
     }
 
-    mutating func advance(
-        level: Float,
-        mode: HUDWaveformMode,
-        reduceMotion: Bool
-    ) {
+    mutating func advance(level: Float, reduceMotion: Bool) {
         frame &+= 1
         let rawLevel = min(1, max(0, CGFloat(level)))
 
         if reduceMotion {
-            applyReducedMotion(level: rawLevel, mode: mode)
+            applyReducedMotion(level: rawLevel)
             return
         }
-
-        switch mode {
-        case .arming:
-            envelope = 0
-            normalizedBars = Array(repeating: 0, count: Self.barCount)
-        case .waiting:
-            envelope = 0
-            applyRoomTone(maximum: 0.1)
-        case .listening:
-            advanceListening(level: rawLevel)
-        }
+        advanceListening(level: rawLevel)
     }
 
     func barHeight(at index: Int) -> CGFloat {
@@ -831,26 +830,11 @@ struct HUDWaveformResponse: Equatable {
         normalizedBars = next.map { min(1, max(0, $0)) }
     }
 
-    private mutating func applyRoomTone(maximum: CGFloat) {
-        normalizedBars = normalizedBars.indices.map { index in
-            let target = 0.018 + randomUnit(channel: UInt64(index) &+ 263) * maximum
-            return min(maximum, normalizedBars[index] * 0.58 + target * 0.42)
-        }
-    }
-
-    private mutating func applyReducedMotion(level: CGFloat, mode: HUDWaveformMode) {
-        let strength: CGFloat
-        switch mode {
-        case .arming:
-            strength = 0
-        case .waiting:
-            strength = 0.1
-        case .listening where level >= 0.58:
-            strength = 1
-        case .listening where level >= 0.32:
-            strength = 0.68
-        case .listening:
-            strength = 0.05
+    private mutating func applyReducedMotion(level: CGFloat) {
+        let strength: CGFloat = switch level {
+        case 0.58...: 1
+        case 0.32...: 0.68
+        default: 0.05
         }
         envelope = strength
         normalizedBars = Self.reducedMotionFactors.map { $0 * strength }
@@ -867,14 +851,8 @@ struct HUDWaveformResponse: Equatable {
     }
 }
 
-private struct HUDWaveformTaskID: Hashable {
-    let mode: HUDWaveformMode
-    let reduceMotion: Bool
-}
-
 private struct HUDWaveform: View {
     let level: Float
-    let mode: HUDWaveformMode
     let reduceMotion: Bool
     let increaseContrast: Bool
 
@@ -884,11 +862,11 @@ private struct HUDWaveform: View {
     )
 
     var body: some View {
-        HStack(alignment: .center, spacing: 2) {
+        HStack(alignment: .center, spacing: 3) {
             ForEach(0..<HUDWaveformResponse.barCount, id: \.self) { index in
                 Capsule()
-                    .fill(Color.white.opacity(barOpacity))
-                    .frame(width: 2, height: HUDWaveformResponse.maximumBarHeight)
+                    .fill(LerroTheme.hudPaper.opacity(increaseContrast ? 1 : 0.9))
+                    .frame(width: 3, height: HUDWaveformResponse.maximumBarHeight)
                     .scaleEffect(
                         y: response.barHeight(at: index)
                             / HUDWaveformResponse.maximumBarHeight,
@@ -896,43 +874,28 @@ private struct HUDWaveform: View {
                     )
             }
         }
-        .frame(width: 38, height: 22)
+        .frame(height: HUDWaveformResponse.maximumBarHeight)
         .animation(
             reduceMotion ? nil : .timingCurve(0.2, 0.8, 0.2, 1, duration: 0.09),
             value: response.normalizedBars
         )
-        .animation(
-            reduceMotion ? nil : .easeOut(duration: 0.12),
-            value: mode
-        )
         .onChange(of: level, initial: true) { _, newValue in
             sampledLevel = newValue
             if reduceMotion {
-                response.advance(level: newValue, mode: mode, reduceMotion: true)
+                response.advance(level: newValue, reduceMotion: true)
             }
         }
-        .task(id: HUDWaveformTaskID(mode: mode, reduceMotion: reduceMotion)) {
-            response.advance(level: sampledLevel, mode: mode, reduceMotion: reduceMotion)
-            guard !reduceMotion, mode != .arming else { return }
+        .task(id: reduceMotion) {
+            response.advance(level: sampledLevel, reduceMotion: reduceMotion)
+            guard !reduceMotion else { return }
 
             let clock = ContinuousClock()
-            do {
-                while !Task.isCancelled {
-                    try await clock.sleep(for: .milliseconds(50))
-                    guard !Task.isCancelled else { return }
-                    response.advance(level: sampledLevel, mode: mode, reduceMotion: false)
-                }
-            } catch is CancellationError {
-                return
-            } catch {
-                return
+            while !Task.isCancelled {
+                try? await clock.sleep(for: .milliseconds(50))
+                guard !Task.isCancelled else { return }
+                response.advance(level: sampledLevel, reduceMotion: false)
             }
         }
         .accessibilityHidden(true)
-    }
-
-    private var barOpacity: Double {
-        if mode == .arming { return increaseContrast ? 0.78 : 0.5 }
-        return increaseContrast ? 1 : 0.9
     }
 }

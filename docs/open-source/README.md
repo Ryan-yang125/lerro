@@ -16,8 +16,8 @@ third-party product screenshots, local manifests, personal data, credentials,
 signing identities, build output, release archives, dSYMs, model weights, test
 recordings, logs, caches, website dependencies and generated output, and the
 source repository's Git object database. Website exclusions include
-`node_modules`, `dist`, `out`, `.wrangler`, `.next`, `.vinext`, `coverage`,
-`outputs`, `work`, and generated `next-env.d.ts` files.
+`node_modules`, `dist`, `.astro`, `.wrangler`, `coverage`, `outputs`, and
+`work`.
 
 Release-machine labels and local paths live in the ignored
 `config/maintainer.local.env`. The tracked `config/maintainer.env.example`

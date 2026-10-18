@@ -134,6 +134,10 @@ enum CoreAudioHardware {
         return devices
     }
 
+    static func defaultInputDeviceID() -> AudioDeviceID? {
+        defaultDeviceID(selector: kAudioHardwarePropertyDefaultInputDevice)
+    }
+
     private static func defaultDeviceID(selector: AudioObjectPropertySelector) -> AudioDeviceID? {
         var address = AudioObjectPropertyAddress(
             mSelector: selector,

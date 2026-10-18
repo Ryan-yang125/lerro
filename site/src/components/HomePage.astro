@@ -1,0 +1,195 @@
+---
+import type { Lang } from "../site";
+import { downloadUrl, githubUrl } from "../site";
+import { home } from "../data/home";
+import HeroDemo from "./HeroDemo.astro";
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = home[lang];
+---
+
+<main class="wrap">
+  <header class="hero">
+    <h1>{t.hero.h1}<span class="cursor"></span></h1>
+    <p class="lede" set:html={t.hero.lede} />
+    <div class="cta">
+      <a class="btn primary lg" href={downloadUrl}>{t.hero.download}</a>
+      <a class="btn ghost lg" href={githubUrl}>{t.hero.github}</a>
+    </div>
+    <p class="req">{t.hero.req}</p>
+
+    <HeroDemo lang={lang} />
+  </header>
+
+  <section class="blk" id="accuracy">
+    <div class="head">
+      <div class="eyebrow">{t.accuracy.eyebrow}</div>
+      <h2 set:html={t.accuracy.h2} />
+      <p class="sub">{t.accuracy.sub}</p>
+    </div>
+    <div class="ba">
+      {t.accuracy.cards.map((card) => (
+        <div class="card">
+          <span class="tag">{card.tag}</span>
+          <div class="lab">{t.accuracy.rawLabel}</div>
+          <p class="raw" set:html={card.raw} />
+          <div class="arrow"></div>
+          <div class="lab">{t.accuracy.outLabel}</div>
+          <p class="out" set:html={card.out} />
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="blk">
+    <div class="split">
+      <div class="text">
+        <div class="eyebrow">{t.dictionary.eyebrow}</div>
+        <h2 set:html={t.dictionary.h2} />
+        <p class="sub">{t.dictionary.sub}</p>
+        <div class="points">
+          {t.dictionary.points.map((p) => (
+            <div><svg viewBox="0 0 16 16"><use href={`#${p.sym}`} /></svg><span>{p.text}</span></div>
+          ))}
+        </div>
+      </div>
+      <div class="mock">
+        <div class="bar">
+          <span class="ttl">{t.dictionary.mock.title}</span>
+          <div class="seg">
+            {t.dictionary.mock.segs.map((s) => <span class:list={[{ on: s.on }]}>{s.label}</span>)}
+          </div>
+        </div>
+        {t.dictionary.mock.rows.map((r) => (
+          <div class="drow">
+            <span class="from">{r.from}</span><span class="ar">→</span><span class="to">{r.to}</span><span class="n">{r.n}</span>
+            <span class="pill a">{t.dictionary.mock.add}</span><span class="pill g">{t.dictionary.mock.ignore}</span>
+          </div>
+        ))}
+        <div class="learned">
+          <div class="h">{t.dictionary.mock.learned}</div>
+          <div class="chips">
+            {t.dictionary.mock.chips.map((c) => <span class="chip">{c.from} → <b>{c.to}</b></span>)}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <div class="head center">
+      <div class="eyebrow">{t.tones.eyebrow}</div>
+      <h2>{t.tones.h2}</h2>
+      <p class="sub">{t.tones.sub}</p>
+    </div>
+    <div class="spoken"><span class="cur"></span><span>{t.tones.spoken}</span></div>
+    <div class="tones">
+      {t.tones.cards.map((c) => (
+        <div class="tone">
+          <div class="app"><span class={`appicon ${c.icon}`}><svg viewBox="0 0 16 16"><use href={`#${c.sym}`} /></svg></span>{c.app}</div>
+          <div class="rule">{c.rule}</div>
+          <p class="res">{c.res}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="blk">
+    <div class="split rev">
+      <div class="text">
+        <div class="eyebrow">{t.menubar.eyebrow}</div>
+        <h2 set:html={t.menubar.h2} />
+        <p class="sub">{t.menubar.sub}</p>
+        <div class="points">
+          {t.menubar.points.map((p) => (
+            <div><svg viewBox="0 0 16 16"><use href={`#${p.sym}`} /></svg><span>{p.text}</span></div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div class="panel">
+          <div class="ph">
+            <svg class="wordmark" viewBox="-4 -4 172 69"><use href="#wm" /></svg>
+            <span class="ok"><i></i>{t.menubar.panel.ready}</span>
+          </div>
+          <div class="modes">
+            <div class="mode">
+              <div class="mt"><svg viewBox="0 0 16 16" style="color:var(--ink)"><use href="#g-dictate" /></svg>{t.menubar.panel.dictate}</div>
+              <span class="kc">Fn</span>
+            </div>
+            <div class="mode">
+              <div class="mt"><svg viewBox="0 0 16 16"><use href="#g-translate" /></svg>{t.menubar.panel.translate}</div>
+              <span class="kc">Fn</span><span class="kc">⇧</span>
+            </div>
+          </div>
+          <div class="last">
+            <div class="meta"><span class="appicon s ic-ai"><svg viewBox="0 0 16 16"><use href="#g-sparkle" /></svg></span>{t.menubar.panel.lastMeta}</div>
+            <div>{t.menubar.panel.lastText}</div>
+            <div class="acts"><span class="pill g">{t.menubar.panel.copy}</span><span class="pill a">{t.menubar.panel.paste}</span></div>
+          </div>
+          <div class="stats">
+            {t.menubar.panel.stats.map((s) => <span set:html={s} />)}
+          </div>
+          <div class="prow"><svg viewBox="0 0 16 16"><use href="#g-mic" /></svg>{t.menubar.panel.mic}<span class="v">{t.menubar.panel.micValue}</span></div>
+          <div class="prow"><svg viewBox="0 0 16 16"><use href="#g-sparkle" /></svg>{t.menubar.panel.smart}<span class="v">{t.menubar.panel.smartValue}</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="blk" id="ai-key">
+    <div class="head">
+      <div class="eyebrow">{t.cost.eyebrow}</div>
+      <h2 set:html={t.cost.h2} />
+      <p class="sub">{t.cost.sub}</p>
+    </div>
+    <div class="cost">
+      <div class="big">
+        <div class="num" set:html={t.cost.num} />
+        <p class="cap">{t.cost.cap}</p>
+        <div class="row">
+          {t.cost.stats.map((s) => <div><b>{s.value}</b>{s.label}</div>)}
+        </div>
+      </div>
+      <div class="steps">
+        {t.cost.steps.map((s, i) => (
+          <div class="step"><span class="i">{i + 1}</span><div><h5>{s.title}</h5><p set:html={s.body} /></div></div>
+        ))}
+        <p class="free">{t.cost.free}</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="blk" id="privacy">
+    <div class="head">
+      <div class="eyebrow">{t.privacy.eyebrow}</div>
+      <h2>{t.privacy.h2}</h2>
+      <p class="sub">{t.privacy.sub}</p>
+    </div>
+    <div class="priv">
+      {t.privacy.items.map((p) => (
+        <div class="pv"><svg viewBox="0 0 16 16"><use href={`#${p.sym}`} /></svg><h5>{p.title}</h5><p>{p.body}</p></div>
+      ))}
+    </div>
+  </section>
+
+  <section class="blk">
+    <div class="head center"><h2>{t.faq.heading}</h2></div>
+    <div class="faq">
+      {t.faq.items.map((f, i) => (
+        <details open={i === 0}><summary>{f.q}</summary><p>{f.a}</p></details>
+      ))}
+    </div>
+  </section>
+
+  <section class="end">
+    <svg class="mark" viewBox="-4 -4 44 69" style="color:var(--brand-ink)"><use href="#mk" /></svg>
+    <h2>{t.end.h2}</h2>
+    <div class="cta"><a class="btn primary lg" href={downloadUrl}>{t.end.download}</a></div>
+    <p class="req">{t.end.req}</p>
+  </section>
+</main>

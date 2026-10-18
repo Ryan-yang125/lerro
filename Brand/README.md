@@ -1,11 +1,10 @@
 # Lerro Brand Kit
 
-Lerro（读音 `LEH-ro`）是一款本地优先的 macOS 语音写作工具。本目录是
-Phase 1 品牌系统的 source of truth。产品视觉以自适应黑白灰内容层、系统强调色交互层、
-清晰文字层级、克制材质和即时反馈构成 Apple-native 桌面体验。
+Lerro（读音 `LEH-ro`）是一款本地优先的 macOS 语音写作工具。本目录是品牌系统的
+source of truth。
 
-核心标志采用 A4 平面结构：左侧 `L` 表示输入起点，中部双拱对应 Lerro 的 `rr`
-节奏，末端开放 `o` 形成文字落点与光标切口。品牌体验围绕一句话展开：
+标志是「光标 L」：一根圆角墨水蓝光标立在一条圆角基线上，两者之间留缝，读作字母 L，
+也读作光标停在一行文字上。
 
 > 自在说，清楚写。
 >
@@ -13,28 +12,31 @@ Phase 1 品牌系统的 source of truth。产品视觉以自适应黑白灰内�
 
 ## 系统原则
 
-- App Icon 与导出 Logo 使用固定 Ink Black / Soft White 黑白组合。
-- 主 UI 的画布、卡片、文字、普通图标与 hover 使用 `LerroTheme` 自适应黑白灰色板；
-  主要动作与焦点继承 macOS `controlAccentColor`，用户修改系统强调色后自动同步。
-  success、warning、error 保留 macOS system status colors。
-- 浅色文字层级为 `#292929`、`#5D5D5D`、`#9E9E9E`；必要的 12 pt 小字使用
-  `#6B6B6B` 保证可读对比度。深色与 Increase Contrast 使用对应自适应值。
-- App 内 inline mark 按信息层级使用主文字或次级文字；品牌 badge 保持固定黑白。
-- App UI 使用 SF Pro 与苹方，技术信息使用 SF Mono。字体由 macOS 提供。
-- 主窗口字号采用 24 / 14 / 13 / 12 pt 四级系统，tracking 统一为 `-0.15`。
-- 导航图标与圆角分别为 14 / 8 pt；卡片图标与圆角分别为 20 / 16 pt；
-  主要 CTA 使用 pill 形态。
-- 菜单栏图标采用 monochrome template artwork，状态依靠轮廓、节奏和符号区分。
-- hover 使用 150 ms ease-out，pointer-down 立即下沉 1 pt；Reduce Motion 下取消位移。
-- HUD 保持既有外壳、声线、processing 节奏、状态切换和静音反馈；processing 三点使用
-  系统强调色，形成克制的处理中状态提示。
+- 标志由光标和基线两个独立图形组成，光标可单独上色和动画。
+- 固定品牌色为墨黑 `#15161A`、纸白 `#F6F4EF`、墨水蓝 `#2F5BFF`、深底墨水蓝
+  `#4A6BFF`、石墨灰 `#8B8C93`。
+- 墨水蓝用于光标、主窗口强调色和焦点；success、warning、error 使用 macOS system
+  status colors，墨水蓝不表达状态。
+- 字标为大写 `Lerro`：`L` 是标志，`erro` 是 Inter SemiBold 转成路径的轮廓。仓库不
+  分发任何字体，Logo 不使用 SF Pro。
+- App Icon 是 macOS 26 Icon Composer 分层文件，由 `xcrun actool` 编译为
+  `AppIcon.icns` 与 `Assets.car`。
+- 菜单栏使用 18×18 pt template image，状态依靠形状和动画区分。
+- App 内：侧栏显示字标，关于页显示 App Icon、名称和版本，Onboarding 首屏显示标志，
+  光标闪烁一次后停住。
+- HUD 是墨黑玻璃胶囊，内含墨水蓝光标，见
+  [ADR 0013](../docs/decisions/0013-brand-capsule-hud.md)。
+- 主窗口画布、卡片、文字层级使用 `LerroTheme` 自适应黑白灰；字体使用 SF Pro、苹方与
+  SF Mono，字号 24 / 14 / 13 / 12 pt，tracking `-0.15`。
 - 所有核心动作保留文字标签、键盘路径和 VoiceOver 语义。
 
 运行时 UI 的权威来源是
-[`DesignTokens.swift`](../Sources/Lerro/DesignSystem/DesignTokens.swift) 与
-[`Components.swift`](../Sources/Lerro/DesignSystem/Components.swift)。本目录的
-[`brand.tokens.json`](tokens/brand.tokens.json) 和
-[`LerroTokens.swift`](tokens/LerroTokens.swift) 保存可公开复用的同版规范。
+[`DesignTokens.swift`](../Sources/Lerro/DesignSystem/DesignTokens.swift)、
+[`Components.swift`](../Sources/Lerro/DesignSystem/Components.swift) 与
+[`LerroBrandGeometry.swift`](../Sources/Lerro/DesignSystem/LerroBrandGeometry.swift)。
+[`brand.tokens.json`](tokens/brand.tokens.json)、
+[`brand.css`](tokens/brand.css) 和 [`LerroTokens.swift`](tokens/LerroTokens.swift)
+保存可公开复用的同版规范。
 
 ## 目录
 
@@ -44,8 +46,9 @@ Brand/
 ├── guidelines/
 ├── source/
 │   ├── logo/
-│   ├── app-icon/
+│   ├── app-icon/AppIcon.icon
 │   ├── menu-bar/
+│   ├── icons/Glyphs.xcassets
 │   ├── templates/
 │   └── validation/
 ├── exports/
@@ -60,9 +63,9 @@ Brand/
 └── SHA256SUMS.txt
 ```
 
-`source/` 保存可编辑 SVG。`exports/` 保存由脚本生成的 SVG、PDF、PNG 与 ICNS。
-`templates/` 保存 GitHub、README、Release 与截图包装资产。`validation/` 保存小尺寸、
-深浅外观和菜单栏状态的验收记录。
+`source/` 保存可编辑 SVG 与 Icon Composer 文件。`exports/` 保存由脚本生成的 SVG、
+PDF、PNG、`AppIcon.icns` 与 `Assets.car`。`templates/` 保存 GitHub、README、Release
+与截图包装资产。`validation/` 保存小尺寸、深浅外观和菜单栏状态的验收记录。
 
 ## 重新生成
 
@@ -73,29 +76,54 @@ Brand/
 ./Brand/scripts/verify-assets.sh
 ```
 
-生成脚本依赖 macOS 自带的 Swift、AppKit、`iconutil`、`sips`、`xmllint` 与
+生成脚本依赖 macOS 自带的 Swift、AppKit、`xcrun actool`、`sips`、`xmllint` 与
 `shasum`。输出采用 sRGB，并保持相同输入产生相同像素和哈希。
 
 ## 快速选用
 
 | 场景 | 资产 |
 | --- | --- |
-| 产品与仓库主标志 | `exports/logo/lerro-lockup-horizontal.svg` |
-| 仅符号 | `exports/logo/lerro-symbol.svg` |
-| 16–24 px | `exports/logo/lerro-micro-16.svg`、`lerro-micro-24.svg` |
-| App Icon | `exports/app-icon/Lerro.icns`、`lerro-app-icon-1024.png` |
-| 菜单栏 | `exports/menu-bar/` 中四态 template assets |
+| 标志（浅底） | `exports/logo/lerro-mark.svg` |
+| 标志（深底） | `exports/logo/lerro-mark-reversed.svg` |
+| 标志（单色） | `exports/logo/lerro-mark-mono.svg` |
+| 字标（浅底） | `exports/logo/lerro-wordmark.svg` |
+| 字标（深底） | `exports/logo/lerro-wordmark-reversed.svg` |
+| 标志加字标，产品与仓库主标志 | `exports/logo/lerro-lockup-horizontal.svg` |
+| 标志加字标，深底 | `exports/logo/lerro-lockup-horizontal-dark.svg` |
+| 构造图 | `exports/logo/lerro-construction.svg` |
+| App Icon | `exports/app-icon/AppIcon.icns`、`Assets.car`、`lerro-app-icon-1024.png` |
+| 菜单栏 | `exports/menu-bar/LerroMenu*Template.png`，八帧 |
 | GitHub 社交图 | `templates/github-social-preview.png` |
 | README Hero | `templates/readme-hero-light.png`、`readme-hero-dark.png` |
+| Release 卡片、截图包装 | `templates/release-card.svg`、`templates/screenshot-frame.svg` |
+
+菜单栏八帧：`Idle`、`Listening`、`ListeningDim`、`Processing1`–`Processing4`、
+`Error`。
+
+## 产品图标
+
+产品概念（听写、智能润色、翻译、麦克风、首页、历史、词典、应用语气、其他所有应用、用量、通用、
+快捷键、隐私、关于、新版本）使用 `source/icons/Glyphs.xcassets` 里的 Lerro 图标，通用操作继续用
+SF Symbols。规则：
+
+- 16 pt 网格，1.4 pt 圆头描边，圆角 2–3 pt，开放几何形，不用实心面。
+- 光标竖条是品牌签名，只出现在听写、智能润色、首页、词典和关于；这五个图标另有
+  `glyph-*-cursor` 图层，App 内着墨水蓝，只接受单色图片的位置（设置 tab）整体单色。
+- 状态图标（成功、警告、错误）与播放控制保留 SF Symbols 实心版本，其余图标一律描边。
+- 每个图标是一份 16×16 SVG，模板渲染、保留矢量，随 `generate-assets.sh` 编进 `Assets.car`；
+  App 内通过 `LerroGlyph` 调用。设计稿见 `work/design-v1.7/icons.html`。
 
 ## 工程接入
 
-生成脚本会重建全部公开导出，同时把 `Lerro.icns` 与菜单栏四态模板同步到
-`Sources/Lerro/Resources`。`verify-assets.sh` 校验 SVG、全尺寸 ICNS、运行时资源
-逐字节一致性、颜色边界和 SHA-256；Release 总门禁会调用同一资产校验。
+生成脚本重建全部公开导出，同时把 `AppIcon.icns`、`Assets.car` 与菜单栏模板图同步到
+`Sources/Lerro/Resources`。`verify-assets.sh` 校验 SVG、图标、运行时资源逐字节一致性、
+颜色边界和 SHA-256；Release 总门禁会调用同一资产校验。检查项见
+[`validation/asset-validation.md`](validation/asset-validation.md)。
 
 ## 许可
 
-资产归属与第三方依赖记录见
-[`licenses/ASSET-LICENSES.json`](licenses/ASSET-LICENSES.json)。系统字体仅通过
-字体栈引用，仓库中未分发 Apple 字体文件。
+资产归属与第三方记录见
+[`licenses/ASSET-LICENSES.json`](licenses/ASSET-LICENSES.json)。字标中的 `erro`
+使用 Inter 4.1（Rasmus Andersson，SIL Open Font License 1.1）的字形轮廓，许可证全文
+见 [`licenses/Inter-OFL.txt`](licenses/Inter-OFL.txt)，字体文件不随仓库分发。系统字体
+仅通过字体栈引用。

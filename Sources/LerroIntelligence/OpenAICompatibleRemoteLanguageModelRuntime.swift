@@ -17,7 +17,7 @@ public actor OpenAICompatibleRemoteLanguageModelRuntime: RemoteLanguageModelRunt
         systemPrompt: String,
         userPrompt: String,
         maxTokens: Int
-    ) async throws -> String {
+    ) async throws -> RemoteGeneration {
         let client = try client(for: configuration)
         let completion = try await client.complete(
             messages: Self.messages(
@@ -26,22 +26,10 @@ public actor OpenAICompatibleRemoteLanguageModelRuntime: RemoteLanguageModelRunt
             ),
             maxTokens: maxTokens
         )
-        return completion.text
-    }
-
-    public func generateStream(
-        configuration: RemoteProviderConfiguration,
-        systemPrompt: String,
-        userPrompt: String,
-        maxTokens: Int
-    ) async throws -> AsyncThrowingStream<String, any Error> {
-        let client = try client(for: configuration)
-        return try await client.stream(
-            messages: Self.messages(
-                systemPrompt: systemPrompt,
-                userPrompt: userPrompt
-            ),
-            maxTokens: maxTokens
+        return RemoteGeneration(
+            text: completion.text,
+            modelIdentifier: completion.modelIdentifier,
+            tokens: completion.tokens
         )
     }
 
@@ -52,7 +40,8 @@ public actor OpenAICompatibleRemoteLanguageModelRuntime: RemoteLanguageModelRunt
         let probe = try await client.testConnection()
         return .success(
             latencyMilliseconds: Self.milliseconds(probe.latency),
-            modelIdentifier: probe.modelIdentifier
+            modelIdentifier: probe.modelIdentifier,
+            tokens: probe.tokens
         )
     }
 

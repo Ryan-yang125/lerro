@@ -10,6 +10,8 @@ public final class FloatingPanelController {
     private var allowsInteraction = true
     private let role: Role
 
+    public var anchorScreenPoint: CGPoint?
+
     public enum Role: Sendable {
         case passiveHUD
         case interactiveCard
@@ -142,7 +144,11 @@ public final class FloatingPanelController {
 
     private func targetFrame(for panel: NSPanel, size: CGSize) -> CGRect {
         let mouseLocation = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouseLocation) }
+        let anchoredScreen = anchorScreenPoint.flatMap { anchor in
+            NSScreen.screens.first { $0.frame.contains(anchor) }
+        }
+        let screen = anchoredScreen
+            ?? NSScreen.screens.first { $0.frame.contains(mouseLocation) }
             ?? panel.screen
             ?? NSScreen.main
             ?? NSScreen.screens.first

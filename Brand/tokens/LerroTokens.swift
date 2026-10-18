@@ -93,26 +93,21 @@ enum LerroTokens {
         static let cardShadow = Color.black.opacity(0.07)
         static let cardShadowHover = Color.black.opacity(0.13)
 
-        static let accent = Color(nsColor: .controlAccentColor)
+        static let accent = adaptive(light: rgb(0x2F5BFF), dark: rgb(0x4A6BFF))
         static let accentHover = accent.opacity(0.88)
         static let accentPressed = accent.opacity(0.72)
         static let primaryAction = accent
         static let primaryActionHover = accentHover
         static let primaryActionPressed = accentPressed
-        static let primaryActionForeground = Color(
-            nsColor: .alternateSelectedControlTextColor
-        )
+        static let primaryActionForeground = Color.white
 
-        static let brandInk = Color(
-            red: 17.0 / 255.0,
-            green: 17.0 / 255.0,
-            blue: 19.0 / 255.0
-        )
-        static let brandLight = Color(
-            red: 245.0 / 255.0,
-            green: 242.0 / 255.0,
-            blue: 234.0 / 255.0
-        )
+        // Fixed brand palette.
+        static let ink = Color(nsColor: rgb(0x15161A))
+        static let paper = Color(nsColor: rgb(0xF6F4EF))
+        static let inkBlue = Color(nsColor: rgb(0x2F5BFF))
+        static let inkBlueOnDark = Color(nsColor: rgb(0x4A6BFF))
+        static let graphite = Color(nsColor: rgb(0x8B8C93))
+
         static let success = Color(nsColor: .systemGreen)
         static let warning = Color(nsColor: .systemOrange)
         static let error = Color(nsColor: .systemRed)
@@ -159,6 +154,25 @@ enum LerroTokens {
                 alpha: 1
             )
         }
+    }
+
+    /// Mark geometry in brand units. Origin top-left, y grows downward.
+    enum Mark {
+        static let cursor = CGRect(x: 0, y: 0, width: 10, height: 46)
+        static let gap: CGFloat = 6
+        static let baseline = CGRect(x: 0, y: 52, width: 36, height: 9)
+        static let size = CGSize(width: 36, height: 61)
+
+        /// Applied when the rendered mark is shorter than `smallBelowPixelHeight`.
+        static let smallBelowPixelHeight: CGFloat = 32
+        static let smallCursorWidth: CGFloat = 13
+        static let smallBaselineHeight: CGFloat = 12
+        static let smallGap: CGFloat = 5
+
+        /// Clear space on every side equals the cursor width.
+        static let clearSpace = cursor.width
+        static let minimumHeightPixels: CGFloat = 12
+        static let minimumAppIconPixels: CGFloat = 16
     }
 
     enum Typography {
@@ -249,6 +263,11 @@ enum LerroTokens {
         )
         static let hudControlOpacity = Animation.easeOut(duration: 0.10)
 
+        static let cursorBlinkSeconds = 1.05
+        static let baselineDrawSeconds = 1.2
+        static let menuBarListeningFrameSeconds = 0.525
+        static let menuBarProcessingFrameSeconds = 0.15
+
         static func stateChange(reduceMotion: Bool) -> Animation? {
             reduceMotion ? nil : interactionSpring
         }
@@ -259,9 +278,12 @@ enum LerroTokens {
     }
 
     enum MenuBar {
-        static let sourcePointSize: CGFloat = 24
-        static let compactPointSize: CGFloat = 16
-        static let regularPointSize: CGFloat = 18
+        static let pointSize: CGFloat = 18
+        static let frames = [
+            "Idle", "Listening", "ListeningDim",
+            "Processing1", "Processing2", "Processing3", "Processing4",
+            "Error"
+        ]
         static let accessibilityLabelPrefix = "Lerro"
     }
 }

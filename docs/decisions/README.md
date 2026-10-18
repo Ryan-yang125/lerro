@@ -18,6 +18,9 @@ ADR 用于记录会长期影响模块、数据、系统权限、模型、发布�
 | [0010](0010-quick-dictate-and-spoken-delivery-edits.md) | superseded | 语音跟进编辑与版本链由 0012 移除；可选 SpeechDetector 收敛为默认关闭的 Quick Dictate |
 | [0011](0011-device-aware-ai-onboarding-and-resumable-model-downloads.md) | accepted | 设备感知 AI 分流、Onboarding 内配置、后台可恢复模型下载与 Quick Dictate 降级 |
 | [0012](0012-strict-delivery-ai-dictionary-learning.md) | accepted | 居中实时预览、capture-bound 严格写入、失败恢复、AI 自动词典与操作型 Onboarding |
+| [0013](0013-brand-capsule-hud.md) | accepted | 品牌墨黑胶囊 HUD、单胶囊形变、commit 即淡出与输入框所在屏幕定位 |
+| [0014](0014-main-window-rebuild.md) | accepted | 原生 NavigationSplitView 主窗口、独立 Settings 窗口、应用语气与墨水蓝系统强调色 |
+| [0015](0015-speech-transcriber.md) | accepted | 实时识别改用 SpeechTranscriber，词典只进入 AI prompt |
 
 ## 需要 ADR 的变化
 

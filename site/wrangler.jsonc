@@ -1,21 +1,19 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "lerro-site",
-  "main": "./worker/index.ts",
-  "compatibility_date": "2026-08-02",
-  "compatibility_flags": ["nodejs_compat"],
+  "main": "./worker/index.js",
+  "compatibility_date": "2026-10-01",
   "workers_dev": false,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": true
+  },
   "routes": [
-    {
-      "pattern": "lerroapp.com",
-      "custom_domain": true
-    },
-    {
-      "pattern": "www.lerroapp.com",
-      "custom_domain": true
-    }
+    { "pattern": "lerroapp.com", "custom_domain": true },
+    { "pattern": "www.lerroapp.com", "custom_domain": true }
   ],
-  "observability": {
-    "enabled": true
-  }
+  "observability": { "enabled": true }
 }

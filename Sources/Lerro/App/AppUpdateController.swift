@@ -80,6 +80,5 @@ enum AppUpdateEnvironment {
 }
 
 enum AppUpdatePresentation {
-    static let availableIcon = "arrow.down.circle.fill"
     static let usesSystemBlue = true
 }

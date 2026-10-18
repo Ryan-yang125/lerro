@@ -62,7 +62,7 @@ access.
 ```
 
 The generator rebuilds the SVG, PDF, PNG, ICNS, templates, validation boards,
-and Brand checksums. It also synchronizes the app icon and eight menu-bar
+and Brand checksums. It also synchronizes the compiled app icon (`AppIcon.icns`, `Assets.car`) and sixteen menu-bar
 template PNGs into `Sources/Lerro/Resources`. The verifier checks the complete
 ICNS representation set and byte identity between Brand exports and runtime
 resources.

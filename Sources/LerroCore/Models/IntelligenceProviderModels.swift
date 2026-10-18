@@ -32,7 +32,7 @@ public enum RemoteProviderKind: String, CaseIterable, Codable, Hashable, Sendabl
     public var defaultModelIdentifier: String {
         switch self {
         case .deepSeek:
-            "deepseek-v4-flash"
+            "deepseek-flash"
         case .openAI, .gemini, .custom:
             ""
         }
@@ -171,34 +171,52 @@ public struct RemoteProviderConfiguration: Codable, Hashable, Sendable {
     }
 }
 
+/// Text and token usage of one remote completion.
+public struct RemoteGeneration: Sendable, Equatable {
+    public var text: String
+    public var modelIdentifier: String
+    public var tokens: AITokenUsage?
+
+    public init(text: String, modelIdentifier: String, tokens: AITokenUsage? = nil) {
+        self.text = text
+        self.modelIdentifier = modelIdentifier
+        self.tokens = tokens
+    }
+}
+
 public struct RemoteConnectionTestOutcome: Sendable, Equatable {
     public var succeeded: Bool
     public var message: String
     public var latencyMilliseconds: Int?
     public var modelIdentifier: String?
+    public var tokens: AITokenUsage?
 
     public init(
         succeeded: Bool,
         message: String,
         latencyMilliseconds: Int? = nil,
-        modelIdentifier: String? = nil
+        modelIdentifier: String? = nil,
+        tokens: AITokenUsage? = nil
     ) {
         self.succeeded = succeeded
         self.message = message
         self.latencyMilliseconds = latencyMilliseconds
         self.modelIdentifier = modelIdentifier
+        self.tokens = tokens
     }
 
     public static func success(
         message: String = "连接成功",
         latencyMilliseconds: Int? = nil,
-        modelIdentifier: String? = nil
+        modelIdentifier: String? = nil,
+        tokens: AITokenUsage? = nil
     ) -> RemoteConnectionTestOutcome {
         RemoteConnectionTestOutcome(
             succeeded: true,
             message: message,
             latencyMilliseconds: latencyMilliseconds,
-            modelIdentifier: modelIdentifier
+            modelIdentifier: modelIdentifier,
+            tokens: tokens
         )
     }
 

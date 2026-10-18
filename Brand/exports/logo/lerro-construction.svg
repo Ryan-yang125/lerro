@@ -1,15 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" fill="none">
-  <title>Lerro symbol construction</title>
-  <rect width="640" height="400" fill="#F5F5F7"/>
-  <g opacity="0.16" stroke="#6E6E73" stroke-width="1">
-    <path d="M80 40V360M120 40V360M160 40V360M200 40V360M240 40V360M280 40V360M320 40V360M360 40V360M400 40V360M440 40V360M480 40V360M520 40V360M560 40V360"/>
-    <path d="M40 80H600M40 120H600M40 160H600M40 200H600M40 240H600M40 280H600M40 320H600"/>
+  <title>Lerro mark construction</title>
+  <rect width="640" height="400" fill="#F6F4EF"/>
+  <g transform="translate(40 24) scale(3.52)">
+    <path d="M5 0V100M10 0V100M15 0V100M20 0V100M25 0V100M30 0V100M35 0V100M40 0V100M45 0V100M50 0V100M55 0V100M60 0V100M65 0V100M70 0V100M75 0V100M80 0V100M85 0V100M90 0V100M95 0V100M0 5 H100M0 10 H100M0 15 H100M0 20 H100M0 25 H100M0 30 H100M0 35 H100M0 40 H100M0 45 H100M0 50 H100M0 55 H100M0 60 H100M0 65 H100M0 70 H100M0 75 H100M0 80 H100M0 85 H100M0 90 H100M0 95 H100" stroke="#8B8C93" stroke-opacity="0.3" stroke-width="0.25"/>
+    <rect width="100" height="100" stroke="#8B8C93" stroke-opacity="0.6" stroke-width="0.3"/>
+    <rect x="32" y="20" width="10" height="46" rx="5" fill="#2F5BFF"/>
+    <rect x="32" y="72" width="36" height="9" rx="4.5" fill="#15161A"/>
+    <g stroke="#E5484D" stroke-width="0.35">
+      <path d="M24 20V66M23 20H25M23 66H25"/>
+      <path d="M24 72V81M23 72H25M23 81H25"/>
+      <path d="M32 87H68M32 86V88M68 86V88"/>
+      <path d="M32 14H42M32 13V15M42 13V15"/>
+      <path d="M46 66V72M45 66H47M45 72H47"/>
+    </g>
+    <g fill="#E5484D" font-size="3.2" font-family="Menlo, monospace">
+      <text x="11" y="44">46</text><text x="13" y="78.5">9</text><text x="47" y="92">36</text><text x="35" y="12">10</text><text x="48" y="70.5">6</text>
+    </g>
   </g>
-  <g transform="translate(128 48) scale(4.8)">
-    <path d="M8 10V42C8 49 12 52 19 52H20V38C20 30 24 26 30 26C36 26 40 30 40 38V52V38C40 30 44 26 50 26C56 26 60 30 60 38V52" stroke="#111113" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M78.34 35.24A11 11 0 1 0 78.34 42.76" stroke="#111113" stroke-width="1.45" stroke-linecap="butt"/>
+  <g fill="#15161A" font-size="14" font-family="Menlo, monospace">
+    <text x="424" y="120">CURSOR</text><text x="524" y="120">10 × 46 · r 5</text>
+    <text x="424" y="152">GAP</text><text x="524" y="152">6</text>
+    <text x="424" y="184">BASELINE</text><text x="524" y="184">36 × 9 · r 4.5</text>
+    <text x="424" y="216">MARK</text><text x="524" y="216">36 × 61</text>
   </g>
-  <text x="40" y="34" fill="#6E6E73" font-family="'SF Mono', ui-monospace, monospace" font-size="12">L → DOUBLE RR RHYTHM → OPEN O / CURSOR CUT</text>
-  <text x="600" y="380" text-anchor="end" fill="#6E6E73" font-family="'SF Mono', ui-monospace, monospace" font-size="11">LERRO / A4 / 01</text>
+  <text x="600" y="380" text-anchor="end" fill="#8B8C93" font-size="11" font-family="Menlo, monospace">LERRO / CURSOR L / 100-UNIT GRID</text>
 </svg>

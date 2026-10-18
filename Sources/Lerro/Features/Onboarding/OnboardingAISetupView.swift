@@ -35,7 +35,7 @@ struct OnboardingAISetupView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             deviceSummary
             routePicker
 
@@ -74,23 +74,21 @@ struct OnboardingAISetupView: View {
     }
 
     private var deviceSummary: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: recommendationIcon)
-                .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
+        HStack(alignment: .top, spacing: 12) {
+            OnboardingIconView(icon: recommendationIcon, size: 16)
                 .foregroundStyle(recommendationColor)
-                .frame(width: 34, height: 34)
-                .background(LerroTheme.fillContainerTough)
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .frame(width: 24)
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(LocalizedStringKey(recommendationTitle))
-                    .font(LerroTheme.font(14, weight: .medium))
+                    .font(LerroFont.bodyEmphasis)
                 if let readiness = session.localAIReadiness {
                     Text(verbatim: deviceFacts(readiness.device))
-                        .font(LerroTheme.font(12))
+                        .font(LerroFont.caption)
                         .foregroundStyle(LerroTheme.secondaryText)
                     Text(LocalizedStringKey(recommendationDetail))
-                        .font(LerroTheme.font(12))
+                        .font(LerroFont.caption)
                         .foregroundStyle(LerroTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
@@ -100,44 +98,36 @@ struct OnboardingAISetupView: View {
             }
             Spacer()
         }
-        .padding(16)
-        .background(LerroTheme.fillContainerThin)
-        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
-                .stroke(LerroTheme.thinBorder)
-        }
+        .padding(14)
+        .onboardingSurface(radius: 12)
         .accessibilityElement(children: .combine)
     }
 
     private var routePicker: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             routeButton(
                 .apple,
                 title: "Apple 听写",
-                detail: "默认 · 立即开始",
-                icon: "waveform"
+                detail: "默认 · 立即开始"
             )
             routeButton(
                 .remote,
                 title: "远端 AI",
-                detail: "快速启用 · 使用自己的 Key",
-                icon: "network"
+                detail: "快速启用 · 使用自己的 Key"
             )
             routeButton(
                 .local,
                 title: "本地 AI",
-                detail: "设备运行 · 约 3.03 GB",
-                icon: "cpu"
+                detail: "设备运行 · 约 3.03 GB"
             )
         }
+        .accessibilityElement(children: .contain)
     }
 
     private func routeButton(
         _ route: OnboardingAIRoute,
         title: String,
-        detail: String,
-        icon: String
+        detail: String
     ) -> some View {
         let selected = selectedRoute == route
         let disabled = route == .local
@@ -154,28 +144,27 @@ struct OnboardingAISetupView: View {
                 session.activateIntelligenceMode(.remote)
             }
         } label: {
-            VStack(alignment: .leading, spacing: 7) {
-                HStack {
-                    Image(systemName: icon)
-                    Spacer()
-                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                }
+            VStack(alignment: .leading, spacing: 4) {
                 Text(LocalizedStringKey(title))
-                    .font(LerroTheme.font(13, weight: .medium))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(LerroTheme.text)
                 Text(LocalizedStringKey(detail))
-                    .font(LerroTheme.font(12))
+                    .font(LerroFont.footnote)
                     .foregroundStyle(LerroTheme.secondaryText)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(13)
-            .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
-            .background(selected ? LerroTheme.fillContainerTough : LerroTheme.fillContainerThin)
-            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 68, alignment: .topLeading)
+            .background(
+                selected ? LerroTheme.accentSoft : LerroTheme.fillContainerThin,
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
             .overlay {
-                RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
-                    .stroke(selected ? LerroTheme.focusBorder : LerroTheme.thinBorder)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(selected ? LerroTheme.accent : Color.clear, lineWidth: 1)
             }
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(LerroPressButtonStyle())
         .disabled(disabled)
@@ -189,9 +178,9 @@ struct OnboardingAISetupView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Qwen3.5 4B")
-                        .font(LerroTheme.font(14, weight: .medium))
+                        .font(LerroFont.bodyEmphasis)
                     Text(LocalizedStringKey(localStatusText))
-                        .font(LerroTheme.font(12))
+                        .font(LerroFont.caption)
                         .foregroundStyle(LerroTheme.secondaryText)
                 }
                 Spacer()
@@ -199,12 +188,12 @@ struct OnboardingAISetupView: View {
                 if session.modelStatus.state == .downloading
                     || session.modelStatus.state == .loading {
                     Button("暂停") { session.pauseLocalModelPreparation() }
-                        .buttonStyle(LerroPillButtonStyle())
+                        .buttonStyle(LerroButtonStyle(.secondary))
                 } else {
                     Button(LocalizedStringKey(localActionTitle)) {
                         session.requestLocalModelPreparation()
                     }
-                    .buttonStyle(LerroPillButtonStyle(prominent: true))
+                    .buttonStyle(LerroButtonStyle(.primary))
                     .disabled(session.localAIIsReady)
                 }
 
@@ -214,34 +203,30 @@ struct OnboardingAISetupView: View {
                     Button("停止", role: .destructive) {
                         isDiscardConfirmationPresented = true
                     }
-                    .buttonStyle(LerroPillButtonStyle(destructive: true))
+                    .buttonStyle(LerroButtonStyle(.destructive))
                 }
             }
 
             if showsLocalProgress {
                 ProgressView(value: max(0, min(1, session.modelStatus.progress)))
+                    .tint(LerroTheme.accent)
                     .accessibilityLabel("本地模型下载进度")
                 HStack {
                     Text(verbatim: progressText)
                     Spacer()
                     Text("可关闭此页面，Lerro 运行期间会继续下载")
                 }
-                .font(LerroTheme.font(12))
+                .font(LerroFont.caption)
                 .foregroundStyle(LerroTheme.secondaryText)
             }
 
             Text("下载期间可以继续使用 Apple 听写。模型就绪后可使用 AI 润色、翻译、自动词典和应用语气。")
-                .font(LerroTheme.font(12))
+                .font(LerroFont.caption)
                 .foregroundStyle(LerroTheme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(16)
-        .background(LerroTheme.fillContainerThin)
-        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
-                .stroke(LerroTheme.thinBorder)
-        }
+        .padding(14)
+        .onboardingSurface(radius: 12)
     }
 
     private var remoteSetup: some View {
@@ -296,11 +281,12 @@ struct OnboardingAISetupView: View {
                 .toggleStyle(.checkbox)
                 .padding(.top, 8)
             }
-            .font(LerroTheme.font(12, weight: .medium))
+            .font(LerroFont.caption)
+            .tint(LerroTheme.accent)
 
             if let validation = providerDraft.validationMessage {
                 Label(LocalizedStringKey(validation), systemImage: "info.circle")
-                    .font(LerroTheme.font(12))
+                    .font(LerroFont.caption)
                     .foregroundStyle(LerroTheme.secondaryText)
             } else if let connectionOutcome {
                 Label {
@@ -310,24 +296,24 @@ struct OnboardingAISetupView: View {
                         ? "checkmark.circle.fill"
                         : "xmark.circle.fill")
                 }
-                .font(LerroTheme.font(12, weight: .medium))
-                .foregroundStyle(connectionOutcome.succeeded ? LerroTheme.green : LerroTheme.red)
+                .font(LerroFont.caption)
+                .foregroundStyle(connectionOutcome.succeeded ? LerroTheme.success : LerroTheme.danger)
             }
 
             HStack {
                 Text("连接测试只发送固定合成文字。API Key 会保存在本机 Lerro 设置 JSON 中。")
-                    .font(LerroTheme.font(12))
+                    .font(LerroFont.caption)
                     .foregroundStyle(LerroTheme.secondaryText)
                 Spacer()
                 Button(LocalizedStringKey(isTestingConnection ? "正在测试" : "测试连接")) {
                     testConnection()
                 }
-                .buttonStyle(LerroPillButtonStyle())
+                .buttonStyle(LerroButtonStyle(.secondary))
                 .disabled(providerDraft.validationMessage != nil || isTestingConnection || isSavingProvider)
                 Button(LocalizedStringKey(isSavingProvider ? "正在保存" : "保存并启用")) {
                     saveProvider()
                 }
-                .buttonStyle(LerroPillButtonStyle(prominent: true))
+                .buttonStyle(LerroButtonStyle(.primary))
                 .disabled(
                     providerDraft.validationMessage != nil
                         || connectionOutcome?.succeeded != true
@@ -336,13 +322,8 @@ struct OnboardingAISetupView: View {
                 )
             }
         }
-        .padding(16)
-        .background(LerroTheme.fillContainerThin)
-        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
-                .stroke(LerroTheme.thinBorder)
-        }
+        .padding(14)
+        .onboardingSurface(radius: 12)
     }
 
     private var appleSetup: some View {
@@ -351,13 +332,13 @@ struct OnboardingAISetupView: View {
                 .fixedSize(horizontal: false, vertical: true)
         } icon: {
             Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(LerroTheme.success)
         }
-        .font(LerroTheme.font(13))
+        .font(LerroFont.body)
         .foregroundStyle(LerroTheme.secondaryText)
-        .padding(16)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LerroTheme.fillContainerThin)
-        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
+        .onboardingSurface(radius: 12)
         .onAppear {
             session.activateIntelligenceMode(.raw)
         }
@@ -365,7 +346,7 @@ struct OnboardingAISetupView: View {
 
     private func fieldLabel(_ title: String) -> some View {
         Text(LocalizedStringKey(title))
-            .font(LerroTheme.font(12, weight: .medium))
+            .font(LerroFont.caption)
             .foregroundStyle(LerroTheme.secondaryText)
             .frame(width: 68, alignment: .leading)
     }
@@ -445,20 +426,20 @@ struct OnboardingAISetupView: View {
         }
     }
 
-    private var recommendationIcon: String {
+    private var recommendationIcon: OnboardingIcon {
         switch session.localAIReadiness?.recommendation {
-        case .localRecommended: "checkmark.seal.fill"
-        case .remoteRecommended: "speedometer"
-        case .localUnavailable: "exclamationmark.triangle.fill"
-        case nil: "ellipsis.circle"
+        case .localRecommended: .system("checkmark.circle.fill")
+        case .remoteRecommended: .system("speedometer")
+        case .localUnavailable: .system("exclamationmark.triangle.fill")
+        case nil: .system("ellipsis.circle")
         }
     }
 
     private var recommendationColor: Color {
         switch session.localAIReadiness?.recommendation {
-        case .localRecommended: LerroTheme.green
-        case .remoteRecommended, .localUnavailable: LerroTheme.orange
-        case nil: LerroTheme.accent
+        case .localRecommended: LerroTheme.success
+        case .remoteRecommended, .localUnavailable: LerroTheme.warning
+        case nil: LerroTheme.secondaryText
         }
     }
 

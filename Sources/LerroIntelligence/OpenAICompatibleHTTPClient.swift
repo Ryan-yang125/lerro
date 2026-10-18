@@ -44,11 +44,13 @@ struct OpenAICompatibleMessage: Sendable, Equatable {
 struct OpenAICompatibleCompletion: Sendable, Equatable {
     let text: String
     let modelIdentifier: String
+    let tokens: AITokenUsage?
 }
 
 struct OpenAICompatibleConnectionProbe: Sendable, Equatable {
     let latency: Duration
     let modelIdentifier: String
+    let tokens: AITokenUsage?
 }
 
 enum OpenAICompatibleRuntimeError: LocalizedError, Sendable, Equatable {
@@ -150,8 +152,7 @@ actor OpenAICompatibleHTTPClient {
     ) async throws -> OpenAICompatibleCompletion {
         let request = try makeRequest(
             messages: messages,
-            maxTokens: maxTokens,
-            stream: false
+            maxTokens: maxTokens
         )
         let (data, response) = try await readResponse(for: request)
         try Self.validate(response: response)
@@ -159,34 +160,6 @@ actor OpenAICompatibleHTTPClient {
             from: data,
             fallbackModelIdentifier: endpoint.modelIdentifier
         )
-    }
-
-    func stream(
-        messages: [OpenAICompatibleMessage],
-        maxTokens: Int
-    ) throws -> AsyncThrowingStream<String, any Error> {
-        let request = try makeRequest(
-            messages: messages,
-            maxTokens: maxTokens,
-            stream: true
-        )
-        let client = self
-
-        return AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    try await client.consumeStream(
-                        request: request,
-                        continuation: continuation
-                    )
-                } catch {
-                    continuation.finish(throwing: Self.sanitized(error))
-                }
-            }
-            continuation.onTermination = { _ in
-                task.cancel()
-            }
-        }
     }
 
     func testConnection() async throws -> OpenAICompatibleConnectionProbe {
@@ -203,7 +176,8 @@ actor OpenAICompatibleHTTPClient {
         )
         return OpenAICompatibleConnectionProbe(
             latency: startedAt.duration(to: clock.now),
-            modelIdentifier: result.modelIdentifier
+            modelIdentifier: result.modelIdentifier,
+            tokens: result.tokens
         )
     }
 
@@ -213,8 +187,7 @@ actor OpenAICompatibleHTTPClient {
 
     private func makeRequest(
         messages: [OpenAICompatibleMessage],
-        maxTokens: Int,
-        stream: Bool
+        maxTokens: Int
     ) throws -> URLRequest {
         guard !messages.isEmpty, maxTokens > 0 else {
             throw OpenAICompatibleRuntimeError.invalidRequest
@@ -228,10 +201,7 @@ actor OpenAICompatibleHTTPClient {
         request.httpMethod = "POST"
         request.httpShouldHandleCookies = false
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(
-            stream ? "text/event-stream, application/json" : "application/json",
-            forHTTPHeaderField: "Accept"
-        )
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
@@ -246,7 +216,6 @@ actor OpenAICompatibleHTTPClient {
             },
             temperature: 0,
             maxTokens: maxTokens,
-            stream: stream,
             thinking: endpoint.usesDeepSeekExtensions
                 ? ChatCompletionRequestBody.Thinking(type: "disabled")
                 : nil
@@ -283,83 +252,6 @@ actor OpenAICompatibleHTTPClient {
                 data.append(byte)
             }
             return (data, response)
-        } catch {
-            throw Self.sanitized(error)
-        }
-    }
-
-    private func consumeStream(
-        request: URLRequest,
-        continuation: AsyncThrowingStream<String, any Error>.Continuation
-    ) async throws {
-        do {
-            let (bytes, response) = try await session.bytes(for: request)
-            guard let response = response as? HTTPURLResponse else {
-                throw OpenAICompatibleRuntimeError.invalidResponse
-            }
-            try Self.validate(response: response)
-            try Self.validateResponseSize(
-                response,
-                maximumBytes: endpoint.maximumResponseBytes
-            )
-
-            let contentType = response.value(forHTTPHeaderField: "Content-Type")?
-                .lowercased() ?? ""
-            if contentType.contains("text/event-stream") {
-                var decoder = SSEEventDecoder()
-                var responseSize = 0
-                var didYieldText = false
-
-                for try await byte in bytes {
-                    try Task.checkCancellation()
-                    responseSize += 1
-                    guard responseSize <= endpoint.maximumResponseBytes else {
-                        throw OpenAICompatibleRuntimeError.responseTooLarge
-                    }
-
-                    for payload in try decoder.append(byte) {
-                        if payload == "[DONE]" {
-                            guard didYieldText else {
-                                throw OpenAICompatibleRuntimeError.emptyResponse
-                            }
-                            continuation.finish()
-                            return
-                        }
-                        if let text = try Self.decodeStreamDelta(from: payload), !text.isEmpty {
-                            didYieldText = true
-                            continuation.yield(text)
-                        }
-                    }
-                }
-
-                for payload in try decoder.finish() where payload != "[DONE]" {
-                    if let text = try Self.decodeStreamDelta(from: payload), !text.isEmpty {
-                        didYieldText = true
-                        continuation.yield(text)
-                    }
-                }
-                guard didYieldText else {
-                    throw OpenAICompatibleRuntimeError.emptyResponse
-                }
-                continuation.finish()
-                return
-            }
-
-            var data = Data()
-            data.reserveCapacity(min(endpoint.maximumResponseBytes, 64 * 1_024))
-            for try await byte in bytes {
-                try Task.checkCancellation()
-                guard data.count < endpoint.maximumResponseBytes else {
-                    throw OpenAICompatibleRuntimeError.responseTooLarge
-                }
-                data.append(byte)
-            }
-            let completion = try Self.decodeCompletion(
-                from: data,
-                fallbackModelIdentifier: endpoint.modelIdentifier
-            )
-            continuation.yield(completion.text)
-            continuation.finish()
         } catch {
             throw Self.sanitized(error)
         }
@@ -485,21 +377,9 @@ actor OpenAICompatibleHTTPClient {
         }
         return OpenAICompatibleCompletion(
             text: text,
-            modelIdentifier: response.model ?? fallbackModelIdentifier
+            modelIdentifier: response.model ?? fallbackModelIdentifier,
+            tokens: response.usage?.tokenUsage
         )
-    }
-
-    private nonisolated static func decodeStreamDelta(from payload: String) throws -> String? {
-        guard let data = payload.data(using: .utf8) else {
-            throw OpenAICompatibleRuntimeError.invalidResponse
-        }
-        let response: ChatCompletionStreamResponse
-        do {
-            response = try JSONDecoder().decode(ChatCompletionStreamResponse.self, from: data)
-        } catch {
-            throw OpenAICompatibleRuntimeError.invalidResponse
-        }
-        return response.choices.first?.delta.content?.text
     }
 
     nonisolated static func sanitized(_ error: any Error) -> OpenAICompatibleRuntimeError {
@@ -555,7 +435,6 @@ private struct ChatCompletionRequestBody: Encodable {
     let messages: [Message]
     let temperature: Double
     let maxTokens: Int
-    let stream: Bool
     let thinking: Thinking?
 
     enum CodingKeys: String, CodingKey {
@@ -563,7 +442,6 @@ private struct ChatCompletionRequestBody: Encodable {
         case messages
         case temperature
         case maxTokens = "max_tokens"
-        case stream
         case thinking
     }
 }
@@ -577,20 +455,72 @@ private struct ChatCompletionResponse: Decodable {
         let message: Message
     }
 
-    let model: String?
-    let choices: [Choice]
-}
+    struct Usage: Decodable {
+        struct PromptTokensDetails: Decodable {
+            let cachedTokens: Int?
 
-private struct ChatCompletionStreamResponse: Decodable {
-    struct Choice: Decodable {
-        struct Delta: Decodable {
-            let content: FlexibleTextContent?
+            enum CodingKeys: String, CodingKey {
+                case cachedTokens = "cached_tokens"
+            }
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                cachedTokens = try? container.decodeIfPresent(Int.self, forKey: .cachedTokens)
+            }
         }
 
-        let delta: Delta
+        let promptTokens: Int?
+        let completionTokens: Int?
+        let cachedTokens: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case promptTokens = "prompt_tokens"
+            case completionTokens = "completion_tokens"
+            case promptTokensDetails = "prompt_tokens_details"
+            case promptCacheHitTokens = "prompt_cache_hit_tokens"
+        }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            promptTokens = try? container.decodeIfPresent(Int.self, forKey: .promptTokens)
+            completionTokens = try? container.decodeIfPresent(Int.self, forKey: .completionTokens)
+            let details = try? container.decodeIfPresent(
+                PromptTokensDetails.self,
+                forKey: .promptTokensDetails
+            )
+            let deepSeekHits = try? container.decodeIfPresent(
+                Int.self,
+                forKey: .promptCacheHitTokens
+            )
+            cachedTokens = details?.cachedTokens ?? deepSeekHits
+        }
+
+        var tokenUsage: AITokenUsage? {
+            guard promptTokens != nil || completionTokens != nil else { return nil }
+            return AITokenUsage(
+                inputTokens: promptTokens ?? 0,
+                outputTokens: completionTokens ?? 0,
+                cachedInputTokens: cachedTokens ?? 0
+            )
+        }
     }
 
+    let model: String?
     let choices: [Choice]
+    let usage: Usage?
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case choices
+        case usage
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        model = try container.decodeIfPresent(String.self, forKey: .model)
+        choices = try container.decode([Choice].self, forKey: .choices)
+        usage = try? container.decodeIfPresent(Usage.self, forKey: .usage)
+    }
 }
 
 private enum FlexibleTextContent: Decodable {
@@ -617,54 +547,5 @@ private enum FlexibleTextContent: Decodable {
         case .parts(let parts):
             parts.compactMap(\.text).joined()
         }
-    }
-}
-
-private struct SSEEventDecoder {
-    private var lineBuffer = Data()
-    private var dataLines: [String] = []
-
-    mutating func append(_ byte: UInt8) throws -> [String] {
-        lineBuffer.append(byte)
-        guard byte == 0x0A else { return [] }
-        return try consumeLine()
-    }
-
-    mutating func finish() throws -> [String] {
-        var events: [String] = []
-        if !lineBuffer.isEmpty {
-            events.append(contentsOf: try consumeLine())
-        }
-        if !dataLines.isEmpty {
-            events.append(dataLines.joined(separator: "\n"))
-            dataLines.removeAll(keepingCapacity: true)
-        }
-        return events
-    }
-
-    private mutating func consumeLine() throws -> [String] {
-        while lineBuffer.last == 0x0A || lineBuffer.last == 0x0D {
-            lineBuffer.removeLast()
-        }
-        guard let line = String(data: lineBuffer, encoding: .utf8) else {
-            throw OpenAICompatibleRuntimeError.invalidResponse
-        }
-        lineBuffer.removeAll(keepingCapacity: true)
-
-        if line.isEmpty {
-            guard !dataLines.isEmpty else { return [] }
-            let event = dataLines.joined(separator: "\n")
-            dataLines.removeAll(keepingCapacity: true)
-            return [event]
-        }
-        guard !line.hasPrefix(":"), line.hasPrefix("data:") else {
-            return []
-        }
-        var value = String(line.dropFirst(5))
-        if value.hasPrefix(" ") {
-            value.removeFirst()
-        }
-        dataLines.append(value)
-        return []
     }
 }

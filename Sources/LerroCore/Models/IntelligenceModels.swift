@@ -15,7 +15,9 @@ public struct IntelligenceRequest: Sendable, Equatable {
     public var context: CapturedContext
     public var dictionary: [DictionaryEntry]
     public var toneInstruction: String?
+    public var usageFeature: AIUsageFeature
 
+    /// `usageFeature` defaults to `.dictate` for polish and `.translate` for translate.
     public init(
         task: IntelligenceTask,
         mode: IntelligenceMode = .local,
@@ -25,7 +27,8 @@ public struct IntelligenceRequest: Sendable, Equatable {
         targetLanguage: String? = nil,
         context: CapturedContext,
         dictionary: [DictionaryEntry] = [],
-        toneInstruction: String? = nil
+        toneInstruction: String? = nil,
+        usageFeature: AIUsageFeature? = nil
     ) {
         self.task = task
         self.mode = mode
@@ -36,6 +39,7 @@ public struct IntelligenceRequest: Sendable, Equatable {
         self.context = context
         self.dictionary = dictionary
         self.toneInstruction = toneInstruction
+        self.usageFeature = usageFeature ?? (task == .translate ? .translate : .dictate)
     }
 }
 

@@ -1,259 +1,426 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import LerroCore
 
-private enum DictionaryTab: String, CaseIterable, Identifiable {
+private enum DictionaryScope: String, CaseIterable, Identifiable {
     case all = "全部"
     case learned = "自动学习"
-    case manual = "手动词条"
+    case manual = "手动"
     case snippets = "快捷语"
+    case suggestions = "建议"
     var id: Self { self }
 
-    init(source: DictionaryEntrySource?) {
-        self = switch source {
-        case .learned: .learned
-        case .manual: .manual
-        case nil: .all
+    func includes(_ entry: DictionaryEntry) -> Bool {
+        switch self {
+        case .all: true
+        case .learned: entry.source == .learned
+        case .manual: entry.source == .manual && !entry.isSnippet
+        case .snippets: entry.isSnippet
+        case .suggestions: false
+        }
+    }
+}
+
+private enum DictionaryEditorTarget: Identifiable {
+    case new
+    case edit(DictionaryEntry)
+
+    var id: String {
+        switch self {
+        case .new: "new"
+        case .edit(let entry): entry.id.uuidString
         }
     }
 
-    var source: DictionaryEntrySource? {
+    var entry: DictionaryEntry? {
         switch self {
-        case .all: nil
-        case .learned: .learned
-        case .manual, .snippets: .manual
+        case .new: nil
+        case .edit(let entry): entry
         }
+    }
+}
+
+fileprivate extension DictionaryEntry {
+    var scopeSortKey: String { applicationBundleIdentifier ?? "" }
+
+    var sourceSortKey: Int {
+        if isSnippet { return 2 }
+        return source == .learned ? 0 : 1
+    }
+
+    var isRecentlyLearned: Bool {
+        source == .learned && createdAt > Date.now.addingTimeInterval(-7 * 24 * 60 * 60)
     }
 }
 
 struct DictionaryView: View {
     @Bindable var session: AppSession
-    @State private var tab: DictionaryTab
-    @State private var searchText: String
-    @State private var displayedEntries: [DictionaryEntry]
-    @State private var isSearchExpanded: Bool
-    @State private var editingEntry: DictionaryEntry?
-    @State private var isEditorPresented = false
-    @State private var applicationScope = ""
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var scope: DictionaryScope = .all
+    @State private var sortOrder: [KeyPathComparator<DictionaryEntry>] = []
+    @State private var selection = Set<DictionaryEntry.ID>()
+    @State private var editorTarget: DictionaryEditorTarget?
+    @State private var pendingDeletion: [DictionaryEntry] = []
     @Environment(\.locale) private var locale
 
-    init(session: AppSession) {
-        self.session = session
-        let initialTab = DictionaryTab(source: session.dictionarySourceFilter)
-        let initialSearch = session.dictionarySearch
-        _tab = State(initialValue: initialTab)
-        _searchText = State(initialValue: initialSearch)
-        _displayedEntries = State(initialValue: Self.filtered(
-            session.dictionaryEntries,
-            searchText: initialSearch,
-            source: initialTab.source,
-            tab: initialTab
-        ))
-        _isSearchExpanded = State(initialValue: !initialSearch.isEmpty)
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                LerroPageTitle(title: localized("词典"))
-                    .frame(height: 40)
-                Spacer()
-                Button("新建词条", systemImage: "plus") {
-                    editingEntry = nil
-                    isEditorPresented = true
-                }
-                .buttonStyle(LerroPillButtonStyle(prominent: true))
-            }
-
-            HStack(spacing: 12) {
-                Picker("词条来源", selection: $tab) {
-                    ForEach(DictionaryTab.allCases) { item in
-                        Text(LocalizedStringKey(item.rawValue)).tag(item)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 380)
-                .onChange(of: tab) { _, item in
-                    session.dictionarySourceFilter = item.source
-                    updateDisplayedEntries()
-                }
-
-                Spacer()
-
-                Picker("应用范围", selection: $applicationScope) {
-                    Text("所有应用").tag("")
-                    ForEach(applicationScopes, id: \.self) { bundleIdentifier in
-                        Text(verbatim: bundleIdentifier).tag(bundleIdentifier)
-                    }
-                }
-                .frame(width: 180)
-                .onChange(of: applicationScope) { _, _ in updateDisplayedEntries() }
-
-                if isSearchExpanded {
-                    LerroSearchField(placeholder: "搜索词典", text: $searchText)
-                        .frame(width: 220)
-                        .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
-                }
-                LerroIconButton(systemName: "magnifyingglass", help: "搜索") {
-                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
-                        if isSearchExpanded && !searchText.isEmpty {
-                            searchText = ""
-                        } else {
-                            isSearchExpanded.toggle()
-                        }
-                    }
-                }
-            }
-            .padding(.top, 16)
-
-            if displayedEntries.isEmpty {
-                EmptyStateView(
-                    systemImage: "character.book.closed",
-                    title: searchText.isEmpty ? "建立您的个人词典" : "没有匹配词语",
-                    detail: searchText.isEmpty
+        let entries = displayedEntries
+        Group {
+            if scope == .suggestions {
+                suggestionsContent
+            } else if entries.isEmpty {
+                LerroEmptyState(
+                    title: session.dictionarySearch.isEmpty ? "建立您的个人词典" : "没有匹配词语",
+                    hint: session.dictionarySearch.isEmpty
                         ? "添加姓名、品牌、缩写与专业术语，让每次听写更准确。"
                         : "尝试新的关键词，或清空当前搜索。"
                 )
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(displayedEntries) { entry in
-                            DictionaryListRow(entry: entry) {
-                                editingEntry = entry
-                                isEditorPresented = true
-                            } delete: {
-                                session.deleteDictionaryEntry(entry)
-                            } promoteGlobal: {
-                                var updated = entry
-                                updated.applicationBundleIdentifier = nil
-                                Task { _ = await session.saveDictionaryEntry(updated) }
-                            }
-                            if entry.id != displayedEntries.last?.id {
-                                Divider().overlay(LerroTheme.thinBorder)
-                            }
-                        }
+                table(entries)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(LerroTheme.main)
+        .navigationTitle(Text("词典"))
+        .searchable(text: $session.dictionarySearch, prompt: Text("搜索词典"))
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("词条来源", selection: $scope) {
+                    ForEach(DictionaryScope.allCases) { item in
+                        Text(verbatim: "\(localized(item.rawValue)) \(count(of: item))").tag(item)
                     }
-                    .background(LerroTheme.topLayer)
-                    .clipShape(RoundedRectangle(
-                        cornerRadius: LerroTheme.cardRadius,
-                        style: .continuous
-                    ))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
-                            .stroke(LerroTheme.thinBorder, lineWidth: 1)
-                    }
-                    .shadow(color: LerroTheme.cardShadow, radius: 2, x: 0, y: 1)
-                    .padding(.top, 16)
-                    .padding(.trailing, 15)
-                    .padding(.bottom, 24)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            if scope == .suggestions {
+                ToolbarItem {
+                    scanControl
                 }
             }
+            ToolbarItem {
+                Menu {
+                    Button("导入 CSV…") { Task { await importCSV() } }
+                    Button("导出 CSV…") { exportCSV() }
+                        .disabled(session.dictionaryEntries.isEmpty)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .accessibilityLabel(Text("更多"))
+                }
+                .menuIndicator(.hidden)
+                .help("更多")
+            }
+            ToolbarItem {
+                Button {
+                    editorTarget = .new
+                } label: {
+                    Label("新建", systemImage: "plus")
+                }
+                .buttonStyle(LerroButtonStyle(.primary))
+            }
+            .sharedBackgroundVisibility(.hidden)
         }
-        .padding(.top, LerroTheme.contentTopPadding)
-        .padding(.horizontal, LerroTheme.contentHorizontalPadding)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(LerroTheme.main)
-        .task(id: searchText) {
-            await updateSearchAfterDelay(searchText)
+        .task {
+            session.refreshAvailableApplications()
+            if session.visualFixturePresentation == "dictionary-suggestions" {
+                scope = .suggestions
+            }
         }
-        .onChange(of: session.dictionaryEntries) {
-            updateDisplayedEntries()
+        .onChange(of: session.dictionaryEntries) { _, entries in
+            selection.formIntersection(Set(entries.map(\.id)))
         }
-        .sheet(isPresented: $isEditorPresented, onDismiss: { editingEntry = nil }) {
-            DictionaryEditorView(entry: editingEntry) { phrase, replacement, bundleIdentifier in
-                var entry = editingEntry ?? DictionaryEntry(phrase: phrase, replacement: replacement)
-                entry.phrase = phrase
-                entry.replacement = replacement
-                if editingEntry == nil { entry.source = .manual }
-                entry.applicationBundleIdentifier = bundleIdentifier
-                return await session.saveDictionaryEntry(entry)
-            } importCSV: {
-                await importCSV()
-            } cancel: {
-                closeEditor()
+        .sheet(item: $editorTarget) { target in
+            DictionaryEditorSheet(session: session, entry: target.entry) {
+                editorTarget = nil
+            }
+        }
+        .confirmationDialog(
+            Text(verbatim: deletionTitle),
+            isPresented: Binding(
+                get: { !pendingDeletion.isEmpty },
+                set: { if !$0 { pendingDeletion = [] } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                pendingDeletion.forEach(session.deleteDictionaryEntry)
+                selection.subtract(pendingDeletion.map(\.id))
+                pendingDeletion = []
+            }
+            Button("取消", role: .cancel) { pendingDeletion = [] }
+        } message: {
+            Text("删除后无法恢复。")
+        }
+    }
+
+    @ViewBuilder
+    private var scanControl: some View {
+        if let progress = session.dictionarySuggestionScan {
+            HStack(spacing: 8) {
+                ProgressView(value: Double(progress.processed), total: Double(max(progress.total, 1)))
+                    .frame(width: 96)
+                Button("停止") { session.cancelDictionarySuggestionScan() }
+                    .buttonStyle(LerroButtonStyle(.secondary))
+            }
+        } else {
+            Button("从历史找词") { session.scanHistoryForDictionarySuggestions() }
+                .buttonStyle(LerroButtonStyle(.secondary))
+                .disabled(!session.canScanDictionarySuggestions)
+        }
+    }
+
+    @ViewBuilder
+    private var suggestionsContent: some View {
+        let suggestions = displayedSuggestions
+        if suggestions.isEmpty {
+            if !session.dictionarySearch.isEmpty && !session.dictionarySuggestions.isEmpty {
+                LerroEmptyState(title: "没有匹配词语")
+            } else {
+                LerroEmptyState(title: session.canScanDictionarySuggestions ? "还没有建议" : "需要启用 AI")
+            }
+        } else {
+            List(suggestions) { suggestion in
+                suggestionRow(suggestion)
+            }
+            .listStyle(.inset)
+        }
+    }
+
+    private func suggestionRow(_ suggestion: DictionarySuggestion) -> some View {
+        HStack(spacing: 8) {
+            Text(verbatim: suggestion.phrase)
+                .font(LerroFont.body)
+                .foregroundStyle(LerroTheme.secondaryText)
+                .lineLimit(1)
+            Image(systemName: "arrow.right")
+                .font(LerroFont.caption)
+                .foregroundStyle(LerroTheme.secondaryText)
+                .accessibilityHidden(true)
+            Text(verbatim: suggestion.replacement)
+                .font(LerroFont.bodyEmphasis)
+                .foregroundStyle(LerroTheme.text)
+                .lineLimit(1)
+            Spacer(minLength: 12)
+            Text(verbatim: "×\(suggestion.occurrences)")
+                .font(LerroFont.caption.monospacedDigit())
+                .foregroundStyle(LerroTheme.secondaryText)
+            Button("加入") { session.acceptDictionarySuggestion(suggestion) }
+                .buttonStyle(LerroButtonStyle(.primary))
+            Button("忽略") { session.ignoreDictionarySuggestion(suggestion) }
+                .buttonStyle(LerroButtonStyle(.secondary))
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func table(_ entries: [DictionaryEntry]) -> some View {
+        Table(entries, selection: $selection, sortOrder: $sortOrder) {
+            TableColumn("听到", value: \.phrase) { entry in
+                Text(verbatim: entry.phrase)
+                    .font(LerroFont.body)
+                    .lineLimit(1)
+            }
+            .width(min: 100, ideal: 180)
+
+            TableColumn("写成", value: \.replacement) { entry in
+                replacementCell(entry)
+            }
+            .width(min: 140, ideal: 260)
+
+            TableColumn("范围", value: \.scopeSortKey) { entry in
+                scopeCell(entry)
+            }
+            .width(min: 90, ideal: 140)
+
+            TableColumn("来源", value: \.sourceSortKey) { entry in
+                Text(LocalizedStringKey(sourceTitle(entry)))
+                    .font(LerroFont.body)
+                    .foregroundStyle(LerroTheme.secondaryText)
+            }
+            .width(min: 64, ideal: 84)
+
+            TableColumn("使用", value: \.useCount) { entry in
+                Text(verbatim: "\(entry.useCount)")
+                    .font(LerroFont.body.monospacedDigit())
+                    .foregroundStyle(LerroTheme.secondaryText)
+            }
+            .width(min: 48, ideal: 60)
+            .alignment(.numeric)
+        }
+        .tableStyle(.inset)
+        .contextMenu(forSelectionType: DictionaryEntry.ID.self) { ids in
+            let targets = selectedEntries(for: ids)
+            if targets.count == 1, let entry = targets.first {
+                Button("编辑") { editorTarget = .edit(entry) }
+            }
+            if targets.contains(where: { $0.applicationBundleIdentifier != nil }) {
+                Button("提升为全局") { promoteToGlobal(targets) }
+            }
+            if !targets.isEmpty {
+                Button("删除", role: .destructive) { pendingDeletion = targets }
+            }
+        } primaryAction: { ids in
+            if let entry = selectedEntries(for: ids).first, ids.count == 1 {
+                editorTarget = .edit(entry)
+            }
+        }
+        .onDeleteCommand {
+            let targets = selectedEntries(for: selection)
+            if !targets.isEmpty { pendingDeletion = targets }
+        }
+    }
+
+    private func replacementCell(_ entry: DictionaryEntry) -> some View {
+        HStack(spacing: 6) {
+            if entry.isSnippet {
+                Text(verbatim: entry.replacement.replacingOccurrences(of: "\n", with: " "))
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(LerroTheme.secondaryText)
+                    .lineLimit(1)
+            } else {
+                Text(verbatim: entry.replacement)
+                    .font(LerroFont.bodyEmphasis)
+                    .lineLimit(1)
+            }
+            if entry.isRecentlyLearned {
+                Text("新")
+                    .font(LerroFont.footnote.weight(.semibold))
+                    .foregroundStyle(LerroTheme.accent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(LerroTheme.accentSoft, in: Capsule())
+                    .accessibilityLabel(Text("最近学到"))
             }
         }
     }
 
-    private func updateSearchAfterDelay(_ value: String) async {
-        do {
-            try await Task.sleep(for: .milliseconds(120))
-        } catch {
-            return
-        }
-        guard !Task.isCancelled else { return }
-        session.dictionarySearch = value
-        updateDisplayedEntries()
-    }
-
-    private func updateDisplayedEntries() {
-        displayedEntries = Self.filtered(
-            session.dictionaryEntries,
-            searchText: searchText,
-            source: tab.source,
-            tab: tab,
-            applicationScope: applicationScope
-        )
-    }
-
-    private static func filtered(
-        _ entries: [DictionaryEntry],
-        searchText: String,
-        source: DictionaryEntrySource?,
-        tab: DictionaryTab = .all,
-        applicationScope: String = ""
-    ) -> [DictionaryEntry] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return entries.filter { entry in
-            let sourceMatches = source.map { entry.source == $0 } ?? true
-            let kindMatches = switch tab {
-            case .snippets: entry.isSnippet
-            case .manual: entry.source == .manual && !entry.isSnippet
-            case .all, .learned: true
+    @ViewBuilder
+    private func scopeCell(_ entry: DictionaryEntry) -> some View {
+        if let bundleIdentifier = entry.applicationBundleIdentifier {
+            let name = applicationName(for: bundleIdentifier)
+            HStack(spacing: 6) {
+                LerroAppIcon(bundleIdentifier: bundleIdentifier, name: name, size: 16)
+                Text(verbatim: name)
+                    .font(LerroFont.body)
+                    .lineLimit(1)
             }
-            let applicationMatches = applicationScope.isEmpty
-                || entry.applicationBundleIdentifier == applicationScope
-            let searchMatches = query.isEmpty
-                || entry.phrase.localizedCaseInsensitiveContains(query)
-                || entry.replacement.localizedCaseInsensitiveContains(query)
-            return sourceMatches && kindMatches && applicationMatches && searchMatches
+            .accessibilityElement(children: .combine)
+        } else {
+            Text("全局")
+                .font(LerroFont.body)
+                .foregroundStyle(LerroTheme.secondaryText)
         }
     }
 
-    private var applicationScopes: [String] {
-        Array(Set(session.dictionaryEntries.compactMap(\.applicationBundleIdentifier))).sorted()
+    // MARK: Data
+
+    private var displayedEntries: [DictionaryEntry] {
+        let query = session.dictionarySearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        let filtered = session.dictionaryEntries.filter { entry in
+            scope.includes(entry)
+                && (query.isEmpty
+                    || entry.phrase.localizedCaseInsensitiveContains(query)
+                    || entry.replacement.localizedCaseInsensitiveContains(query))
+        }
+        return filtered.sorted(using: sortOrder)
     }
 
-    private func closeEditor() {
-        isEditorPresented = false
-        editingEntry = nil
+    private var displayedSuggestions: [DictionarySuggestion] {
+        let query = session.dictionarySearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return session.dictionarySuggestions }
+        return session.dictionarySuggestions.filter {
+            $0.phrase.localizedCaseInsensitiveContains(query)
+                || $0.replacement.localizedCaseInsensitiveContains(query)
+        }
     }
 
-    private func importCSV() async -> Bool {
+    private func count(of scope: DictionaryScope) -> Int {
+        if scope == .suggestions { return session.dictionarySuggestions.count }
+        return session.dictionaryEntries.reduce(0) { $0 + (scope.includes($1) ? 1 : 0) }
+    }
+
+    private func selectedEntries(for ids: Set<DictionaryEntry.ID>) -> [DictionaryEntry] {
+        session.dictionaryEntries.filter { ids.contains($0.id) }
+    }
+
+    private func applicationName(for bundleIdentifier: String) -> String {
+        session.availableApplications.first { $0.bundleIdentifier == bundleIdentifier }?.name
+            ?? session.preferences.appToneProfiles.first { $0.bundleIdentifier == bundleIdentifier }?.applicationName
+            ?? bundleIdentifier.split(separator: ".").last.map(String.init)
+            ?? bundleIdentifier
+    }
+
+    private func sourceTitle(_ entry: DictionaryEntry) -> String {
+        if entry.isSnippet { return "快捷语" }
+        return entry.source == .learned ? "自动学习" : "手动"
+    }
+
+    private func promoteToGlobal(_ targets: [DictionaryEntry]) {
+        let scoped = targets.filter { $0.applicationBundleIdentifier != nil }
+        Task {
+            for var entry in scoped {
+                entry.applicationBundleIdentifier = nil
+                _ = await session.saveDictionaryEntry(entry)
+            }
+        }
+    }
+
+    private var deletionTitle: String {
+        pendingDeletion.count > 1
+            ? LerroInterfaceLocalization.format("删除 %lld 个词条？", locale: locale, arguments: pendingDeletion.count)
+            : localized("删除这个词语？")
+    }
+
+    // MARK: CSV
+
+    private func importCSV() async {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.commaSeparatedText, .plainText]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
             let values = try url.resourceValues(forKeys: [.fileSizeKey])
             guard (values.fileSize ?? 0) <= 2_000_000 else {
                 session.currentError = localized("词典导入失败：CSV 文件不能超过 2 MB")
-                return false
+                return
             }
             let contents = try String(contentsOf: url, encoding: .utf8)
-            return await session.importDictionaryCSV(contents)
+            _ = await session.importDictionaryCSV(contents)
         } catch {
-            session.currentError = String(
-                format: localized("词典导入失败：%@"),
+            session.currentError = LerroInterfaceLocalization.format(
+                "词典导入失败：%@",
                 locale: locale,
-                error.localizedDescription
+                arguments: error.localizedDescription
             )
-            return false
         }
+    }
+
+    private func exportCSV() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = localized("词典") + ".csv"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        // Matches DictionaryCSVParser: the phrase ends at the first comma and
+        // the rest of the line is the replacement.
+        var rows = ["phrase,replacement"]
+        for entry in session.dictionaryEntries {
+            rows.append(Self.csvLine(entry.phrase) + "," + Self.csvLine(entry.replacement))
+        }
+        do {
+            try (rows.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            session.currentError = LerroInterfaceLocalization.format(
+                "词典导出失败：%@",
+                locale: locale,
+                arguments: error.localizedDescription
+            )
+        }
+    }
+
+    private static func csvLine(_ value: String) -> String {
+        value.components(separatedBy: .newlines).joined(separator: " ")
     }
 
     private func localized(_ key: String) -> String {
@@ -261,200 +428,103 @@ struct DictionaryView: View {
     }
 }
 
-private struct DictionaryListRow: View {
-    let entry: DictionaryEntry
-    let edit: () -> Void
-    let delete: () -> Void
-    let promoteGlobal: () -> Void
-    @State private var hovering = false
-    @State private var showDeleteConfirmation = false
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-    @Environment(\.locale) private var locale
+// MARK: - Editor
 
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(verbatim: entry.phrase)
-                    .font(LerroTheme.font(14, weight: .medium))
-                    .foregroundStyle(LerroTheme.text)
-                    .lineLimit(1)
-                HStack(spacing: 6) {
-                    Text(LocalizedStringKey(entry.source == .learned ? "自动学习" : entry.isSnippet ? "快捷语" : "手动词条"))
-                    if entry.replacement != entry.phrase {
-                        Text("·")
-                        Text(verbatim: entry.replacement)
-                    }
-                    Text("·")
-                    Text(verbatim: entry.applicationBundleIdentifier ?? "全局")
-                }
-                .lerroTypography(.caption)
-                .foregroundStyle(LerroTheme.metadataText)
-            }
-            Spacer()
-            HStack(spacing: 2) {
-                Button(action: edit) {
-                    Image(systemName: "pencil")
-                        .frame(width: 28, height: 28)
-                }
-                .buttonStyle(LerroPressButtonStyle())
-                .help("编辑")
-                .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
-                    "编辑 %@",
-                    locale: locale,
-                    arguments: entry.phrase
-                )))
-                Button { showDeleteConfirmation = true } label: {
-                    Image(systemName: "trash")
-                        .frame(width: 28, height: 28)
-                }
-                .buttonStyle(LerroPressButtonStyle())
-                .help("删除")
-                .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
-                    "删除 %@",
-                    locale: locale,
-                    arguments: entry.phrase
-                )))
-            }
-            .foregroundStyle(LerroTheme.secondaryText)
-            .opacity(hovering || colorSchemeContrast == .increased ? 1 : 0.62)
-        }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 56)
-        .background(hovering ? LerroTheme.fillHover : Color.clear)
-        .contentShape(Rectangle())
-        .onHover { isHovering in
-            withAnimation(.easeOut(duration: LerroTheme.hoverDuration)) {
-                hovering = isHovering
-            }
-        }
-        .contextMenu {
-            Button("编辑", action: edit)
-            if entry.applicationBundleIdentifier != nil {
-                Button("提升为全局词条", action: promoteGlobal)
-            }
-            Button("删除", role: .destructive) { showDeleteConfirmation = true }
-        }
-        .alert("删除这个词语？", isPresented: $showDeleteConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("删除", role: .destructive, action: delete)
-        }
-    }
-
-}
-
-private struct DictionaryEditorView: View {
-    private enum EntryKind: String, CaseIterable, Identifiable {
+private struct DictionaryEditorSheet: View {
+    private enum Kind: String, CaseIterable, Identifiable {
         case term = "词条"
         case snippet = "快捷语"
         var id: Self { self }
     }
 
-    let existingEntry: DictionaryEntry?
-    let save: (String, String, String?) async -> Bool
-    let importCSV: () async -> Bool
-    let cancel: () -> Void
+    let session: AppSession
+    let existing: DictionaryEntry?
+    let close: () -> Void
     @State private var phrase: String
     @State private var replacement: String
-    @State private var kind: EntryKind
+    @State private var kind: Kind
     @State private var applicationBundleIdentifier: String
-    @State private var isWorking = false
-    @FocusState private var focused: Bool
+    @State private var isSaving = false
+    @FocusState private var phraseFocused: Bool
+    @Environment(\.locale) private var locale
 
-    init(
-        entry: DictionaryEntry?,
-        save: @escaping (String, String, String?) async -> Bool,
-        importCSV: @escaping () async -> Bool,
-        cancel: @escaping () -> Void
-    ) {
-        existingEntry = entry
-        self.save = save
-        self.importCSV = importCSV
-        self.cancel = cancel
+    init(session: AppSession, entry: DictionaryEntry?, close: @escaping () -> Void) {
+        self.session = session
+        self.existing = entry
+        self.close = close
         _phrase = State(initialValue: entry?.phrase ?? "")
         _replacement = State(initialValue: entry?.replacement ?? "")
-        _kind = State(initialValue: entry?.isSnippet == true
-            ? .snippet
-            : .term)
+        _kind = State(initialValue: entry?.isSnippet == true ? .snippet : .term)
         _applicationBundleIdentifier = State(initialValue: entry?.applicationBundleIdentifier ?? "")
     }
 
+    private var isLearned: Bool { existing?.source == .learned }
+    private var trimmedPhrase: String { phrase.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmedReplacement: String { replacement.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var canSave: Bool {
+        !trimmedPhrase.isEmpty && !(kind == .snippet && trimmedReplacement.isEmpty) && !isSaving
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(LocalizedStringKey(existingEntry == nil ? "新建" : "编辑"))
-                .lerroTypography(.title)
-                .frame(height: 30)
-
-            Picker("类型", selection: $kind) {
-                ForEach(EntryKind.allCases) { kind in
-                    Text(LocalizedStringKey(kind.rawValue)).tag(kind)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.top, 16)
-
-            TextField(kind == .snippet ? "说出触发词" : "输入词语", text: $phrase)
-                .textFieldStyle(.plain)
-                .lerroTypography(.body)
-                .padding(.horizontal, 10)
-                .frame(height: 41)
-                .background(LerroTheme.main)
-                .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
-                        .stroke(LerroTheme.focusBorder, lineWidth: 1)
-                }
-                .focused($focused)
-                .padding(.top, 12)
-                .onSubmit(savePhrase)
-
-            if kind == .snippet {
-                TextEditor(text: $replacement)
-                    .font(LerroTheme.font(14))
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
-                    .frame(minHeight: 100)
-                    .background(LerroTheme.main)
-                    .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
-                            .stroke(LerroTheme.focusBorder, lineWidth: 1)
+        VStack(spacing: 0) {
+            Form {
+                if !isLearned {
+                    Picker("类型", selection: $kind) {
+                        ForEach(Kind.allCases) { item in
+                            Text(LocalizedStringKey(item.rawValue)).tag(item)
+                        }
                     }
-                    .padding(.top, 12)
-            }
-
-            TextField("应用 Bundle ID（留空为全局）", text: $applicationBundleIdentifier)
-                .textFieldStyle(.plain)
-                .lerroTypography(.body)
-                .padding(.horizontal, 10)
-                .frame(height: 41)
-                .background(LerroTheme.main)
-                .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
-                        .stroke(LerroTheme.thinBorder, lineWidth: 1)
+                    .pickerStyle(.segmented)
                 }
-                .padding(.top, 12)
+
+                TextField("听到", text: $phrase)
+                    .focused($phraseFocused)
+                    .onSubmit(save)
+
+                if kind == .snippet {
+                    LabeledContent("写成") {
+                        TextEditor(text: $replacement)
+                            .font(.system(size: 12, design: .monospaced))
+                            .scrollContentBackground(.hidden)
+                            .padding(6)
+                            .frame(height: 96)
+                            .background(LerroTheme.fillContainerThin, in: RoundedRectangle(
+                                cornerRadius: LerroTheme.controlRadius,
+                                style: .continuous
+                            ))
+                    }
+                } else if isLearned {
+                    TextField("写成", text: $replacement)
+                }
+
+                Picker("范围", selection: $applicationBundleIdentifier) {
+                    Text("全局").tag("")
+                    ForEach(scopeOptions, id: \.bundleIdentifier) { option in
+                        Text(verbatim: option.name).tag(option.bundleIdentifier)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
 
             HStack(spacing: 8) {
-                Button("导入 CSV") { perform(importCSV) }
-                    .buttonStyle(LerroPillButtonStyle())
-                    .disabled(isWorking)
                 Spacer()
-                Button("取消", action: cancel)
-                    .buttonStyle(LerroPillButtonStyle())
-                    .disabled(isWorking)
-                Button(action: savePhrase) {
-                    Text(LocalizedStringKey(existingEntry == nil ? "添加" : "保存"))
-                }
-                    .buttonStyle(LerroPillButtonStyle(prominent: true))
-                    .disabled(trimmedPhrase.isEmpty || (kind == .snippet && trimmedReplacement.isEmpty) || isWorking)
+                Button("取消", action: close)
+                    .buttonStyle(LerroButtonStyle(.secondary))
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(isSaving)
+                Button("保存", action: save)
+                    .buttonStyle(LerroButtonStyle(.primary))
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canSave)
             }
-            .padding(.top, 24)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
         }
-        .padding(24)
-        .frame(width: 448, height: kind == .snippet ? 420 : 306, alignment: .topLeading)
-        .background(LerroTheme.main)
-        .onAppear { focused = true }
+        .frame(width: 440)
+        .fixedSize(horizontal: false, vertical: true)
+        .onAppear { phraseFocused = true }
         .onChange(of: phrase) {
             if phrase.count > 100 { phrase = String(phrase.prefix(100)) }
         }
@@ -463,34 +533,37 @@ private struct DictionaryEditorView: View {
         }
     }
 
-    private var trimmedPhrase: String {
-        phrase.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var trimmedReplacement: String {
-        replacement.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func savePhrase() {
-        guard !trimmedPhrase.isEmpty else { return }
-        let bundleIdentifier = applicationBundleIdentifier
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        perform {
-            await save(
-                trimmedPhrase,
-                kind == .snippet ? trimmedReplacement : trimmedPhrase,
-                bundleIdentifier.isEmpty ? nil : bundleIdentifier
-            )
+    private var scopeOptions: [(bundleIdentifier: String, name: String)] {
+        var options = session.availableApplications
+            .map { (bundleIdentifier: $0.bundleIdentifier, name: $0.name) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        if !applicationBundleIdentifier.isEmpty,
+           !options.contains(where: { $0.bundleIdentifier == applicationBundleIdentifier }) {
+            options.insert((applicationBundleIdentifier, applicationBundleIdentifier), at: 0)
         }
+        return options
     }
 
-    private func perform(_ operation: @escaping () async -> Bool) {
-        guard !isWorking else { return }
-        isWorking = true
+    private func save() {
+        guard canSave else { return }
+        var entry = existing ?? DictionaryEntry(phrase: trimmedPhrase, source: .manual)
+        entry.phrase = trimmedPhrase
+        switch (kind, entry.source) {
+        case (.snippet, _):
+            entry.replacement = trimmedReplacement
+        case (.term, .manual):
+            entry.replacement = trimmedPhrase
+        case (.term, .learned):
+            entry.replacement = trimmedReplacement.isEmpty ? trimmedPhrase : trimmedReplacement
+        }
+        entry.applicationBundleIdentifier = applicationBundleIdentifier.isEmpty
+            ? nil
+            : applicationBundleIdentifier
+        isSaving = true
         Task { @MainActor in
-            let succeeded = await operation()
-            isWorking = false
-            if succeeded { cancel() }
+            let succeeded = await session.saveDictionaryEntry(entry)
+            isSaving = false
+            if succeeded { close() }
         }
     }
 }

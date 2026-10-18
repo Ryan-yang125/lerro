@@ -6,6 +6,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
     private let composer: PromptComposer
     private let cloudComposer: CloudPromptComposer
     private let dictionaryLearningComposer: DictionaryLearningPromptComposer
+    private let usageRecorder: (any AIUsageRepository)?
     private var modelIdentifier: String
 
     public init(
@@ -15,7 +16,8 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         pipeline: TextPipeline = TextPipeline(),
         composer: PromptComposer = PromptComposer(),
         cloudComposer: CloudPromptComposer = CloudPromptComposer(),
-        dictionaryLearningComposer: DictionaryLearningPromptComposer = DictionaryLearningPromptComposer()
+        dictionaryLearningComposer: DictionaryLearningPromptComposer = DictionaryLearningPromptComposer(),
+        usageRecorder: (any AIUsageRepository)? = nil
     ) {
         self.runtime = runtime
         self.remoteRuntime = remoteRuntime
@@ -23,6 +25,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         self.composer = composer
         self.cloudComposer = cloudComposer
         self.dictionaryLearningComposer = dictionaryLearningComposer
+        self.usageRecorder = usageRecorder
         _ = pipeline
     }
 
@@ -72,17 +75,27 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
             guard let remoteRuntime else {
                 throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
             }
-            generated = try await remoteRuntime.generate(
+            generated = try await recordingUsage(
+                feature: request.usageFeature,
                 configuration: configuration,
-                systemPrompt: invocation.systemPrompt,
-                userPrompt: invocation.userPrompt,
-                maxTokens: invocation.maxTokens
-            )
+                tokens: \.tokens
+            ) {
+                try await remoteRuntime.generate(
+                    configuration: configuration,
+                    systemPrompt: invocation.systemPrompt,
+                    userPrompt: invocation.userPrompt,
+                    maxTokens: invocation.maxTokens
+                )
+            }.text
         }
+
+        let generatedText = invocation.source == .remote && request.task == .polish
+            ? CloudPromptComposer.dictateText(from: generated)
+            : generated
 
         return IntelligenceResult(
             text: try Self.finalText(
-                from: generated,
+                from: generatedText,
                 fallbackTranscript: rawTranscript,
                 task: request.task,
                 source: invocation.source
@@ -91,96 +104,6 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
             modelIdentifier: invocation.modelIdentifier,
             source: invocation.source
         )
-    }
-
-    public func processStream(
-        _ request: IntelligenceRequest
-    ) async throws -> AsyncThrowingStream<IntelligenceResult, any Error> {
-        let rawTranscript = request.transcript
-        guard !rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw LerroError.emptyTranscription
-        }
-        let disposition = Self.disposition(for: request.task)
-
-        if request.mode == .raw {
-            guard request.task == .polish else {
-                throw LerroError.modelUnavailable("翻译需要启用 AI")
-            }
-            let result = IntelligenceResult(
-                text: rawTranscript,
-                disposition: disposition,
-                modelIdentifier: "raw-transcript",
-                source: .raw
-            )
-            return AsyncThrowingStream { continuation in
-                continuation.yield(result)
-                continuation.finish()
-            }
-        }
-
-        let invocation = try invocation(for: request)
-        let tokenStream: AsyncThrowingStream<String, any Error>
-        switch invocation.runtime {
-        case .local:
-            try await runtime.load(modelIdentifier: invocation.modelIdentifier)
-            tokenStream = try await runtime.generateStream(
-                systemPrompt: invocation.systemPrompt,
-                userPrompt: invocation.userPrompt,
-                maxTokens: invocation.maxTokens
-            )
-        case .remote(let configuration):
-            guard let remoteRuntime else {
-                throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
-            }
-            tokenStream = try await remoteRuntime.generateStream(
-                configuration: configuration,
-                systemPrompt: invocation.systemPrompt,
-                userPrompt: invocation.userPrompt,
-                maxTokens: invocation.maxTokens
-            )
-        }
-
-        let currentModelIdentifier = invocation.modelIdentifier
-        let source = invocation.source
-        return AsyncThrowingStream { continuation in
-            let task = Task {
-                var generated = ""
-                var lastEmitted = ""
-                do {
-                    for try await chunk in tokenStream {
-                        try Task.checkCancellation()
-                        generated += chunk
-                        let partial = Self.sanitize(generated, fallback: "")
-                        guard !partial.isEmpty, partial != lastEmitted else { continue }
-                        lastEmitted = partial
-                        continuation.yield(IntelligenceResult(
-                            text: partial,
-                            disposition: disposition,
-                            modelIdentifier: currentModelIdentifier,
-                            source: source
-                        ))
-                    }
-                    let finalText = try Self.finalText(
-                        from: generated,
-                        fallbackTranscript: rawTranscript,
-                        task: request.task,
-                        source: source
-                    )
-                    if finalText != lastEmitted {
-                        continuation.yield(IntelligenceResult(
-                            text: finalText,
-                            disposition: disposition,
-                            modelIdentifier: currentModelIdentifier,
-                            source: source
-                        ))
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-            continuation.onTermination = { _ in task.cancel() }
-        }
     }
 
     public func classifyCorrection(
@@ -214,12 +137,18 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
             guard let remoteRuntime else {
                 throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
             }
-            generated = try await remoteRuntime.generate(
+            generated = try await recordingUsage(
+                feature: .dictionaryLearning,
                 configuration: configuration,
-                systemPrompt: prompts.system,
-                userPrompt: prompts.user,
-                maxTokens: DictionaryLearningPromptComposer.maximumOutputTokens
-            )
+                tokens: \.tokens
+            ) {
+                try await remoteRuntime.generate(
+                    configuration: configuration,
+                    systemPrompt: prompts.system,
+                    userPrompt: prompts.user,
+                    maxTokens: DictionaryLearningPromptComposer.maximumOutputTokens
+                )
+            }.text
         }
         let decision = try DictionaryLearningDecision.decodeStrictJSON(generated)
         guard decision.candidates.allSatisfy({ candidate in
@@ -241,7 +170,54 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         guard let remoteRuntime else {
             throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
         }
-        return try await remoteRuntime.testConnection(configuration: configuration)
+        return try await recordingUsage(
+            feature: .connectionTest,
+            configuration: configuration,
+            tokens: \.tokens,
+            succeeded: \.succeeded
+        ) {
+            try await remoteRuntime.testConnection(configuration: configuration)
+        }
+    }
+
+    /// Runs one remote call and appends a usage record for it. Cancelled calls
+    /// record nothing. Recording failures never affect the call.
+    private func recordingUsage<Result: Sendable>(
+        feature: AIUsageFeature,
+        configuration: RemoteProviderConfiguration,
+        tokens: (Result) -> AITokenUsage?,
+        succeeded: (Result) -> Bool = { _ in true },
+        _ call: () async throws -> Result
+    ) async throws -> Result {
+        let clock = ContinuousClock()
+        let date = Date()
+        let start = clock.now
+        func record(tokens: AITokenUsage?, succeeded: Bool) async {
+            try? await usageRecorder?.append(AIUsageRecord(
+                date: date,
+                feature: feature,
+                provider: configuration.provider,
+                modelIdentifier: configuration.modelIdentifier,
+                tokens: tokens,
+                latencyMilliseconds: Self.milliseconds(since: start, clock: clock),
+                succeeded: succeeded
+            ))
+        }
+        do {
+            let result = try await call()
+            await record(tokens: tokens(result), succeeded: succeeded(result))
+            return result
+        } catch {
+            if !(error is CancellationError), !Task.isCancelled {
+                await record(tokens: nil, succeeded: false)
+            }
+            throw error
+        }
+    }
+
+    private nonisolated static func milliseconds(since start: ContinuousClock.Instant, clock: ContinuousClock) -> Int {
+        let components = start.duration(to: clock.now).components
+        return Int(components.seconds) * 1_000 + Int(components.attoseconds / 1_000_000_000_000_000)
     }
 
     private func invocation(for request: IntelligenceRequest) throws -> Invocation {

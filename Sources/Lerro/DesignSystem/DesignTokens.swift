@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 /// Lerro uses a restrained monochrome content palette with adaptive light and
-/// dark variants. Key interactions inherit the user's macOS accent color;
-/// system status colors remain available for warnings and errors.
+/// dark variants. Interactions use the Lerro brand blue (`accent`,
+/// `accentButton`); system status colors cover success, warning and danger.
 enum LerroTheme {
     // MARK: Surfaces
 
@@ -13,24 +13,16 @@ enum LerroTheme {
         highContrastLight: rgb(0xFFFFFF),
         highContrastDark: rgb(0x0D0D0D)
     )
-    static let mainContrast = adaptive(
-        light: rgb(0xF2F2F2),
-        dark: rgb(0x202020),
-        highContrastLight: rgb(0xEEEEEE),
-        highContrastDark: rgb(0x272727)
-    )
     static let topLayer = adaptive(
         light: rgb(0xFFFFFF),
         dark: rgb(0x222222),
         highContrastLight: rgb(0xFFFFFF),
         highContrastDark: rgb(0x1A1A1A)
     )
-    static let bottomLayer = adaptive(light: rgb(0xF2F2F2), dark: rgb(0x191919))
     static let canvas = main
     static let sidebar = adaptive(light: rgb(0xF1F1F1), dark: rgb(0x1B1B1B))
     static let card = topLayer
     static let elevated = adaptive(light: rgb(0xFFFFFF), dark: rgb(0x292929))
-    static let scrim = Color.black.opacity(0.32)
 
     // MARK: Text
 
@@ -58,19 +50,11 @@ enum LerroTheme {
         highContrastLight: rgb(0x444444),
         highContrastDark: rgb(0xD8D8D8)
     )
-    static let disabledText = Color(nsColor: .disabledControlTextColor)
     static let pivotText = adaptive(light: rgb(0xFFFFFF), dark: rgb(0x292929))
-    static let brandInk = Color(
-        red: 17.0 / 255.0,
-        green: 17.0 / 255.0,
-        blue: 19.0 / 255.0
-    )
-    static let brandLight = Color(
-        red: 245.0 / 255.0,
-        green: 242.0 / 255.0,
-        blue: 234.0 / 255.0
-    )
-    static let brandOutline = Color.white.opacity(0.14)
+    static let brandInk = Color(nsColor: rgb(0x15161A))
+    static let brandPaper = Color(nsColor: rgb(0xF6F4EF))
+    static let brandBlueOnDark = Color(nsColor: rgb(0x4A6BFF))
+    static let brandCursor = adaptive(light: rgb(0x2F5BFF), dark: rgb(0x4A6BFF))
 
     // MARK: Fill and border
 
@@ -108,6 +92,11 @@ enum LerroTheme {
         highContrastLight: rgb(0x858585),
         highContrastDark: rgb(0x787878)
     )
+    static let keycapFill = adaptive(light: rgb(0xFFFFFF), dark: rgb(0x2C2C2F))
+    static let keycapBorder = adaptive(
+        light: rgb(0x000000, alpha: 0.14),
+        dark: rgb(0xFFFFFF, alpha: 0.14)
+    )
     static let focusBorder = accent
     static let selection = fillSelected
     static let cardShadow = Color.black.opacity(0.07)
@@ -115,40 +104,68 @@ enum LerroTheme {
 
     // MARK: Actions and statuses
 
-    static let accent = Color(nsColor: .controlAccentColor)
-    static let accentHover = accent.opacity(0.88)
-    static let accentPressed = accent.opacity(0.72)
-    static let primaryAction = accent
-    static let primaryActionHover = accentHover
-    static let primaryActionPressed = accentPressed
-    static let primaryActionForeground = Color(nsColor: .alternateSelectedControlTextColor)
-    static let green = Color(nsColor: .systemGreen)
-    static let red = Color(nsColor: .systemRed)
-    static let orange = Color(nsColor: .systemOrange)
+    /// Cursor, selection, links, switches and the current-day bar.
+    static let accent = adaptive(
+        light: rgb(0x2F5BFF),
+        dark: rgb(0x4A6BFF),
+        highContrastLight: rgb(0x1F46E0),
+        highContrastDark: rgb(0x7D95FF)
+    )
+    /// Accent-coloured text on a window surface (links, small labels).
+    static let accentText = adaptive(
+        light: rgb(0x2F5BFF),
+        dark: rgb(0x7D95FF),
+        highContrastLight: rgb(0x1F46E0),
+        highContrastDark: rgb(0x9DB0FF)
+    )
+    /// Primary button fill; text on it is always white.
+    static let accentButton = adaptive(
+        light: rgb(0x2F5BFF),
+        dark: rgb(0x3557F0),
+        highContrastLight: rgb(0x1F46E0),
+        highContrastDark: rgb(0x2A47D6)
+    )
+    /// Selected-row background.
+    static let accentSoft = adaptive(
+        light: rgb(0x2F5BFF, alpha: 0.10),
+        dark: rgb(0x4A6BFF, alpha: 0.18),
+        highContrastLight: rgb(0x1F46E0, alpha: 0.16),
+        highContrastDark: rgb(0x7D95FF, alpha: 0.26)
+    )
+    static let primaryAction = accentButton
+    static let primaryActionHover = accentButton.opacity(0.88)
+    static let primaryActionPressed = accentButton.opacity(0.72)
+    static let primaryActionForeground = Color.white
+    static let success = Color(nsColor: .systemGreen)
+    static let warning = Color(nsColor: .systemOrange)
+    static let danger = Color(nsColor: .systemRed)
+    static let green = success
+    static let red = danger
+    static let orange = warning
+
+    // MARK: Capture HUD
+
+    static let hudInk = brandInk
+    static let hudPaper = brandPaper
+    static let hudCursor = brandBlueOnDark
+    static let hudSecondaryText = hudPaper.opacity(0.6)
+    static let hudWarning = Color(nsColor: .systemOrange)
+    static let hudError = Color(nsColor: .systemRed)
+    static let hudCapsuleHeight: CGFloat = 40
+    static let hudHorizontalPadding: CGFloat = 16
+    static let hudContentSpacing: CGFloat = 10
+    static let hudLiveTextMaximumWidth: CGFloat = 400
 
     // MARK: Geometry
 
-    static let hubSize = CGSize(width: 1080, height: 750)
     static let hubMinimumSize = CGSize(width: 988, height: 658)
     static let sidebarWidth: CGFloat = 220
     static let contentHorizontalPadding: CGFloat = 28
-    static let contentTopPadding: CGFloat = 30
-    static let contentBottomPadding: CGFloat = 16
-    static let settingsMaximumSize = CGSize(width: 920, height: 640)
-    static let settingsMinimumSize = CGSize(width: 760, height: 520)
-    static let settingsSidebarWidth: CGFloat = 202
-    static let settingsModalCornerRadius: CGFloat = 22
-    static let settingsModalHorizontalInset: CGFloat = 16
-    static let settingsModalVerticalInset: CGFloat = 12
-    static let hudPanelSize = CGSize(width: 460, height: 118)
-    static let hudMinimumInteractionSize = CGSize(width: 70, height: 34)
+    static let hudPanelSize = CGSize(width: 560, height: 120)
     static let hudContentBottomInset: CGFloat = 18
-    static let outerInset: CGFloat = 0
-    static let sidebarRadius: CGFloat = 0
     static let navigationRadius: CGFloat = 8
     static let cardRadius: CGFloat = 16
     static let controlRadius: CGFloat = 8
-    static let topDragHeight: CGFloat = 58
 
     static let navigationIconSize: CGFloat = 14
     static let cardIconSize: CGFloat = 20
@@ -159,9 +176,6 @@ enum LerroTheme {
         .system(size: size, weight: weight)
     }
 
-    static func displayFont(_ size: CGFloat, weight: Font.Weight = .medium) -> Font {
-        .system(size: size, weight: weight, design: .default)
-    }
 
     static let uiTracking: CGFloat = -0.15
     static let titleSize: CGFloat = 24
@@ -203,12 +217,26 @@ enum LerroTheme {
         })
     }
 
-    private static func rgb(_ value: UInt32) -> NSColor {
+    private static func rgb(_ value: UInt32, alpha: CGFloat = 1) -> NSColor {
         NSColor(
             srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
             green: CGFloat((value >> 8) & 0xFF) / 255,
             blue: CGFloat(value & 0xFF) / 255,
-            alpha: 1
+            alpha: alpha
         )
     }
+}
+
+/// Static fonts for the main window. Apply with `.font(LerroFont.body)`.
+enum LerroFont {
+    static let pageTitle = Font.system(size: 15, weight: .semibold)
+    static let body = Font.system(size: 13)
+    static let bodyEmphasis = Font.system(size: 13, weight: .medium)
+    /// History detail body text.
+    static let detail = Font.system(size: 16)
+    static let stat = Font.system(size: 30, weight: .semibold).monospacedDigit()
+    static let statUnit = Font.system(size: 15, weight: .medium)
+    static let caption = Font.system(size: 12)
+    static let footnote = Font.system(size: 11)
+    static let sectionLabel = Font.system(size: 11, weight: .semibold)
 }

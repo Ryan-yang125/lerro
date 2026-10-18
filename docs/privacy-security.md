@@ -12,11 +12,14 @@
 | History | capture 完成或交付失败 | 按用户 retention | 应用内单条/批量删除；`never` 阻止新记录 |
 | Audio | `saveAudio` 开启且 history 允许 | 关闭 | history 拥有相对路径；删除历史先删除音频 |
 | Dictionary | 手动录入、CSV 或 AI 学习 | 手动可用；AI 学习偏好开启但只在 AI 模式运行 | 应用内编辑、撤销、删除、应用 scope/全局调整 |
-| App tone | AI 用户保存真实预览 | 空 | 个性化页面编辑或删除 |
+| App tone | AI 用户保存真实预览 | 空 | 应用语气页面编辑或删除 |
 | Local model | 用户确认下载 | 缺失 | Models cache；停止清理断点，完整 blob 保留 |
 | API configuration | 用户测试并保存 | 空 | plaintext `preferences.json`；清除 Key 回到 raw |
+| AI usage | 每次远程模型调用 | 空 | `ai-usage.json`，只含时间、功能、Provider、模型 ID、token 数、延迟与成败；保留 90 天；设置 → 用量可清除 |
+| Model prices | 用户编辑价格 | 内置 DeepSeek 价格 | `preferences.json` 的 `modelPrices` 覆盖项；恢复默认即删除 |
 | Target fingerprint | capture 与写入 | 进程内 | session 结束即释放，不写入历史 |
 | Correction diff | AI 自动学习观察 | 进程内 | 分类后释放；只保存合格 dictionary entry |
+| Dictionary suggestions | 用户点「从历史找词」 | 空 | `dictionary-suggestions.json`：建议词、出现次数、忽略列表与已扫描历史 ID；加入后成为 learned 词条 |
 
 Application Support 根目录每次准备或迁移后收紧到 `0700`，preferences 文件每次读取或
 原子替换后收紧到 `0600`。同一 macOS 用户身份下的软件仍可读取 plaintext API Key。
@@ -47,6 +50,9 @@ category names、phase timing、状态和可选音频引用。历史排除 focus
 Apple Speech authorization 与语言资源状态由 Speech framework 管理。Quick Dictate 使用同一
 Speech session 的 `SpeechDetector`，默认关闭且不增加权限。
 
+所选听写语言的 Apple Speech 资源在启动、语言切换和录音前按需自动准备，缺失资源由 macOS
+通过 Apple 服务下载。此过程不采集麦克风、不读取目标文本，也不改变 TCC 授权。
+
 Onboarding 通过真实操作验证权限、语言资源、麦克风、快捷键、写入和恢复。用户可以随时在
 系统设置撤销 TCC。撤销会取消活动 capture、停止 event tap，并让自动学习观察安静结束。
 
@@ -59,7 +65,7 @@ Onboarding 通过真实操作验证权限、语言资源、麦克风、快捷键
 - caret 前最多 80、后最多 40 个 UTF-16 单元；
 - 当前任务需要的 selected text，远端上限 4,096 字符；
 - focused element/value/selection/secure state 的严格 delivery fingerprint；
-- 最多 12 个 prompt dictionary match 与当前 app tone。
+- 最多 12 个 prompt dictionary match、最多 40 个 `known_terms`（非 snippet 词典词条，每条最多 40 字符，不要求出现在 transcript 中）与当前 app tone；两者都受词典上下文开关约束，app 范围词条还需要应用上下文开关。
 
 视图只展示必要状态。上下文开关按 capture 开始时冻结；用户在生成期间修改设置只影响下一次。
 系统 prompt 把 transcript、上下文和词典声明为无权限数据，抵抗 prompt injection。
@@ -116,17 +122,14 @@ confidence 必须在 0–1；保存阈值为 0.7。
 confidence 会拒绝整个输出。
 
 AI 未启用、新 capture、离开 app/field、secure input、AX unavailable、unsupported editor、
-timeout 或 task cancellation 会安静停止。日志和 history 不写 span 或 AI 分类输出。合格条目默认
-绑定当前 app，用户可以撤销通知、编辑、删除或提升为全局。
+timeout 或 task cancellation 会安静停止。日志和 history 不写 span 或 AI 分类输出。合格条目保存为
+全局词条（识别纠错与应用无关，AI 只把词典当作提示），用户可以撤销通知、编辑或删除。
 
-## Apple Speech 词典上下文
+## Apple Speech 与词典
 
-同一 `DictionaryEntry` 数据通过 `SpeechVocabularyTerm` 进入 Apple Speech。AppSession 只选择
-当前应用相关的 non-snippet 条目，应用级优先于全局，并按 priority、use count、recency 排序。
-Apple `AnalysisContext.contextualStrings[.general]` 单次最多 100 个去重 replacement/phrase。
-
-词典同时进入 local/remote AI prompt、词典页面、CSV 和 scope 管理。Apple-only 用户可以手动
-维护词典并获得 Speech contextual recognition。
+Apple Speech 使用 `SpeechTranscriber`，不接收词典内容（该模块忽略 contextual strings）。
+词典进入 local/remote AI prompt、词典页面、CSV 和 scope 管理；Apple-only 模式下词典只用于
+快捷语和管理，不影响识别。
 
 ## 音频生命周期
 
@@ -144,8 +147,8 @@ Apple `AnalysisContext.contextualStrings[.general]` 单次最多 100 个去重 r
 
 ### Apple
 
-macOS 可以下载 Speech language assets。Apple framework 接收音频流和最多 100 个 contextual
-strings；行为继续受系统版本和 Apple 服务约束。生产代码不使用 Apple Translation。
+macOS 可以下载 Speech language assets。Apple framework 只接收音频流；行为继续受系统版本和
+Apple 服务约束。生产代码不使用 Apple Translation。
 
 ### Hugging Face
 
@@ -157,7 +160,7 @@ prompt 或 Key。
 
 用户启用 remote 后，Lerro 直接请求配置的 DeepSeek/OpenAI/Gemini/custom endpoint。连接测试
 只发送固定合成消息。正常请求按已启用类别发送 transcript、应用、窗口、80/40 caret context、
-task-required selection、最多 12 个 dictionary matches 和 app tone。
+task-required selection、最多 12 个 dictionary matches、最多 40 个 `known_terms` 和 app tone。
 
 自动学习使用更窄 payload：original/corrected spans、80/40 nearby context、app name、optional
 bundle ID。Provider 按自己的条款处理内容和连接/计费元数据。
@@ -199,6 +202,12 @@ CLI token。
 - prompt、model output、dictionary value、app window body；
 - API Key、Authorization header、certificate identity、Team ID、notary value；
 - email、invite code 和用户绝对路径。
+
+capture 计时日志（category `capture-trace`）只包含 trace id 前 8 位、里程碑名、毫秒数、mode、
+intelligence mode、processing route、outcome 与无 payload 的错误类别，全部以 public 级别输出；
+不记录 bundle ID、应用名、窗口标题或错误 message。历史条目的 `phaseTimings.milestones` 只保存
+里程碑名与秒数，随历史保留策略删除。`script/capture_latency_report.py` 只读本机 history，
+终端输出不含任何文本内容。
 
 新日志字段先完成 sample-value review 和 secret scan。
 

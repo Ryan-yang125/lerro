@@ -51,6 +51,21 @@ struct UserPreferencesTests {
         #expect(!preferences.shouldSaveCaptureAudio)
     }
 
+    @Test("Default tone instruction is empty and round-trips through JSON")
+    func defaultToneInstructionDecoding() throws {
+        let legacy = Data("{}".utf8)
+        let decoded = try JSONDecoder().decode(UserPreferences.self, from: legacy)
+        #expect(decoded.defaultToneInstruction == "")
+
+        var preferences = UserPreferences()
+        preferences.defaultToneInstruction = "自然、简洁"
+        let roundTrip = try JSONDecoder().decode(
+            UserPreferences.self,
+            from: JSONEncoder().encode(preferences)
+        )
+        #expect(roundTrip.defaultToneInstruction == "自然、简洁")
+    }
+
     @Test("Default hotkeys provide the clean first-run capture profile")
     func validatesDefaultHotkeys() throws {
         let hotkeys = UserPreferences().hotkeys
@@ -207,6 +222,19 @@ struct UserPreferencesTests {
         #expect(!decoded.quickDictateEnabled)
     }
 
+    @Test("Hands-free stop hint count defaults to zero and survives a round trip")
+    func handsFreeStopHintUseCountPersistence() throws {
+        let legacy = Data(#"{"recognitionLocaleIdentifier":"en_US","hasCompletedOnboarding":true}"#.utf8)
+        let decodedLegacy = try JSONDecoder().decode(UserPreferences.self, from: legacy)
+        #expect(decodedLegacy.handsFreeStopHintUseCount == 0)
+
+        let preferences = UserPreferences(handsFreeStopHintUseCount: 7)
+        let encoded = try JSONEncoder().encode(preferences)
+        let decoded = try JSONDecoder().decode(UserPreferences.self, from: encoded)
+        #expect(decoded.handsFreeStopHintUseCount == 7)
+        #expect(decoded == preferences)
+    }
+
     @Test("Older preference documents keep their saved values and default model consent to off")
     func migratesOlderDocuments() throws {
         let legacy = Data(#"{"recognitionLocaleIdentifier":"en_US","interactionSoundsEnabled":true,"enhancementEnabled":false,"hasCompletedOnboarding":true}"#.utf8)
@@ -255,27 +283,6 @@ struct UserPreferencesTests {
 
         preferences.automaticDictionaryLearningEnabled = false
         #expect(!preferences.isAutomaticDictionaryLearningActive)
-    }
-
-    @Test("Dictionary entries become application-scoped Speech vocabulary terms")
-    func mapsDictionaryToSpeechVocabulary() throws {
-        let entry = DictionaryEntry(
-            phrase: "乐若",
-            replacement: "Lerro",
-            source: .learned,
-            applicationBundleIdentifier: "com.openai.chat",
-            useCount: 8
-        )
-        let term = SpeechVocabularyTerm(dictionaryEntry: entry)
-
-        #expect(term.phrase == "乐若")
-        #expect(term.replacement == "Lerro")
-        #expect(term.applicationBundleIdentifier == "com.openai.chat")
-        #expect(term.priority == 8)
-        #expect(try JSONDecoder().decode(
-            SpeechVocabularyTerm.self,
-            from: JSONEncoder().encode(term)
-        ) == term)
     }
 
     @Test("Local model policy gates enhanced dictation, translation, and Ask")

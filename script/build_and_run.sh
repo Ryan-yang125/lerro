@@ -257,12 +257,14 @@ while IFS= read -r provenance_path; do
     package_name="$(basename "$(dirname "$provenance_path")")"
     ditto "$provenance_path" "$third_party_licenses_path/$package_name-UPSTREAM.md"
 done < <(find "$project_dir/Vendor" -mindepth 2 -maxdepth 2 -type f -name UPSTREAM.md | sort)
-source_icon="$project_dir/Sources/Lerro/Resources/icon.icns"
-[[ -f "$source_icon" ]] || {
-    print -u2 "Missing Lerro app icon: $source_icon"
-    exit 1
-}
-ditto "$source_icon" "$resources_path/icon.icns"
+for icon_resource_name in AppIcon.icns Assets.car; do
+    source_icon_resource="$project_dir/Sources/Lerro/Resources/$icon_resource_name"
+    [[ -s "$source_icon_resource" ]] || {
+        print -u2 "Missing Lerro app icon resource: $source_icon_resource"
+        exit 1
+    }
+    ditto "$source_icon_resource" "$resources_path/$icon_resource_name"
+done
 menu_bar_source="$project_dir/Sources/Lerro/Resources/MenuBar"
 [[ -d "$menu_bar_source" ]] || {
     print -u2 "Missing Lerro menu-bar resources: $menu_bar_source"
@@ -273,8 +275,16 @@ menu_bar_resource_names=(
     LerroMenuIdleTemplate@2x.png
     LerroMenuListeningTemplate.png
     LerroMenuListeningTemplate@2x.png
-    LerroMenuProcessingTemplate.png
-    LerroMenuProcessingTemplate@2x.png
+    LerroMenuListeningDimTemplate.png
+    LerroMenuListeningDimTemplate@2x.png
+    LerroMenuProcessing1Template.png
+    LerroMenuProcessing1Template@2x.png
+    LerroMenuProcessing2Template.png
+    LerroMenuProcessing2Template@2x.png
+    LerroMenuProcessing3Template.png
+    LerroMenuProcessing3Template@2x.png
+    LerroMenuProcessing4Template.png
+    LerroMenuProcessing4Template@2x.png
     LerroMenuErrorTemplate.png
     LerroMenuErrorTemplate@2x.png
 )

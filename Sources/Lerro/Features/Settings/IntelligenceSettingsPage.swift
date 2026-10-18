@@ -3,35 +3,6 @@ import Foundation
 import SwiftUI
 import LerroCore
 
-extension IntelligenceMode {
-    var lerroDisplayName: String {
-        switch self {
-        case .raw: "原始听写"
-        case .local: "本地 AI"
-        case .remote: "API 模型"
-        }
-    }
-
-    fileprivate var lerroIcon: String {
-        switch self {
-        case .raw: "waveform"
-        case .local: "cpu"
-        case .remote: "network"
-        }
-    }
-
-    fileprivate var lerroDetail: String {
-        switch self {
-        case .raw:
-            "转写完成后直接写入，不调用语言模型。"
-        case .local:
-            "使用 Qwen3.5 4B 在当前 Mac 整理文本。"
-        case .remote:
-            "使用您自己的 API Key 调用云端模型。"
-        }
-    }
-}
-
 extension RemoteProviderKind {
     var lerroDisplayName: String {
         switch self {
@@ -44,7 +15,7 @@ extension RemoteProviderKind {
 
     var lerroModelPlaceholder: String {
         switch self {
-        case .deepSeek: "deepseek-v4-flash"
+        case .deepSeek: "deepseek-flash"
         case .openAI: "例如 gpt-4.1-mini"
         case .gemini: "例如 gemini-2.5-flash"
         case .custom: "输入兼容 Chat Completions 的 Model ID"
@@ -118,6 +89,7 @@ struct IntelligenceSettingsPage: View {
     @Bindable var session: AppSession
     @Environment(\.locale) private var locale
 
+    @State private var shownMode: IntelligenceMode
     @State private var providerDraft = IntelligenceProviderDraft()
     @State private var connectionOutcome: RemoteConnectionTestOutcome?
     @State private var inlineMessage: String?
@@ -128,52 +100,40 @@ struct IntelligenceSettingsPage: View {
 
     init(session: AppSession) {
         self.session = session
+        _shownMode = State(initialValue: session.preferences.intelligenceMode)
         _providerDraft = State(initialValue: IntelligenceProviderDraft(
             configuration: session.preferences.remoteProvider
         ))
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("智能处理")
-                    .lerroTypography(.title)
-                    .foregroundStyle(LerroTheme.text)
-                    .frame(height: 32, alignment: .leading)
-                    .padding(.bottom, 20)
-
-                currentModeHeader
-                    .padding(.bottom, 20)
-
-                modePicker
-                    .padding(.bottom, 30)
-
-                settingsSection("自动词典学习") {
-                    Toggle(
-                        "修正刚写入的专名后，用 AI 判断并加入词典",
-                        isOn: $session.preferences.automaticDictionaryLearningEnabled
-                    )
-                    .toggleStyle(.switch)
-                    .disabled(session.preferences.intelligenceMode == .raw)
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .intelligenceSettingsBlock()
-                }
-                .padding(.bottom, 30)
-
-                settingsSection("本地模型") {
-                    localModelCard
-                }
-                .padding(.bottom, 30)
-
-                settingsSection("API 模型") {
-                    remoteProviderCard
-                }
+        Form {
+            Section {
+                modeTiles
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
             }
-            .padding(.top, 24)
-            .padding(.horizontal, 36)
-            .padding(.bottom, 36)
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            switch shownMode {
+            case .raw:
+                EmptyView()
+            case .remote:
+                remoteSections
+            case .local:
+                localSection
+            }
+
+            Section {
+                Toggle(
+                    "修正后自动学词",
+                    isOn: $session.preferences.automaticDictionaryLearningEnabled
+                )
+                .disabled(session.preferences.intelligenceMode == .raw)
+            }
+        }
+        .formStyle(.grouped)
+        .onChange(of: session.preferences.intelligenceMode) { _, updated in
+            shownMode = updated
         }
         .onChange(of: providerDraft.provider) { previous, updated in
             guard previous != updated else { return }
@@ -210,410 +170,211 @@ struct IntelligenceSettingsPage: View {
         }
     }
 
-    private var currentModeHeader: some View {
-        HStack(alignment: .center, spacing: 16) {
-            Image(systemName: session.preferences.intelligenceMode.lerroIcon)
-                .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
-                .foregroundStyle(LerroTheme.accent)
-                .frame(width: 48, height: 48)
-                .background(LerroTheme.fillSelected)
-                .clipShape(RoundedRectangle(cornerRadius: LerroTheme.navigationRadius, style: .continuous))
+    // MARK: Mode tiles
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("当前模式")
-                    .font(LerroTheme.font(12, weight: .medium))
-                    .foregroundStyle(LerroTheme.secondaryText)
-                Text(LocalizedStringKey(session.preferences.intelligenceMode.lerroDisplayName))
-                    .lerroTypography(.title)
-                    .foregroundStyle(LerroTheme.text)
-                Text(LocalizedStringKey(session.preferences.intelligenceMode.lerroDetail))
-                    .font(LerroTheme.font(13))
-                    .foregroundStyle(LerroTheme.secondaryText)
-            }
-
-            Spacer(minLength: 16)
-
-            Label {
-                Text(LocalizedStringKey(currentModeStatusText))
-            } icon: {
-                Image(systemName: currentModeStatusIcon)
-            }
-                .font(LerroTheme.font(12, weight: .medium))
-                .foregroundStyle(currentModeStatusColor)
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, minHeight: 108, alignment: .leading)
-        .background(LerroTheme.fillContainerThin)
-        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
-                .stroke(LerroTheme.thinBorder, lineWidth: 1)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(verbatim:
-            String(
-                format: localized("当前智能处理模式：%@"),
-                locale: locale,
-                localized(session.preferences.intelligenceMode.lerroDisplayName)
-            )
-        ))
-        .accessibilityValue(Text(verbatim: localized(currentModeStatusText)))
-    }
-
-    private var modePicker: some View {
+    private var modeTiles: some View {
         HStack(spacing: 10) {
             ForEach(IntelligenceMode.allCases) { mode in
-                modeButton(mode)
+                modeTile(mode)
             }
         }
+        .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text(verbatim: localized("选择智能处理模式")))
     }
 
-    private func modeButton(_ mode: IntelligenceMode) -> some View {
-        let selected = session.preferences.intelligenceMode == mode
+    private func modeTile(_ mode: IntelligenceMode) -> some View {
+        let selected = shownMode == mode
+        let active = session.preferences.intelligenceMode == mode
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 
         return Button {
             inlineMessage = nil
+            shownMode = mode
             selectMode(mode)
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Image(systemName: mode.lerroIcon)
-                        .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
-                        .foregroundStyle(selected ? LerroTheme.accent : LerroTheme.secondaryText)
-                    Spacer()
-                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(selected ? LerroTheme.accent : LerroTheme.tertiaryText)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(LocalizedStringKey(tileTitle(mode)))
+                        .font(LerroFont.bodyEmphasis)
+                        .foregroundStyle(LerroTheme.text)
+                    Spacer(minLength: 0)
+                    if active {
+                        LerroStatusDot(color: LerroTheme.success)
+                    }
                 }
-                Text(LocalizedStringKey(mode.lerroDisplayName))
-                    .lerroTypography(.heading)
-                    .foregroundStyle(LerroTheme.text)
-                Text(LocalizedStringKey(mode.lerroDetail))
-                    .font(LerroTheme.font(12))
+                Text(verbatim: tileDetail(mode))
+                    .font(LerroFont.caption)
                     .foregroundStyle(LerroTheme.secondaryText)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2, reservesSpace: true)
+                    .multilineTextAlignment(.leading)
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, minHeight: 126, alignment: .topLeading)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(selected ? LerroTheme.accentSoft : LerroTheme.fillContainerThin, in: shape)
+            .overlay {
+                shape.strokeBorder(
+                    selected ? LerroTheme.accent : LerroTheme.thinBorder,
+                    lineWidth: selected ? 1.5 : 1
+                )
+            }
+            .contentShape(shape)
         }
-        .buttonStyle(LerroCardButtonStyle(selected: selected))
-        .accessibilityLabel(Text(verbatim: localized(mode.lerroDisplayName)))
-        .accessibilityValue(Text(verbatim: localized(selected ? "当前模式" : "未选择")))
-        .accessibilityHint(Text(verbatim: localized(mode.lerroDetail)))
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(verbatim: localized(tileTitle(mode))))
+        .accessibilityValue(Text(verbatim: tileDetail(mode)))
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private var localModelCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "cpu")
-                    .font(.system(size: LerroTheme.cardIconSize, weight: .medium))
-                    .foregroundStyle(LerroTheme.secondaryText)
-                    .frame(width: 38, height: 38)
-                    .background(LerroTheme.fillContainerTough)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 8) {
-                        Text("Qwen3.5 4B")
-                            .lerroTypography(.heading)
-                        if session.preferences.intelligenceMode == .local {
-                            Text("已开启")
-                                .font(LerroTheme.font(12, weight: .medium))
-                                .foregroundStyle(LerroTheme.green)
-                        }
-                    }
-                    Text("约 3.03 GB · 下载后在当前 Mac 运行")
-                        .font(LerroTheme.font(13))
-                        .foregroundStyle(LerroTheme.secondaryText)
-                    Label {
-                        Text(LocalizedStringKey(localModelStatusText))
-                    } icon: {
-                        Image(systemName: localModelStatusIcon)
-                    }
-                        .font(LerroTheme.font(12))
-                        .foregroundStyle(localModelStatusColor)
-                }
-
-                Spacer(minLength: 12)
-
-                HStack(spacing: 8) {
-                    if session.modelStatus.state == .downloading
-                        || session.modelStatus.state == .loading {
-                        Button("暂停") {
-                            session.pauseLocalModelPreparation()
-                        }
-                        .buttonStyle(LerroPillButtonStyle())
-                    } else {
-                        Button {
-                            if session.preferences.hasApprovedModelDownload {
-                                session.activateIntelligenceMode(.local)
-                            } else {
-                                session.requestLocalModelPreparation()
-                            }
-                        } label: {
-                            Text(LocalizedStringKey(localModelActionTitle))
-                        }
-                        .buttonStyle(LerroPillButtonStyle(prominent: true))
-                        .disabled(localModelActionDisabled)
-                    }
-
-                    if session.modelStatus.state == .paused
-                        || session.modelStatus.state == .downloading
-                        || session.modelStatus.state == .loading {
-                        Button("停止", role: .destructive) {
-                            isDiscardDownloadConfirmationPresented = true
-                        }
-                        .buttonStyle(LerroPillButtonStyle(destructive: true))
-                    }
-                }
-            }
-
-            if showsLocalModelProgress {
-                ProgressView(value: min(1, max(0, session.modelStatus.progress)))
-                    .accessibilityLabel(Text(verbatim: localized("本地模型准备进度")))
-                HStack {
-                    Text(verbatim: localModelProgressText)
-                    Spacer()
-                    if let remaining = localModelRemainingText {
-                        Text(verbatim: remaining)
-                    }
-                }
-                .font(LerroTheme.font(12))
-                .foregroundStyle(LerroTheme.secondaryText)
-            }
-
-            Text("听写内容、上下文与生成结果留在这台 Mac；模型缓存可在停用后继续保留。")
-                .font(LerroTheme.font(12))
-                .foregroundStyle(LerroTheme.tertiaryText)
+    private func tileTitle(_ mode: IntelligenceMode) -> String {
+        switch mode {
+        case .raw: "不用 AI"
+        case .remote: "API"
+        case .local: "本地模型"
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .intelligenceSettingsBlock()
     }
 
-    private var remoteProviderCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("使用自己的 API Key")
-                    .lerroTypography(.heading)
-                Text("支持 OpenAI Chat Completions 兼容接口。配置只在点击“保存并启用”后写入。")
-                    .font(LerroTheme.font(13))
-                    .foregroundStyle(LerroTheme.secondaryText)
+    private func tileDetail(_ mode: IntelligenceMode) -> String {
+        switch mode {
+        case .raw:
+            return localized("直接写入苹果识别结果")
+        case .remote:
+            let configuration = session.preferences.remoteProvider
+            let state: String
+            if !configuration.isReadyForUse {
+                state = "未配置"
+            } else if session.preferences.intelligenceMode == .remote {
+                state = "已启用"
+            } else {
+                state = "已配置"
             }
+            return "\(configuration.provider.lerroDisplayName) · \(localized(state))"
+        case .local:
+            return "Qwen3.5 4B · \(localModelStatusText)"
+        }
+    }
 
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 12) {
-                GridRow {
-                    fieldLabel("Provider")
-                    Picker("Provider", selection: $providerDraft.provider) {
-                        ForEach(RemoteProviderKind.allCases) { provider in
-                            Text(LocalizedStringKey(provider.lerroDisplayName)).tag(provider)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+    // MARK: API
 
-                GridRow {
-                    fieldLabel("Model ID")
-                    TextField(LocalizedStringKey(providerDraft.provider.lerroModelPlaceholder), text: $providerDraft.modelIdentifier)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel(localized("Model ID"))
-                }
-
-                GridRow {
-                    fieldLabel("API Base URL")
-                    if providerDraft.provider == .custom {
-                        TextField("https://example.com/v1", text: customBaseURLBinding)
-                            .textFieldStyle(.roundedBorder)
-                            .accessibilityLabel(localized("自定义 API Base URL"))
-                    } else {
-                        HStack(spacing: 8) {
-                            Text(verbatim: providerDraft.baseURL)
-                                .font(LerroTheme.font(13))
-                                .foregroundStyle(LerroTheme.secondaryText)
-                                .textSelection(.enabled)
-                            Spacer()
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: LerroTheme.navigationIconSize, weight: .medium))
-                                .foregroundStyle(LerroTheme.tertiaryText)
-                        }
-                        .padding(.horizontal, 8)
-                        .frame(maxWidth: .infinity, minHeight: 24)
-                        .background(LerroTheme.fillContainerTough)
-                        .clipShape(RoundedRectangle(cornerRadius: LerroTheme.navigationRadius, style: .continuous))
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel(Text(verbatim:
-                            String(
-                                format: localized("API Base URL，预设只读，%@"),
-                                locale: locale,
-                                providerDraft.baseURL
-                            )
-                        ))
-                    }
-                }
-
-                GridRow {
-                    fieldLabel("API Key")
-                    SecureField("输入 API Key", text: $providerDraft.apiKey)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel(localized("API Key"))
-                        .privacySensitive()
+    @ViewBuilder
+    private var remoteSections: some View {
+        Section {
+            Picker("服务商", selection: $providerDraft.provider) {
+                ForEach(RemoteProviderKind.allCases) { provider in
+                    Text(LocalizedStringKey(provider.lerroDisplayName)).tag(provider)
                 }
             }
 
-            Divider().overlay(LerroTheme.thinBorder)
+            TextField(
+                "模型",
+                text: $providerDraft.modelIdentifier,
+                prompt: Text(LocalizedStringKey(providerDraft.provider.lerroModelPlaceholder))
+            )
+            .multilineTextAlignment(.trailing)
 
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("发送给 API")
-                        .font(LerroTheme.font(14, weight: .medium))
-                    Text("原始语音转写始终发送；以下上下文可逐项关闭。")
-                        .font(LerroTheme.font(12))
-                        .foregroundStyle(LerroTheme.secondaryText)
-                }
+            SecureField("API Key", text: $providerDraft.apiKey, prompt: Text("输入 API Key"))
+                .multilineTextAlignment(.trailing)
+                .privacySensitive()
 
-                Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
-                    GridRow {
-                        contextToggle("应用类型", value: $providerDraft.contextSharing.application)
-                        contextToggle("窗口标题", value: $providerDraft.contextSharing.windowTitle)
-                    }
-                    GridRow {
-                        contextToggle("光标附近文字", value: $providerDraft.contextSharing.nearbyText)
-                        contextToggle("选中文字", value: $providerDraft.contextSharing.selectedText)
-                    }
-                    GridRow {
-                        contextToggle("个人词典", value: $providerDraft.contextSharing.dictionary)
-                        contextToggle("应用语气", value: $providerDraft.contextSharing.tone)
-                    }
-                }
+            if providerDraft.provider == .custom {
+                TextField("地址", text: customBaseURLBinding, prompt: Text(verbatim: "https://example.com/v1"))
+                    .multilineTextAlignment(.trailing)
             }
 
-            Label {
-                Text("API Key、Provider、Model ID、Base URL 与上下文设置会以明文保存在这台 Mac 的 Lerro 设置 JSON 中。请仅在受信任的个人设备使用。")
-                    .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: "exclamationmark.triangle.fill")
-            }
-            .font(LerroTheme.font(12))
-            .foregroundStyle(LerroTheme.orange)
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(LerroTheme.orange.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            remoteActionRow
+        } footer: {
+            Text("API Key 以明文保存在这台 Mac 的设置文件中。")
+                .font(LerroFont.footnote)
+        }
 
-            remoteFeedback
+        Section("发送给 AI 的上下文") {
+            Toggle("应用名", isOn: $providerDraft.contextSharing.application)
+            Toggle("窗口标题", isOn: $providerDraft.contextSharing.windowTitle)
+            Toggle("光标附近文字", isOn: $providerDraft.contextSharing.nearbyText)
+            Toggle("选中文字", isOn: $providerDraft.contextSharing.selectedText)
+            Toggle("词典", isOn: $providerDraft.contextSharing.dictionary)
+            Toggle("应用语气", isOn: $providerDraft.contextSharing.tone)
+        }
+    }
 
-            HStack(spacing: 10) {
-                Button("清除已保存的 Key", role: .destructive) {
+    private var remoteActionRow: some View {
+        let busy = isTestingConnection
+            || isPersistingConfiguration
+            || !session.canModifyIntelligenceConfiguration
+        let invalid = providerDraft.validationMessage != nil
+
+        return HStack(spacing: 8) {
+            remoteStatus
+            Spacer(minLength: 8)
+
+            if !session.preferences.remoteProvider.apiKey.isEmpty {
+                Button("清除 Key", role: .destructive) {
                     isClearKeyConfirmationPresented = true
                 }
-                .buttonStyle(LerroPillButtonStyle(destructive: true))
-                .disabled(
-                    session.preferences.remoteProvider.apiKey.isEmpty
-                        || isTestingConnection
-                        || isPersistingConfiguration
-                        || !session.canModifyIntelligenceConfiguration
-                )
-
-                Button {
-                    testConnection()
-                } label: {
-                    Group {
-                        if isTestingConnection {
-                            Label("正在测试", systemImage: "clock")
-                        } else {
-                            Label("测试连接", systemImage: "bolt.horizontal.circle")
-                        }
-                    }
-                    .frame(minWidth: 86)
-                }
-                .buttonStyle(LerroPillButtonStyle())
-                .disabled(
-                    isTestingConnection
-                        || isPersistingConfiguration
-                        || providerDraft.validationMessage != nil
-                        || !session.canModifyIntelligenceConfiguration
-                )
-
-                Spacer()
-
-                Button("保存并启用") {
-                    saveAndActivateRemoteProvider()
-                }
-                .buttonStyle(LerroPillButtonStyle(prominent: true))
-                .disabled(
-                    isTestingConnection
-                        || isPersistingConfiguration
-                        || providerDraft.validationMessage != nil
-                        || !session.canModifyIntelligenceConfiguration
-                )
-                .keyboardShortcut(.defaultAction)
+                .buttonStyle(LerroButtonStyle(.destructive))
+                .disabled(busy)
             }
+
+            Button {
+                testConnection()
+            } label: {
+                Text(LocalizedStringKey(isTestingConnection ? "正在测试" : "测试连接"))
+            }
+            .buttonStyle(LerroButtonStyle(.secondary))
+            .disabled(busy || invalid)
+
+            Button("保存") {
+                saveAndActivateRemoteProvider()
+            }
+            .buttonStyle(LerroButtonStyle(.primary))
+            .disabled(busy || invalid)
+            .keyboardShortcut(.defaultAction)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .intelligenceSettingsBlock()
     }
 
     @ViewBuilder
-    private var remoteFeedback: some View {
+    private var remoteStatus: some View {
         if let validationMessage = providerDraft.validationMessage {
-            Label {
+            statusLabel(color: LerroTheme.warning) {
                 Text(LocalizedStringKey(validationMessage))
-            } icon: {
-                Image(systemName: "info.circle")
             }
-                .font(LerroTheme.font(12))
-                .foregroundStyle(LerroTheme.secondaryText)
-                .accessibilityLabel(Text(verbatim:
-                    String(
-                        format: localized("配置提示：%@"),
-                        locale: locale,
-                        localized(validationMessage)
-                    )
-                ))
+            .accessibilityLabel(Text(verbatim:
+                String(
+                    format: localized("配置提示：%@"),
+                    locale: locale,
+                    localized(validationMessage)
+                )
+            ))
         } else if let connectionOutcome {
-            HStack(spacing: 8) {
-                Image(systemName: connectionOutcome.succeeded ? "checkmark.circle.fill" : "xmark.circle.fill")
-                Text(verbatim: localized(connectionOutcome.message))
-                if let latency = connectionOutcome.latencyMilliseconds {
-                    Text(verbatim: "· \(latency) ms")
-                        .monospacedDigit()
-                }
-                if let model = connectionOutcome.modelIdentifier, !model.isEmpty {
-                    Text(verbatim: "· \(model)")
-                        .lineLimit(1)
+            statusLabel(color: connectionOutcome.succeeded ? LerroTheme.success : LerroTheme.danger) {
+                HStack(spacing: 4) {
+                    Text(verbatim: localized(connectionOutcome.message))
+                    if let latency = connectionOutcome.latencyMilliseconds {
+                        Text(verbatim: "\(latency) ms")
+                            .monospacedDigit()
+                    }
                 }
             }
-            .font(LerroTheme.font(12, weight: .medium))
-            .foregroundStyle(connectionOutcome.succeeded ? LerroTheme.green : LerroTheme.red)
             .accessibilityElement(children: .combine)
         } else if let inlineMessage {
-            Label {
+            statusLabel(color: LerroTheme.accent) {
                 Text(LocalizedStringKey(inlineMessage))
-            } icon: {
-                Image(systemName: "info.circle.fill")
             }
-                .font(LerroTheme.font(12, weight: .medium))
-                .foregroundStyle(LerroTheme.accent)
         }
     }
 
-    private func fieldLabel(_ title: String) -> some View {
-        Text(LocalizedStringKey(title))
-            .font(LerroTheme.font(13, weight: .medium))
-            .foregroundStyle(LerroTheme.secondaryText)
-            .frame(width: 102, alignment: .leading)
-    }
-
-    private func contextToggle(_ title: String, value: Binding<Bool>) -> some View {
-        Toggle(LocalizedStringKey(title), isOn: value)
-            .toggleStyle(.switch)
-            .tint(LerroTheme.accent)
-            .font(LerroTheme.font(13))
-            .frame(maxWidth: .infinity, alignment: .leading)
+    private func statusLabel<Content: View>(
+        color: Color,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(spacing: 6) {
+            LerroStatusDot(color: color)
+            content()
+                .font(LerroFont.caption)
+                .foregroundStyle(LerroTheme.secondaryText)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var customBaseURLBinding: Binding<String> {
@@ -628,15 +389,69 @@ struct IntelligenceSettingsPage: View {
         }
     }
 
-    private func settingsSection<Content: View>(
-        _ title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(LocalizedStringKey(title))
-                .lerroTypography(.label)
-                .foregroundStyle(LerroTheme.metadataText)
-            content()
+    // MARK: Local model
+
+    private var localSection: some View {
+        Section {
+            HStack(spacing: 8) {
+                LerroStatusDot(color: localModelStatusColor)
+                Text(verbatim: "Qwen3.5 4B · 3.03 GB")
+                    .font(LerroFont.body)
+                Text(verbatim: localModelStatusText)
+                    .font(LerroFont.caption)
+                    .foregroundStyle(LerroTheme.secondaryText)
+                Spacer(minLength: 8)
+                localModelActions
+            }
+
+            if showsLocalModelProgress {
+                VStack(alignment: .leading, spacing: 6) {
+                    ProgressView(value: min(1, max(0, session.modelStatus.progress)))
+                        .accessibilityLabel(Text(verbatim: localized("本地模型准备进度")))
+                    HStack {
+                        Text(verbatim: localModelProgressText)
+                        Spacer()
+                        if let remaining = localModelRemainingText {
+                            Text(verbatim: remaining)
+                        }
+                    }
+                    .font(LerroFont.caption)
+                    .foregroundStyle(LerroTheme.secondaryText)
+                    .monospacedDigit()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var localModelActions: some View {
+        let state = session.modelStatus.state
+        let isPreparing = state == .downloading || state == .loading
+
+        if isPreparing {
+            Button("暂停") {
+                session.pauseLocalModelPreparation()
+            }
+            .buttonStyle(LerroButtonStyle(.secondary))
+        } else {
+            Button {
+                if session.preferences.hasApprovedModelDownload {
+                    session.activateIntelligenceMode(.local)
+                } else {
+                    session.requestLocalModelPreparation()
+                }
+            } label: {
+                Text(LocalizedStringKey(localModelActionTitle))
+            }
+            .buttonStyle(LerroButtonStyle(.primary))
+            .disabled(localModelActionDisabled)
+        }
+
+        if state == .paused || isPreparing {
+            Button("停止", role: .destructive) {
+                isDiscardDownloadConfirmationPresented = true
+            }
+            .buttonStyle(LerroButtonStyle(.destructive))
         }
     }
 
@@ -644,7 +459,7 @@ struct IntelligenceSettingsPage: View {
         if !session.modelStatus.message.isEmpty {
             return LerroInterfaceLocalization.statusString(session.modelStatus.message, locale: locale)
         }
-        return switch session.modelStatus.state {
+        let key = switch session.modelStatus.state {
         case .unavailable: "等待下载"
         case .ready: "模型已缓存"
         case .downloading: "正在下载"
@@ -653,50 +468,16 @@ struct IntelligenceSettingsPage: View {
         case .loaded: "模型已加载"
         case .failed: "准备失败"
         }
-    }
-
-    private var currentModeIsReady: Bool {
-        switch session.preferences.intelligenceMode {
-        case .raw:
-            true
-        case .local:
-            session.localAIIsReady
-        case .remote:
-            session.preferences.remoteProvider.isReadyForUse
-        }
-    }
-
-    private var currentModeStatusText: String {
-        if currentModeIsReady { return "已启用" }
-        return session.preferences.intelligenceMode == .local ? "等待下载" : "需要配置"
-    }
-
-    private var currentModeStatusIcon: String {
-        currentModeIsReady ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
-    }
-
-    private var currentModeStatusColor: Color {
-        currentModeIsReady ? LerroTheme.green : LerroTheme.orange
-    }
-
-    private var localModelStatusIcon: String {
-        switch session.modelStatus.state {
-        case .loaded: "checkmark.circle.fill"
-        case .downloading, .loading: "clock.fill"
-        case .paused: "pause.circle.fill"
-        case .failed: "exclamationmark.circle.fill"
-        case .ready: "internaldrive.fill"
-        case .unavailable: "arrow.down.circle"
-        }
+        return localized(key)
     }
 
     private var localModelStatusColor: Color {
         switch session.modelStatus.state {
-        case .loaded: LerroTheme.green
-        case .failed: LerroTheme.red
+        case .loaded: LerroTheme.success
+        case .failed: LerroTheme.danger
         case .downloading, .loading: LerroTheme.accent
-        case .paused: LerroTheme.orange
-        case .ready, .unavailable: LerroTheme.secondaryText
+        case .paused: LerroTheme.warning
+        case .ready, .unavailable: LerroTheme.tertiaryText
         }
     }
 
@@ -750,6 +531,8 @@ struct IntelligenceSettingsPage: View {
         return "约 \(duration.formatted(.units(allowed: [.hours, .minutes], width: .abbreviated)))"
     }
 
+    // MARK: Actions
+
     private func clearRemoteFeedback() {
         connectionOutcome = nil
         inlineMessage = nil
@@ -784,11 +567,11 @@ struct IntelligenceSettingsPage: View {
             }
         case .remote:
             guard providerDraft.validationMessage == nil else {
-                inlineMessage = "请先在下方填写完整的 API 配置。"
+                inlineMessage = "请先填写完整的 API 配置。"
                 return
             }
             guard providerDraft.configuration == session.preferences.remoteProvider else {
-                inlineMessage = "配置有未保存的更改，请点击下方“保存并启用”。"
+                inlineMessage = "配置有未保存的更改，请点击“保存”。"
                 return
             }
             session.activateIntelligenceMode(.remote)
@@ -829,17 +612,5 @@ struct IntelligenceSettingsPage: View {
 
     private func localized(_ key: String) -> String {
         LerroInterfaceLocalization.string(key, locale: locale)
-    }
-}
-
-private extension View {
-    func intelligenceSettingsBlock() -> some View {
-        background(LerroTheme.fillContainerThin)
-            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
-                    .stroke(LerroTheme.thinBorder, lineWidth: 1)
-            }
-            .shadow(color: LerroTheme.cardShadow, radius: 2, x: 0, y: 1)
     }
 }

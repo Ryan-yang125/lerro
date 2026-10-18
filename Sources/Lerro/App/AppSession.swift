@@ -5,6 +5,25 @@ import SwiftUI
 import LerroCore
 import LerroMac
 
+/// Sidebar status for the selected intelligence mode. Strings are already
+/// localized for the current interface language.
+struct IntelligenceStatus: Equatable {
+    var title: String
+    var detail: String
+    var isReady: Bool
+}
+
+enum OnboardingCorrectionResult: Equatable {
+    case learned
+    case noLearning
+    case failed(String)
+}
+
+struct DictionarySuggestionScanProgress: Equatable {
+    var processed: Int
+    var total: Int
+}
+
 @MainActor
 @Observable
 final class AppSession {
@@ -43,22 +62,28 @@ final class AppSession {
     var isHandsFreeCapture = false
     private(set) var isQuickDictateCapture = false
     private(set) var quickDictateDetectedSpeech = false
-    private(set) var isHUDSuppressed = false
+    private(set) var hudDeliveryFeedback: HUDDeliveryFeedback?
+    private(set) var isSilenceWarningVisible = false
+    private(set) var silenceWarningDeviceName: String?
     private(set) var captureError: String?
     var currentError: String?
     var lastResult = ""
     private(set) var recoveryPresentation: RecoveryPresentation?
     private(set) var dictionaryLearningToast: DictionaryLearningToast?
     private(set) var availableApplications: [ApplicationDescriptor] = []
+    private(set) var applicationDictationCounts: [String: Int] = [:]
     private(set) var historyEntries: [HistoryEntry] = []
     private(set) var historyTotalCount = 0
     private(set) var historyHasMore = false
     private(set) var isLoadingHistoryPage = false
     private(set) var historyListRevision: UInt64 = 0
     var dictionaryEntries: [DictionaryEntry] = []
+    private(set) var dictionarySuggestions: [DictionarySuggestion] = []
+    private(set) var dictionarySuggestionScan: DictionarySuggestionScanProgress?
     var audioInputDevices: [AudioInputDevice] = []
     var preferences = UserPreferences()
-    var usage = UsageSummary()
+    private(set) var usageStatistics = UsageStatistics(entries: [])
+    private(set) var recentHistoryEntries: [HistoryEntry] = []
     var modelStatus = LocalModelStatus(
         state: .unavailable,
         modelIdentifier: "",
@@ -71,8 +96,7 @@ final class AppSession {
     var visualFixtureReduceMotion = false
     var visualFixtureIncreaseContrast = false
     var visualFixtureReduceTransparency = false
-    var isSettingsPresented = false
-    var settingsDestination: SettingsDestination = .settings
+    var settingsTab: SettingsTab = .general
     var isOnboardingPresented = false
     var historySearch = ""
     var historyModeFilter: CaptureMode?
@@ -91,12 +115,52 @@ final class AppSession {
     var onboardingMicrophoneTestPassed = false
     var onboardingMicrophoneTestError: String?
 
-    var activeToneProfileApplicationName: String? {
-        activeSession?.toneProfileApplicationName
-    }
-
     var activeCaptureApplicationName: String? {
         activeSession?.context.applicationName
+    }
+
+    var activeCaptureBundleIdentifier: String? {
+        activeSession?.context.bundleIdentifier
+    }
+
+    var activeCaptureUsesAI: Bool {
+        guard let activeSession else { return false }
+        return switch activeSession.mode {
+        case .translation: true
+        case .dictation: activeSession.intelligenceMode != .raw
+        case .ask: false
+        }
+    }
+
+    var activeTranslationDirectionLabel: String? {
+        guard activeMode == .translation,
+              let target = activeSession?.targetLanguage
+                ?? preferences.translationLanguageIdentifiers.first else {
+            return nil
+        }
+        return "\(Self.shortLanguageLabel(preferences.recognitionLocaleIdentifier)) → \(Self.shortLanguageLabel(target))"
+    }
+
+    var showsHandsFreeStopHint: Bool {
+        isHandsFreeCapture
+            && !isQuickDictateCapture
+            && phase == .listening
+            && preferences.handsFreeStopHintUseCount < Self.handsFreeStopHintLimit
+    }
+
+    var handsFreeStopKeyLabel: String? {
+        let action = hotkeyAction(for: activeMode)
+        return preferences.hotkeys.first(where: { $0.action == action })?.displayName
+    }
+
+    var currentHUDVisualState: CaptureHUDVisualState {
+        CaptureHUDVisualState.resolve(
+            phase: phase,
+            isStartingCapture: isStartingCapture,
+            deliveryFeedback: hudDeliveryFeedback,
+            hasRecoveryPresentation: recoveryPresentation != nil,
+            hasDictionaryLearningToast: dictionaryLearningToast != nil
+        )
     }
 
     var preferredDictationActivation: ShortcutActivation {
@@ -104,16 +168,38 @@ final class AppSession {
     }
 
     func preferredActivation(for mode: CaptureMode) -> ShortcutActivation {
-        let action: HotkeyAction = switch mode {
-        case .dictation: .dictate
-        case .translation: .translate
-        case .ask: .ask
-        }
+        let action = hotkeyAction(for: mode)
         return preferences.hotkeys.first(where: { $0.action == action })?.activation.resolved ?? .hold
     }
 
     var shortcutConfigurationAvailable: Bool {
         !hasActiveCapture && !isCleaningCapture
+    }
+
+    private func hotkeyAction(for mode: CaptureMode) -> HotkeyAction {
+        switch mode {
+        case .dictation: .dictate
+        case .translation: .translate
+        case .ask: .ask
+        }
+    }
+
+    private static let handsFreeStopHintLimit = 20
+    private static let silenceLevelThreshold: Float = 0.2
+    private static let silenceWarningDelay: TimeInterval = 3
+
+    private static func shortLanguageLabel(_ identifier: String) -> String {
+        let code = identifier
+            .split(whereSeparator: { $0 == "_" || $0 == "-" })
+            .first
+            .map { $0.lowercased() } ?? identifier.lowercased()
+        return switch code {
+        case "zh": "中"
+        case "en": "EN"
+        case "ja": "日"
+        case "ko": "한"
+        default: String(code.prefix(2)).uppercased()
+        }
     }
 
     private let dependencies: AppDependencies
@@ -125,9 +211,18 @@ final class AppSession {
     private var completionTask: Task<Void, Never>?
     private var deliveredTextObservationTask: Task<Void, Never>?
     private var dictionaryLearningToastTask: Task<Void, Never>?
+    private var dictionarySuggestionState = DictionarySuggestionState()
+    private var dictionarySuggestionScanTask: Task<Void, Never>?
+    private var recoveryDismissTask: Task<Void, Never>?
+    private var hudDeliveryFeedbackTask: Task<Void, Never>?
+    private var hudDeliveryFeedbackToken: UUID?
+    private var silenceMonitorTask: Task<Void, Never>?
+    private var lastVoiceAt = Date.now
     private var captureGeneration: UUID?
+    private var traceRecorder = CaptureTraceRecorder()
     private var committedTextDeliverySessionID: UUID?
     private(set) var isStartingCapture = false
+    private(set) var isWaitingForSpeechResources = false
     private var isCleaningCapture = false
     private var modelLoadTask: Task<Void, Never>?
     private var captureTimerTask: Task<Void, Never>?
@@ -144,6 +239,7 @@ final class AppSession {
     private var pendingModelCaptureMode: CaptureMode?
     private var pendingRetentionApplication: HistoryRetention?
     private var historyUsageEntries: [HistoryEntry] = []
+    private var usageStatisticsDay = Calendar.current.startOfDay(for: .now)
     private var historyPageGeneration = UUID()
     private var historyUsageGeneration = UUID()
     private var loadedHistorySearch: String?
@@ -220,6 +316,10 @@ final class AppSession {
         }
     }
 
+    var canScanDictionarySuggestions: Bool {
+        selectedAIIsReady && preferences.intelligenceMode != .raw
+    }
+
     var isCaptureCancellationAvailable: Bool {
         switch phase {
         case .listening, .transcribing, .enhancing:
@@ -231,19 +331,89 @@ final class AppSession {
         }
     }
 
-    func presentSettings(_ entryPoint: SettingsEntryPoint) {
-        presentSettings(entryPoint.destination)
+    /// Localized sidebar status for the selected intelligence mode.
+    var intelligenceStatus: IntelligenceStatus {
+        switch preferences.intelligenceMode {
+        case .raw:
+            return IntelligenceStatus(
+                title: localized("原始听写"),
+                detail: localized("不使用 AI"),
+                isReady: true
+            )
+        case .remote:
+            let isReady = preferences.remoteProvider.isReadyForUse
+            return IntelligenceStatus(
+                title: preferences.remoteProvider.provider.lerroDisplayName,
+                detail: localized(isReady ? "AI 润色已开启" : "未配置 API"),
+                isReady: isReady
+            )
+        case .local:
+            let title = localized("本地 AI")
+            if localAIIsReady {
+                return IntelligenceStatus(title: title, detail: localized("AI 润色已开启"), isReady: true)
+            }
+            let detail: String = switch modelStatus.state {
+            case .downloading:
+                LerroInterfaceLocalization.format(
+                    "下载中 %lld%%",
+                    locale: interfaceLocale,
+                    arguments: Int64((min(1, max(0, modelStatus.progress)) * 100).rounded())
+                )
+            case .loading: localized("正在加载")
+            case .paused: localized("下载已暂停")
+            case .failed: localized("需要重试")
+            case .ready, .loaded, .unavailable: localized("未下载")
+            }
+            return IntelligenceStatus(title: title, detail: detail, isReady: false)
+        }
     }
 
-    func presentSettings(_ destination: SettingsDestination) {
-        settingsDestination = destination
-        isOnboardingPresented = false
-        isSettingsPresented = true
+    var historyAllCount: Int {
+        historyUsageEntries.count
     }
 
-    func dismissSettings() {
-        endShortcutConfiguration()
-        isSettingsPresented = false
+    var recentlyLearnedEntries: [DictionaryEntry] {
+        let cutoff = Date.now.addingTimeInterval(-7 * 86_400)
+        return dictionaryEntries
+            .filter { $0.source == .learned && $0.createdAt >= cutoff }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    var currentMicrophoneName: String {
+        if let uid = preferences.microphoneDeviceUID,
+           let device = audioInputDevices.first(where: { $0.uid == uid }) {
+            return device.name
+        }
+        return audioInputDevices.first(where: \.isDefault)?.name ?? localized("系统麦克风")
+    }
+
+    func selectMicrophone(uid: String?) {
+        guard preferences.microphoneDeviceUID != uid else { return }
+        preferences.microphoneDeviceUID = uid
+        savePreferences()
+        prewarmAudioInput()
+    }
+
+    /// Builds the capture audio input while idle so the next capture opens the
+    /// microphone sooner. The microphone itself stays off.
+    private func prewarmAudioInput() {
+        guard microphonePermission, !hasActiveCapture else { return }
+        let uid = preferences.microphoneDeviceUID
+        Task { [dependencies] in
+            await dependencies.speech.prewarmAudioInput(microphoneDeviceUID: uid)
+        }
+    }
+
+    func recordingURL(for entry: HistoryEntry) -> URL? {
+        audioFileURL(relativePath: entry.audioRelativePath)
+    }
+
+    private var interfaceLocale: Locale {
+        LerroInterfaceLocalization.locale(for: preferences.appLanguage)
+    }
+
+    private func localized(_ key: String) -> String {
+        LerroInterfaceLocalization.string(key, locale: interfaceLocale)
     }
 
     func start() async {
@@ -311,6 +481,7 @@ final class AppSession {
                 "词典读取失败：\(error.localizedDescription)"
             ).localizedDescription
         }
+        await loadDictionarySuggestions()
         updateUsageSummary()
         modelStatus = await modelStatusTask.value
     }
@@ -322,16 +493,23 @@ final class AppSession {
             speechPreparationTask = nil
             speechPreparationRequestID = nil
         }
+        if speechPreparationTask != nil,
+           speechResourceStatus.sourceLanguageIdentifier == source { return }
         let requestID = UUID()
         languageResourceRefreshRequestID = requestID
         let speechStatus = await dependencies.speech.resourceStatus(localeIdentifier: source)
         guard languageResourceRefreshRequestID == requestID,
               preferences.recognitionLocaleIdentifier == source else { return }
         speechResourceStatus = speechStatus
+        if speechStatus.state == .available || speechStatus.state == .downloading {
+            prepareSpeechResources()
+        }
     }
 
     func prepareSpeechResources() {
         let source = preferences.recognitionLocaleIdentifier
+        if speechPreparationTask != nil,
+           speechResourceStatus.sourceLanguageIdentifier == source { return }
         languageResourceRefreshRequestID = UUID()
         speechPreparationTask?.cancel()
         let requestID = UUID()
@@ -349,7 +527,13 @@ final class AppSession {
                 )
                 guard speechPreparationRequestID == requestID,
                       preferences.recognitionLocaleIdentifier == source else { return }
-                speechResourceStatus = status
+                speechResourceStatus = status.state == .ready || status.state == .unsupported
+                    ? status
+                    : LanguageResourceStatus(
+                        state: .failed,
+                        sourceLanguageIdentifier: source,
+                        message: "语音资源暂未就绪，请稍后重试。"
+                    )
             } catch {
                 guard speechPreparationRequestID == requestID,
                       preferences.recognitionLocaleIdentifier == source else { return }
@@ -596,6 +780,7 @@ final class AppSession {
     }
 
     func refreshPermissions(prompt: Bool) async {
+        guard visualFixturePresentation != "menubar-panel-permission" else { return }
         microphonePermission = prompt
             ? await dependencies.permissions.requestMicrophone()
             : await dependencies.permissions.microphoneAuthorized()
@@ -609,11 +794,18 @@ final class AppSession {
         } else {
             cancelCaptureBeforeStoppingHotkeysIfNeeded()
         }
-        if !microphonePermission { stopOnboardingMicrophoneTest(resetResult: true) }
+        if microphonePermission {
+            prewarmAudioInput()
+        } else {
+            stopOnboardingMicrophoneTest(resetResult: true)
+        }
     }
 
     func applicationDidBecomeActive() async {
         guard isStarted, dependencies.startupStorageError == nil else { return }
+        if usageStatisticsDay != Calendar.current.startOfDay(for: .now) {
+            updateUsageSummary()
+        }
         await refreshPermissions(prompt: false)
     }
 
@@ -878,7 +1070,7 @@ final class AppSession {
         preferences.intelligenceMode = .local
         savePreferences()
         if !isOnboardingPresented {
-            presentSettings(SettingsDestination.intelligence)
+            settingsTab = .intelligence
         }
         NSApp.activate(ignoringOtherApps: true)
         prepareLocalModel()
@@ -908,15 +1100,18 @@ final class AppSession {
             return
         }
 
+        finishTrace(.cancelled)
         captureGeneration = nil
         committedTextDeliverySessionID = nil
         activeHotkeyOrigin = nil
         pendingHotkeysAfterCancellation.removeAll()
         isStartingCapture = false
+        isWaitingForSpeechResources = false
         isCleaningCapture = true
         activeSession = nil
         captureError = nil
-        isHUDSuppressed = false
+        clearDeliveryFeedback()
+        resetSilenceWarning()
         phase = .cancelled
         updateHUD()
         completionTask?.cancel()
@@ -959,9 +1154,12 @@ final class AppSession {
     }
 
     func pasteLastResult() {
-        let result = lastResult
-        guard !result.isEmpty else { return }
-        Task { [weak self, result] in
+        paste(lastResult)
+    }
+
+    func paste(_ text: String) {
+        guard !text.isEmpty else { return }
+        Task { [weak self, text] in
             guard let self else { return }
             let context = await dependencies.context.captureCurrentContext()
             do {
@@ -969,7 +1167,7 @@ final class AppSession {
                     throw LerroError.secureField
                 }
                 _ = try await dependencies.textDelivery.deliver(
-                    result,
+                    text,
                     to: context,
                     replacingSelection: false,
                     targetPolicy: .requireCurrent
@@ -993,6 +1191,8 @@ final class AppSession {
     }
 
     func dismissRecovery() {
+        recoveryDismissTask?.cancel()
+        recoveryDismissTask = nil
         recoveryPresentation = nil
         if phase == .failed {
             phase = .idle
@@ -1006,6 +1206,17 @@ final class AppSession {
         dictionaryLearningToastTask?.cancel()
         dictionaryLearningToastTask = nil
         dictionaryLearningToast = nil
+        updateHUD()
+    }
+
+    func setDictionaryLearningToastHoverPaused(_ paused: Bool) {
+        guard let toast = dictionaryLearningToast else { return }
+        if paused {
+            dictionaryLearningToastTask?.cancel()
+            dictionaryLearningToastTask = nil
+        } else {
+            scheduleDictionaryLearningToastDismissal(toastID: toast.id)
+        }
     }
 
     func undoDictionaryLearning() {
@@ -1027,7 +1238,14 @@ final class AppSession {
     func refreshAvailableApplications() {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            availableApplications = await dependencies.applicationCatalog.applications()
+            let applications = await dependencies.applicationCatalog.applications()
+            let entries = (try? await dependencies.history.entries()) ?? []
+            var counts: [String: Int] = [:]
+            for case let bundleIdentifier? in entries.map(\.bundleIdentifier) where !bundleIdentifier.isEmpty {
+                counts[bundleIdentifier, default: 0] += 1
+            }
+            availableApplications = applications
+            applicationDictationCounts = counts
         }
     }
 
@@ -1062,18 +1280,23 @@ final class AppSession {
     }
 
     func completeOnboarding() {
-        stopOnboardingMicrophoneTest(resetResult: true)
         preferences.hasCompletedOnboarding = true
         preferences.onboardingStepIndex = nil
-        isOnboardingPresented = false
+        dismissOnboarding()
         savePreferences()
+    }
+
+    func dismissOnboarding() {
+        stopOnboardingMicrophoneTest(resetResult: true)
+        endShortcutConfiguration()
+        if isCaptureCancellationAvailable { cancelCapture() }
+        isOnboardingPresented = false
     }
 
     func restartOnboarding() {
         stopOnboardingMicrophoneTest(resetResult: true)
-        preferences.hasCompletedOnboarding = false
         preferences.onboardingStepIndex = nil
-        dismissSettings()
+        endShortcutConfiguration()
         isOnboardingPresented = true
         savePreferences()
     }
@@ -1209,6 +1432,195 @@ final class AppSession {
         }
     }
 
+    // MARK: Dictionary suggestions
+
+    private static let dictionarySuggestionConfidence = 0.7
+    private static let dictionarySuggestionConcurrency = 3
+
+    func scanHistoryForDictionarySuggestions() {
+        guard canScanDictionarySuggestions, dictionarySuggestionScanTask == nil else { return }
+        let mode = preferences.intelligenceMode
+        let remoteProvider = mode == .remote
+            ? normalizedRemoteProvider(preferences.remoteProvider)
+            : nil
+        dictionarySuggestionScan = DictionarySuggestionScanProgress(processed: 0, total: 0)
+        dictionarySuggestionScanTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await runDictionarySuggestionScan(mode: mode, remoteProvider: remoteProvider)
+            dictionarySuggestionScan = nil
+            dictionarySuggestionScanTask = nil
+        }
+    }
+
+    func cancelDictionarySuggestionScan() {
+        dictionarySuggestionScanTask?.cancel()
+    }
+
+    func acceptDictionarySuggestion(_ suggestion: DictionarySuggestion) {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await dependencies.dictionary.save(DictionaryEntry(
+                    phrase: suggestion.phrase,
+                    replacement: suggestion.replacement,
+                    source: .learned
+                ))
+            } catch {
+                currentError = "词典保存失败：\(error.localizedDescription)"
+                return
+            }
+            dictionarySuggestionState.remove(suggestion)
+            await persistDictionarySuggestionState()
+            await refreshDictionaryAndUsage()
+        }
+    }
+
+    func ignoreDictionarySuggestion(_ suggestion: DictionarySuggestion) {
+        dictionarySuggestionState.ignore(suggestion)
+        updateVisibleDictionarySuggestions()
+        Task { [weak self] in
+            await self?.persistDictionarySuggestionState()
+        }
+    }
+
+    private func loadDictionarySuggestions() async {
+        guard dictionarySuggestionScanTask == nil else { return }
+        do {
+            dictionarySuggestionState = try await dependencies.dictionarySuggestions.load()
+        } catch {
+            currentError = userFacingError(error, context: "词典建议读取失败")
+        }
+        updateVisibleDictionarySuggestions()
+    }
+
+    private func persistDictionarySuggestionState() async {
+        do {
+            try await dependencies.dictionarySuggestions.save(dictionarySuggestionState)
+        } catch {
+            currentError = userFacingError(error, context: "词典建议保存失败")
+        }
+    }
+
+    private func updateVisibleDictionarySuggestions() {
+        let existingReplacements = Set(dictionaryEntries.map {
+            $0.replacement.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        })
+        dictionarySuggestions = dictionarySuggestionState.suggestions
+            .filter { suggestion in
+                !dictionarySuggestionState.ignoredKeys.contains(suggestion.id)
+                    && !existingReplacements.contains(
+                        suggestion.replacement.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    )
+            }
+            .sorted { lhs, rhs in
+                if lhs.occurrences != rhs.occurrences { return lhs.occurrences > rhs.occurrences }
+                if lhs.lastSeen != rhs.lastSeen { return lhs.lastSeen > rhs.lastSeen }
+                return lhs.id < rhs.id
+            }
+    }
+
+    private func runDictionarySuggestionScan(
+        mode: IntelligenceMode,
+        remoteProvider: RemoteProviderConfiguration?
+    ) async {
+        let history: [HistoryEntry]
+        do {
+            history = try await dependencies.history.entries()
+        } catch {
+            currentError = userFacingError(error, context: "历史读取失败")
+            return
+        }
+
+        struct ScanEntry {
+            var entry: HistoryEntry
+            var pendingHunks: Int
+            var failed = false
+            var candidates: [DictionaryLearningCandidate] = []
+        }
+        struct ScanJob: Sendable {
+            var entryIndex: Int
+            var request: DictionaryLearningRequest
+        }
+
+        var scanEntries: [ScanEntry] = []
+        var jobs: [ScanJob] = []
+        for entry in history
+        where entry.mode == .dictation
+            && entry.wasEnhanced
+            && !entry.rawText.isEmpty
+            && !entry.finalText.isEmpty
+            && !dictionarySuggestionState.scannedEntryIDs.contains(entry.id) {
+            let hunks = CorrectionHunkExtractor.hunks(raw: entry.rawText, final: entry.finalText)
+            guard !hunks.isEmpty else {
+                dictionarySuggestionState.scannedEntryIDs.insert(entry.id)
+                continue
+            }
+            let entryIndex = scanEntries.count
+            scanEntries.append(ScanEntry(entry: entry, pendingHunks: hunks.count))
+            for hunk in hunks {
+                jobs.append(ScanJob(
+                    entryIndex: entryIndex,
+                    request: DictionaryLearningRequest(
+                        mode: mode,
+                        remoteProvider: remoteProvider,
+                        originalSpan: hunk.original,
+                        correctedSpan: hunk.corrected,
+                        contextBefore: hunk.contextBefore,
+                        contextAfter: hunk.contextAfter,
+                        applicationName: entry.applicationName,
+                        bundleIdentifier: entry.bundleIdentifier
+                    )
+                ))
+            }
+        }
+
+        var processed = 0
+        dictionarySuggestionScan = DictionarySuggestionScanProgress(processed: 0, total: jobs.count)
+        let intelligence = dependencies.intelligence
+        await withTaskGroup(of: (Int, [DictionaryLearningCandidate]?).self) { group in
+            var iterator = jobs.makeIterator()
+            func launchNext(in group: inout TaskGroup<(Int, [DictionaryLearningCandidate]?)>) {
+                guard !Task.isCancelled, let job = iterator.next() else { return }
+                group.addTask {
+                    let decision = try? await intelligence.classifyCorrection(job.request)
+                    return (job.entryIndex, decision?.candidates)
+                }
+            }
+            for _ in 0..<Self.dictionarySuggestionConcurrency {
+                launchNext(in: &group)
+            }
+            for await (entryIndex, candidates) in group {
+                processed += 1
+                dictionarySuggestionScan = DictionarySuggestionScanProgress(
+                    processed: processed,
+                    total: jobs.count
+                )
+                if let candidates {
+                    scanEntries[entryIndex].candidates.append(contentsOf: candidates)
+                } else {
+                    scanEntries[entryIndex].failed = true
+                }
+                scanEntries[entryIndex].pendingHunks -= 1
+                if scanEntries[entryIndex].pendingHunks == 0, !scanEntries[entryIndex].failed {
+                    let scanned = scanEntries[entryIndex]
+                    for candidate in scanned.candidates
+                    where candidate.confidence >= Self.dictionarySuggestionConfidence {
+                        dictionarySuggestionState.merge(
+                            candidate: candidate,
+                            seenAt: scanned.entry.createdAt,
+                            applicationName: scanned.entry.applicationName
+                        )
+                    }
+                    dictionarySuggestionState.scannedEntryIDs.insert(scanned.entry.id)
+                    updateVisibleDictionarySuggestions()
+                }
+                launchNext(in: &group)
+            }
+        }
+        updateVisibleDictionarySuggestions()
+        await persistDictionarySuggestionState()
+    }
+
     func saveAppToneProfile(
         _ profile: AppToneProfile,
         replacingBundleIdentifier: String? = nil
@@ -1284,6 +1696,38 @@ final class AppSession {
         }
     }
 
+    func aiUsageRecords(since: Date) async -> [AIUsageRecord] {
+        do {
+            return try await dependencies.aiUsage.records(since: since)
+        } catch {
+            currentError = userFacingError(error, context: "本地数据处理失败")
+            return []
+        }
+    }
+
+    func deleteAllAIUsage() async {
+        do {
+            try await dependencies.aiUsage.deleteAll()
+        } catch {
+            currentError = userFacingError(error, context: "本地数据处理失败")
+        }
+    }
+
+    func setModelPrice(_ price: AIModelPrice) {
+        if let index = preferences.modelPrices.firstIndex(where: { $0.id == price.id }) {
+            preferences.modelPrices[index] = price
+        } else {
+            preferences.modelPrices.append(price)
+        }
+        savePreferences()
+    }
+
+    func resetModelPrice(modelIdentifier: String) {
+        let key = modelIdentifier.lowercased()
+        preferences.modelPrices.removeAll { $0.id == key }
+        savePreferences()
+    }
+
     func setHistoryRetention(_ retention: HistoryRetention) {
         preferences.historyRetention = retention
         pendingRetentionApplication = retention
@@ -1326,9 +1770,7 @@ final class AppSession {
                 targetLanguage: entry.targetLanguage,
                 context: context,
                 dictionary: dictionaryEntries.filter { !$0.isSnippet },
-                toneInstruction: preferences.appToneProfiles.first {
-                    $0.enabled && $0.bundleIdentifier == entry.bundleIdentifier
-                }?.instruction
+                toneInstruction: resolvedTone(bundleIdentifier: entry.bundleIdentifier).instruction
             )
             let monitor = intelligenceMode == .local ? startModelStatusMonitor() : nil
             defer { monitor?.cancel() }
@@ -1344,6 +1786,20 @@ final class AppSession {
                 currentError = userFacingError(error, context: "智能处理失败")
             }
         }
+    }
+
+    /// Enabled app profile first, then the default instruction, otherwise no tone.
+    private func resolvedTone(
+        bundleIdentifier: String?
+    ) -> (instruction: String?, applicationName: String?) {
+        if let profile = preferences.appToneProfiles.first(where: {
+            $0.enabled && $0.bundleIdentifier == bundleIdentifier
+        }) {
+            return (profile.instruction, profile.applicationName)
+        }
+        let fallback = preferences.defaultToneInstruction
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (fallback.isEmpty ? nil : fallback, nil)
     }
 
     func exportAudio(_ entry: HistoryEntry) {
@@ -1529,7 +1985,7 @@ final class AppSession {
                     definitionID: trigger.definitionID,
                     mode: mode
                 )
-                startCapture(mode, handsFree: false)
+                startCapture(mode, handsFree: false, pressedAt: trigger.pressedAt)
                 if !hasActiveCapture { activeHotkeyOrigin = nil }
             case .ended:
                 guard let origin = activeHotkeyOrigin,
@@ -1554,7 +2010,8 @@ final class AppSession {
                 startCapture(
                     mode,
                     handsFree: true,
-                    quickDictate: mode == .dictation && preferences.quickDictateEnabled
+                    quickDictate: mode == .dictation && preferences.quickDictateEnabled,
+                    pressedAt: trigger.pressedAt
                 )
                 return
             }
@@ -1629,7 +2086,8 @@ final class AppSession {
     private func startCapture(
         _ mode: CaptureMode,
         handsFree: Bool,
-        quickDictate: Bool = false
+        quickDictate: Bool = false,
+        pressedAt: ContinuousClock.Instant? = nil
     ) {
         guard !isShortcutConfigurationActive else {
             currentError = "快捷键测试期间不会开始录音"
@@ -1646,7 +2104,12 @@ final class AppSession {
         guard mode == .translation || authorizeIntelligenceIfNeeded(for: mode) else { return }
         deliveredTextObservationTask?.cancel()
         Task { await dependencies.deliveredTextObserver.stopObserving() }
+        recoveryDismissTask?.cancel()
+        recoveryDismissTask = nil
         recoveryPresentation = nil
+        clearDeliveryFeedback()
+        resetSilenceWarning()
+        hudController.anchorScreenPoint = nil
         let intelligenceMode: IntelligenceMode = if mode == .dictation,
                                                     preferences.intelligenceMode == .local,
                                                     !localAIIsReady {
@@ -1659,12 +2122,22 @@ final class AppSession {
             : nil
         let generation = UUID()
         captureGeneration = generation
+        let handledAt = ContinuousClock.now
+        finishTrace(.cancelled)
+        let trace = CaptureTrace(
+            id: generation,
+            mode: mode,
+            intelligenceMode: intelligenceMode,
+            pressedAt: pressedAt ?? handledAt,
+            handledAt: handledAt
+        )
+        traceRecorder.begin(trace)
+        dependencies.captureTrace.captureTraceDidBegin(trace)
         committedTextDeliverySessionID = nil
         activeMode = mode
         isHandsFreeCapture = handsFree
         isQuickDictateCapture = quickDictate && mode == .dictation
         quickDictateDetectedSpeech = false
-        isHUDSuppressed = false
         captureError = nil
         partialTranscript = ""
         partialTranscriptIsStable = false
@@ -1672,6 +2145,7 @@ final class AppSession {
         captureElapsed = 0
         isStartingCapture = true
         updateHUD()
+        markTrace(.hudArmed, generation: generation)
         completionTask?.cancel()
         completionTask = Task { [weak self] in
             await self?.beginCapture(
@@ -1706,6 +2180,10 @@ final class AppSession {
         guard captureGeneration == generation, !Task.isCancelled else { return }
         let context = await dependencies.context.captureCurrentContext()
         guard captureGeneration == generation, !Task.isCancelled else { return }
+        markTrace(.contextCaptured, generation: generation)
+        hudController.anchorScreenPoint = context.focusedElementScreenFrame.map {
+            CGPoint(x: $0.midX, y: $0.midY)
+        }
         guard CapturePrivacyPolicy.permitsCapture(in: context) else {
             fail(LerroError.secureField)
             return
@@ -1717,50 +2195,52 @@ final class AppSession {
         }
 
         do {
-            let vocabulary = dictionaryEntries
-                .filter { entry in
-                    !entry.isSnippet
-                        && (entry.applicationBundleIdentifier == nil
-                            || entry.applicationBundleIdentifier == context.bundleIdentifier)
-                }
-                .sorted { lhs, rhs in
-                    if lhs.applicationBundleIdentifier != rhs.applicationBundleIdentifier {
-                        return lhs.applicationBundleIdentifier != nil
-                    }
-                    if lhs.useCount != rhs.useCount { return lhs.useCount > rhs.useCount }
-                    return lhs.updatedAt > rhs.updatedAt
-                }
-                .prefix(100)
-                .map { SpeechVocabularyTerm(dictionaryEntry: $0) }
+            if let preparation = speechPreparationTask {
+                isWaitingForSpeechResources = true
+                await preparation.value
+                isWaitingForSpeechResources = false
+                guard captureGeneration == generation, !Task.isCancelled else { return }
+            }
+            markTrace(.speechResourcesReady, generation: generation)
+            markTrace(.speechStartRequested, generation: generation)
             let stream = try await dependencies.speech.start(
                 localeIdentifier: preferences.recognitionLocaleIdentifier,
                 microphoneDeviceUID: preferences.microphoneDeviceUID,
                 muteOtherAudio: preferences.muteOtherAudio,
                 saveAudio: preferences.shouldSaveCaptureAudio,
-                vocabulary: vocabulary,
-                detectSpeechEndpoint: isQuickDictateCapture
+                detectSpeechEndpoint: isQuickDictateCapture,
+                milestones: { [weak self] milestone, instant in
+                    Task { @MainActor [weak self] in
+                        self?.markTrace(milestone, generation: generation, at: instant)
+                    }
+                }
             )
             guard captureGeneration == generation, !Task.isCancelled else {
                 await dependencies.speech.cancel()
                 return
             }
-            let toneProfile = preferences.appToneProfiles.first {
-                $0.enabled && $0.bundleIdentifier == context.bundleIdentifier
-            }
+            speechResourceStatus = LanguageResourceStatus(
+                state: .ready,
+                sourceLanguageIdentifier: preferences.recognitionLocaleIdentifier,
+                message: "语音资源已准备"
+            )
+            let tone = resolvedTone(bundleIdentifier: context.bundleIdentifier)
             let session = CaptureSession(
                 mode: mode,
                 context: context,
                 targetLanguage: targetLanguage,
                 intelligenceMode: intelligenceMode,
                 remoteProvider: remoteProvider,
-                toneInstruction: toneProfile?.instruction,
-                toneProfileApplicationName: toneProfile?.applicationName
+                toneInstruction: tone.instruction,
+                toneProfileApplicationName: tone.applicationName
             )
             activeSession = session
             isStartingCapture = false
             phase = .listening
             updateHUD()
+            markTrace(.listening, generation: generation)
             startCaptureTimer(for: session)
+            startSilenceMonitor(for: session)
             eventTask?.cancel()
             eventTask = Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -1778,6 +2258,7 @@ final class AppSession {
             }
         } catch is CancellationError {
             if captureGeneration == generation {
+                finishTrace(.cancelled)
                 captureGeneration = nil
                 activeHotkeyOrigin = nil
                 isStartingCapture = false
@@ -1791,9 +2272,11 @@ final class AppSession {
 
     private func requestFinishCapture() {
         guard phase == .listening, activeSession != nil else { return }
+        markTrace(.stopRequested, generation: captureGeneration)
         dependencies.hotkeys.resetTransientState()
         captureTimerTask?.cancel()
         captureTimerTask = nil
+        resetSilenceWarning()
         // A stop gesture becomes visible in the same MainActor turn. The
         // listening -> transcribing transition also owns finalization, so the
         // recording timer and a physical stop gesture cannot stop Speech twice.
@@ -1807,13 +2290,11 @@ final class AppSession {
     }
 
     private func finishCapture() async {
-        guard let session = activeSession else { return }
+        guard let session = activeSession, let generation = captureGeneration else { return }
         var recordedAudioRelativePath: String?
 
         do {
-            let transcriptionStartedAt = Date.now
             let transcription = try await dependencies.speech.stop()
-            let transcriptionLatency = Date.now.timeIntervalSince(transcriptionStartedAt)
             recordedAudioRelativePath = transcription.audioRelativePath
             guard activeSession?.id == session.id else {
                 do {
@@ -1823,14 +2304,15 @@ final class AppSession {
                 }
                 return
             }
+            markTrace(.transcriptionFinished, generation: generation)
             partialTranscript = transcription.rawText
             partialTranscriptIsStable = true
             phase = .enhancing
             updateHUD()
             try await complete(
                 session: session,
-                transcription: transcription,
-                transcriptionLatency: transcriptionLatency
+                generation: generation,
+                transcription: transcription
             )
         } catch {
             var reportedError: any Error = error
@@ -1860,10 +2342,9 @@ final class AppSession {
 
     private func complete(
         session: CaptureSession,
-        transcription: SpeechTranscription,
-        transcriptionLatency: TimeInterval
+        generation: UUID,
+        transcription: SpeechTranscription
     ) async throws {
-        let processingStartedAt = Date.now
         let processingTranscript = transcription.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         let task = intelligenceTask(
             mode: session.mode,
@@ -1883,6 +2364,7 @@ final class AppSession {
         )
 
         let result: IntelligenceResult
+        var usedRawFallback = false
         if session.mode == .dictation,
            let snippet = SnippetResolver.resolve(
                transcript: processingTranscript,
@@ -1908,6 +2390,7 @@ final class AppSession {
                 throw CancellationError()
             } catch {
                 if session.mode == .dictation {
+                    usedRawFallback = true
                     result = try rawResult(for: request, task: task)
                 } else {
                     throw error
@@ -1917,7 +2400,9 @@ final class AppSession {
                 modelStatus = await dependencies.intelligence.modelStatus()
             }
         }
-        let processingDuration = Date.now.timeIntervalSince(processingStartedAt)
+        traceRecorder.setProcessingRoute(historyProcessingRoute(result: result), id: generation)
+        markTrace(.processingFinished, generation: generation)
+        let deliveryFeedback: HUDDeliveryFeedback = usedRawFallback ? .deliveredRawFallback : .delivered
 
         guard activeSession?.id == session.id else { throw CancellationError() }
         var history = HistoryEntry(
@@ -1940,7 +2425,6 @@ final class AppSession {
             contextReceipt: historyContextReceipt(session: session, result: result)
         )
         var systemReceipt: TextDeliveryReceipt?
-        var deliveryDuration: TimeInterval = 0
 
         do {
             switch result.disposition {
@@ -1950,7 +2434,6 @@ final class AppSession {
                 phase = .inserting
                 committedTextDeliverySessionID = nil
                 updateHUD()
-                let deliveryStartedAt = Date.now
                 systemReceipt = try await dependencies.textDelivery.deliver(
                     result.text,
                     to: session.context,
@@ -1959,50 +2442,61 @@ final class AppSession {
                     onCommit: { [weak self] in
                         guard let self,
                               self.activeSession?.id == session.id else { return }
+                        self.markTrace(.deliveryCommitted, generation: generation)
                         self.committedTextDeliverySessionID = session.id
-                        self.suppressHUD(for: session.id)
+                        self.presentDeliveryFeedback(deliveryFeedback)
                     }
                 )
-                deliveryDuration = Date.now.timeIntervalSince(deliveryStartedAt)
+                markTrace(.deliveryFinished, generation: generation)
             case .openURL:
                 throw LerroError.modelUnavailable("此版本已关闭指令打开链接")
             }
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            markTrace(.deliveryFinished, generation: generation)
             lastResult = result.text
             history.status = .failed
             try? await dependencies.recoveryText.copyForRecovery(result.text)
-            recoveryPresentation = RecoveryPresentation(
+            presentRecovery(RecoveryPresentation(
                 id: history.id,
                 applicationName: session.context.applicationName,
                 text: result.text,
                 message: "内容已复制到剪贴板"
-            )
+            ))
+            history.phaseTimings = traceRecorder.current.map {
+                HistoryPhaseTimings(trace: $0, outcome: .deliveryFailed)
+            }
             if preferences.historyRetention == .never {
                 try await deleteAudioFile(relativePath: history.audioRelativePath)
             } else {
                 try await dependencies.history.save(history)
             }
+            markTrace(.historySaved, generation: generation)
             await refreshHistoryAndUsage()
+            finishTrace(.deliveryFailed, generation: generation)
             finishCaptureState(phase: .failed, message: "未能写入 \(session.context.applicationName)")
             return
         }
 
         guard activeSession?.id == session.id else { throw CancellationError() }
-        suppressHUD(for: session.id)
+        if isHandsFreeCapture,
+           !isQuickDictateCapture,
+           preferences.handsFreeStopHintUseCount < Self.handsFreeStopHintLimit {
+            preferences.handsFreeStopHintUseCount += 1
+            savePreferences()
+        }
         lastResult = result.text
-        history.phaseTimings = HistoryPhaseTimings(
-            recording: transcription.duration,
-            transcription: transcriptionLatency,
-            processing: processingDuration,
-            delivery: deliveryDuration
-        )
+        let outcome: CaptureTraceOutcome = usedRawFallback ? .completedWithRawFallback : .completed
+        history.phaseTimings = traceRecorder.current.map {
+            HistoryPhaseTimings(trace: $0, outcome: outcome)
+        }
         if preferences.historyRetention == .never {
             try await deleteAudioFile(relativePath: history.audioRelativePath)
         } else {
             try await dependencies.history.save(history)
         }
+        markTrace(.historySaved, generation: generation)
         try await applyRetentionAndClean(preferences.historyRetention, now: .now)
         await refreshHistoryAndUsage()
         if let systemReceipt,
@@ -2011,6 +2505,7 @@ final class AppSession {
            preferences.automaticDictionaryLearningEnabled {
             startDeliveredTextObservation(text: result.text, receipt: systemReceipt)
         }
+        finishTrace(outcome, generation: generation)
         finishCaptureState(phase: .idle)
     }
 
@@ -2022,11 +2517,12 @@ final class AppSession {
         activeHotkeyOrigin = nil
         pendingHotkeysAfterCancellation.removeAll()
         isStartingCapture = false
+        isWaitingForSpeechResources = false
         isHandsFreeCapture = false
         isQuickDictateCapture = false
         quickDictateDetectedSpeech = false
         phase = finalPhase
-        isHUDSuppressed = false
+        resetSilenceWarning()
         partialTranscript = message ?? ""
         partialTranscriptIsStable = false
         audioLevel = 0
@@ -2050,6 +2546,7 @@ final class AppSession {
                 )
                 for try await edit in stream {
                     try Task.checkCancellation()
+                    let classificationStartedAt = ContinuousClock.now
                     let decision = try await dependencies.intelligence.classifyCorrection(
                         DictionaryLearningRequest(
                             mode: mode,
@@ -2062,10 +2559,15 @@ final class AppSession {
                             bundleIdentifier: edit.bundleIdentifier
                         )
                     )
-                    await persistLearningDecision(
+                    let classificationDuration = classificationStartedAt.duration(to: ContinuousClock.now).timeInterval
+                    let savedCount = await persistLearningDecision(
                         decision,
-                        applicationName: edit.applicationName,
-                        bundleIdentifier: edit.bundleIdentifier
+                        applicationName: edit.applicationName
+                    )
+                    dependencies.captureTrace.dictionaryLearningDidClassify(
+                        duration: classificationDuration,
+                        candidateCount: decision.candidates.count,
+                        savedCount: savedCount
                     )
                 }
             } catch is CancellationError {
@@ -2078,11 +2580,12 @@ final class AppSession {
     }
 
     @discardableResult
+    /// Learned entries are recognition corrections, which hold in every app, so
+    /// they are saved globally. The AI treats them as hints, not forced replacements.
     private func persistLearningDecision(
         _ decision: DictionaryLearningDecision,
-        applicationName: String,
-        bundleIdentifier: String?
-    ) async -> Bool {
+        applicationName: String
+    ) async -> Int {
         var saved: [DictionaryEntry] = []
         for candidate in decision.candidates where candidate.confidence >= 0.7 {
             let source = candidate.phrase.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2090,22 +2593,20 @@ final class AppSession {
             guard !dictionaryEntries.contains(where: {
                 $0.phrase.caseInsensitiveCompare(source) == .orderedSame
                     && $0.replacement == replacement
-                    && $0.applicationBundleIdentifier == bundleIdentifier
             }) else { continue }
             let entry = DictionaryEntry(
                 phrase: source,
                 replacement: replacement,
-                source: .learned,
-                applicationBundleIdentifier: bundleIdentifier
+                source: .learned
             )
             do {
                 try await dependencies.dictionary.save(entry)
                 saved.append(entry)
             } catch {
-                return false
+                return 0
             }
         }
-        guard let first = saved.first else { return false }
+        guard let first = saved.first else { return 0 }
         await refreshDictionaryAndUsage()
         dictionaryLearningToastTask?.cancel()
         let toast = DictionaryLearningToast(
@@ -2118,21 +2619,25 @@ final class AppSession {
         )
         dictionaryLearningToast = toast
         updateHUD()
-        dictionaryLearningToastTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(6))
-            guard let self, self.dictionaryLearningToast?.id == toast.id else { return }
-            self.dictionaryLearningToast = nil
-            self.updateHUD()
-        }
-        return true
+        scheduleDictionaryLearningToastDismissal(toastID: toast.id)
+        return saved.count
     }
 
-    func learnOnboardingCorrection(originalText: String, correctedText: String) async -> Bool {
-        guard preferences.isAutomaticDictionaryLearningActive else { return false }
+    func learnOnboardingCorrection(
+        originalText: String,
+        correctedText: String
+    ) async -> OnboardingCorrectionResult {
+        guard preferences.intelligenceMode != .raw else {
+            return .failed("请返回 AI 步骤，启用 AI 后重试。")
+        }
+        guard preferences.automaticDictionaryLearningEnabled else {
+            return .failed("自动词典学习已关闭，请在智能设置中开启后重试。")
+        }
         let original = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
         let corrected = correctedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !original.isEmpty, !corrected.isEmpty, original != corrected else { return false }
+        guard !original.isEmpty, !corrected.isEmpty, original != corrected else { return .noLearning }
         do {
+            try Task.checkCancellation()
             let decision = try await dependencies.intelligence.classifyCorrection(
                 DictionaryLearningRequest(
                     mode: preferences.intelligenceMode,
@@ -2145,23 +2650,40 @@ final class AppSession {
                     bundleIdentifier: nil
                 )
             )
-            return await persistLearningDecision(
+            try Task.checkCancellation()
+            let candidates = decision.candidates.filter { $0.confidence >= 0.7 }
+            guard !candidates.isEmpty else { return .noLearning }
+            let alreadyLearned = candidates.allSatisfy { candidate in
+                dictionaryEntries.contains {
+                    $0.phrase.caseInsensitiveCompare(
+                        candidate.phrase.trimmingCharacters(in: .whitespacesAndNewlines)
+                    ) == .orderedSame
+                        && $0.replacement == candidate.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
+                        && $0.applicationBundleIdentifier == nil
+                }
+            }
+            if alreadyLearned { return .learned }
+            let saved = await persistLearningDecision(
                 decision,
-                applicationName: "Lerro Onboarding",
-                bundleIdentifier: nil
+                applicationName: "Lerro Onboarding"
             )
+            return saved > 0 ? .learned : .failed("词典保存失败，请重试。")
+        } catch is CancellationError {
+            return .failed("已取消")
         } catch {
-            return false
+            return .failed(userFacingError(error, context: "词典学习失败"))
         }
     }
 
     func previewAppTone(
         application: ApplicationDescriptor,
-        instruction: String
+        instruction: String,
+        sample: String = "明天下午三点开会，请提前准备资料。"
     ) async -> String? {
         guard selectedAIIsReady else { return nil }
         let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+        let transcript = sample.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !transcript.isEmpty else { return nil }
         do {
             return try await dependencies.intelligence.process(IntelligenceRequest(
                 task: .polish,
@@ -2169,13 +2691,14 @@ final class AppSession {
                 remoteProvider: preferences.intelligenceMode == .remote
                     ? normalizedRemoteProvider(preferences.remoteProvider)
                     : nil,
-                transcript: "明天下午三点开会，请提前准备资料。",
+                transcript: transcript,
                 context: CapturedContext(
                     applicationName: application.name,
                     bundleIdentifier: application.bundleIdentifier
                 ),
                 dictionary: dictionaryEntries.filter { !$0.isSnippet },
-                toneInstruction: trimmed
+                toneInstruction: trimmed,
+                usageFeature: .tonePreview
             )).text
         } catch {
             return nil
@@ -2225,6 +2748,10 @@ final class AppSession {
         switch event {
         case .audioLevel(let level):
             audioLevel = level
+            if level >= Self.silenceLevelThreshold {
+                lastVoiceAt = .now
+                if isSilenceWarningVisible { resetSilenceWarning() }
+            }
         case .partial(let text):
             partialTranscript = text
             partialTranscriptIsStable = false
@@ -2253,13 +2780,7 @@ final class AppSession {
             while !Task.isCancelled {
                 guard let self, self.activeSession?.id == session.id else { return }
                 let elapsed = Date.now.timeIntervalSince(session.startedAt)
-                if elapsed >= 8 * 60 {
-                    let wasCountdownVisible = self.captureElapsed >= 8 * 60
-                    self.captureElapsed = elapsed
-                    if !wasCountdownVisible {
-                        self.updateHUD()
-                    }
-                }
+                self.captureElapsed = elapsed
                 if elapsed >= 9 * 60 {
                     self.requestFinishCapture()
                     return
@@ -2277,11 +2798,13 @@ final class AppSession {
             microphonePermission = await dependencies.permissions.requestMicrophone()
         }
         accessibilityPermission = dependencies.permissions.accessibilityAuthorized(prompt: true)
+        markTrace(.permissionsChecked, generation: captureGeneration)
         if accessibilityPermission {
             configureHotkeys(reportError: true)
         } else {
             stopHotkeyMonitoring()
         }
+        markTrace(.hotkeysConfigured, generation: captureGeneration)
         guard microphonePermission else {
             fail(LerroError.permissionRequired("麦克风"))
             return false
@@ -2451,6 +2974,7 @@ final class AppSession {
     private func refreshDictionaryAndUsage() async {
         do {
             dictionaryEntries = try await dependencies.dictionary.entries()
+            updateVisibleDictionarySuggestions()
             updateUsageSummary()
         } catch {
             currentError = LerroError.localData(
@@ -2460,7 +2984,11 @@ final class AppSession {
     }
 
     private func updateUsageSummary() {
-        usage = TextMetrics.usageSummary(entries: historyUsageEntries)
+        usageStatistics = UsageStatistics(entries: historyUsageEntries)
+        usageStatisticsDay = Calendar.current.startOfDay(for: .now)
+        recentHistoryEntries = Array(
+            historyUsageEntries.sorted { $0.createdAt > $1.createdAt }.prefix(6)
+        )
     }
 
     private func normalizedHistorySearch(_ value: String) -> String {
@@ -2506,7 +3034,9 @@ final class AppSession {
 
     private func updateHUD() {
         guard presentsFloatingPanels else { return }
-        guard currentHUDVisualState != .idleHidden else {
+        let state = currentHUDVisualState
+        guard state != .idleHidden else {
+            hudController.anchorScreenPoint = nil
             hudController.hide(animated: false)
             return
         }
@@ -2517,9 +3047,9 @@ final class AppSession {
         hudController.show(
             content: content,
             size: LerroTheme.hudPanelSize,
-            interactionSize: hudInteractionSize,
+            interactionSize: CGSize(width: 480, height: 40),
             interactionBottomInset: LerroTheme.hudContentBottomInset,
-            allowsInteraction: !isHUDSuppressed,
+            allowsInteraction: state.acceptsPointer,
             animated: false
         )
     }
@@ -2538,85 +3068,98 @@ final class AppSession {
         configureAppearance(preferences.appearance)
         lastAppliedSystemPreferences = preferences
 
+        if let rawDestination = environment["LERRO_FIXTURE_DESTINATION"],
+           let fixtureDestination = SidebarDestination(rawValue: rawDestination) {
+            destination = fixtureDestination
+        }
+
         guard let presentation = environment["LERRO_FIXTURE_PRESENTATION"] else { return }
         visualFixturePresentation = presentation
         isPanelOnlyVisualFixture = environment["LERRO_FIXTURE_PANEL_ONLY"] == "1"
+            || presentation.hasPrefix("menubar-panel")
 
         switch presentation {
-        case "settings":
-            presentSettings(SettingsDestination.settings)
+        case "settings-general":
+            settingsTab = .general
+        case "settings-shortcuts":
+            settingsTab = .shortcuts
         case "settings-intelligence":
-            presentSettings(SettingsDestination.intelligence)
-        case "settings-personal", "settings-personal-editor":
-            presentSettings(SettingsDestination.personal)
+            settingsTab = .intelligence
+        case "settings-usage":
+            settingsTab = .usage
+        case "settings-privacy":
+            settingsTab = .privacy
+        case "settings-about":
+            settingsTab = .about
         case "hud-waiting":
-            activeMode = .dictation
-            phase = .idle
+            activeSession = visualFixtureSession()
             isStartingCapture = true
-            partialTranscript = ""
-            audioLevel = 0
-            captureElapsed = 0
-            if !isPanelOnlyVisualFixture { updateHUD() }
+        case "hud-preparing-speech":
+            activeSession = visualFixtureSession()
+            isStartingCapture = true
+            isWaitingForSpeechResources = true
         case "hud-recording":
-            activeMode = .dictation
-            phase = .listening
-            partialTranscript = ""
-            audioLevel = 0.72
-            captureElapsed = 3
-            if !isPanelOnlyVisualFixture { updateHUD() }
-        case "hud-profile":
-            activeMode = .dictation
-            let context = CapturedContext(
-                applicationName: "Mail",
-                bundleIdentifier: "com.apple.mail"
-            )
-            activeSession = CaptureSession(
-                mode: .dictation,
-                context: context,
-                toneInstruction: "Clear, friendly, and concise",
-                toneProfileApplicationName: "Mail"
-            )
+            activeSession = visualFixtureSession()
             phase = .listening
             audioLevel = 0.72
             captureElapsed = 3
-            if !isPanelOnlyVisualFixture { updateHUD() }
+        case "menubar-panel":
+            break
+        case "menubar-panel-listening":
+            activeSession = visualFixtureSession()
+            phase = .listening
+            audioLevel = 0.72
+            captureElapsed = 12
+        case "menubar-panel-permission":
+            microphonePermission = false
+        case "hud-timer":
+            activeSession = visualFixtureSession()
+            phase = .listening
+            audioLevel = 0.72
+            captureElapsed = 6
+        case "hud-hands-free":
+            activeSession = visualFixtureSession()
+            phase = .listening
+            isHandsFreeCapture = true
+            audioLevel = 0.72
+            captureElapsed = 3
+        case "hud-silent":
+            activeSession = visualFixtureSession()
+            phase = .listening
+            isSilenceWarningVisible = true
+            silenceWarningDeviceName = "AirPods Pro"
+            captureElapsed = 6
         case "hud-dictating":
-            activeMode = .dictation
-            activeSession = CaptureSession(
-                mode: .dictation,
-                context: CapturedContext(
-                    applicationName: "Messages",
-                    bundleIdentifier: "com.apple.MobileSMS"
-                )
-            )
+            activeSession = visualFixtureSession()
             phase = .listening
             partialTranscript = "明天下午三点把新版发布清单发给设计和工程团队"
             partialTranscriptIsStable = false
             audioLevel = 0.72
             captureElapsed = 3
-            if !isPanelOnlyVisualFixture { updateHUD() }
-        case "hud-hands-free":
-            activeMode = .dictation
+        case "hud-translating":
+            activeMode = .translation
+            activeSession = visualFixtureSession(mode: .translation)
             phase = .listening
-            isHandsFreeCapture = true
-            partialTranscript = ""
             audioLevel = 0.72
             captureElapsed = 3
-            if !isPanelOnlyVisualFixture { updateHUD() }
         case "hud-processing":
-            activeMode = .dictation
+            activeSession = visualFixtureSession(intelligenceMode: .remote)
             phase = .enhancing
-            isHandsFreeCapture = true
             partialTranscript = "合成转写"
             partialTranscriptIsStable = true
-            captureElapsed = 3
-            if !isPanelOnlyVisualFixture { updateHUD() }
+        case "hud-processing-translation":
+            activeMode = .translation
+            activeSession = visualFixtureSession(mode: .translation)
+            phase = .enhancing
+            partialTranscript = "合成转写"
+            partialTranscriptIsStable = true
+        case "hud-delivered-fallback":
+            activeSession = visualFixtureSession()
+            hudDeliveryFeedback = .deliveredRawFallback
         case "hud-error":
-            activeMode = .dictation
             phase = .failed
-            captureError = "没有识别到语音"
-            partialTranscript = "合成错误"
-            if !isPanelOnlyVisualFixture { updateHUD() }
+            captureError = "没有听到声音"
+            partialTranscript = "没有听到声音"
         case "hud-recovery":
             recoveryPresentation = RecoveryPresentation(
                 id: UUID(),
@@ -2625,7 +3168,6 @@ final class AppSession {
                 message: "内容已复制到剪贴板"
             )
             phase = .failed
-            if !isPanelOnlyVisualFixture { updateHUD() }
         case "hud-dictionary-learned":
             dictionaryLearningToast = DictionaryLearningToast(
                 id: UUID(),
@@ -2635,12 +3177,28 @@ final class AppSession {
                 applicationName: "Messages",
                 count: 1
             )
-            phase = .idle
-            if !isPanelOnlyVisualFixture { updateHUD() }
         default:
             break
         }
 
+        if presentation.hasPrefix("hud-"), !isPanelOnlyVisualFixture {
+            updateHUD()
+        }
+    }
+
+    private func visualFixtureSession(
+        mode: CaptureMode = .dictation,
+        intelligenceMode: IntelligenceMode = .raw
+    ) -> CaptureSession {
+        CaptureSession(
+            mode: mode,
+            context: CapturedContext(
+                applicationName: "Messages",
+                bundleIdentifier: "com.apple.MobileSMS"
+            ),
+            targetLanguage: mode == .translation ? "en" : nil,
+            intelligenceMode: intelligenceMode
+        )
     }
 
     private func configureDeliveryProbeIfRequested() {
@@ -2682,12 +3240,40 @@ final class AppSession {
         )
     }
 
+    private func markTrace(
+        _ milestone: CaptureMilestone,
+        generation: UUID?,
+        at instant: ContinuousClock.Instant = ContinuousClock.now
+    ) {
+        guard let generation,
+              traceRecorder.mark(milestone, id: generation, at: instant),
+              let offset = traceRecorder.current?.offset(of: milestone) else { return }
+        dependencies.captureTrace.captureTrace(generation, didMark: milestone, offset: offset)
+    }
+
+    /// Finishes the open trace. With a `generation`, only that generation's
+    /// trace is finished.
+    private func finishTrace(
+        _ outcome: CaptureTraceOutcome,
+        error: (any Error)? = nil,
+        generation: UUID? = nil
+    ) {
+        if let generation, traceRecorder.current?.id != generation { return }
+        guard let trace = traceRecorder.finish(
+            outcome,
+            errorKind: error.map(CaptureTrace.errorKind(of:)),
+            at: ContinuousClock.now
+        ) else { return }
+        dependencies.captureTrace.captureTraceDidFinish(trace)
+    }
+
     private func userFacingError(_ error: any Error, context: String) -> String {
         if error is LerroError { return error.localizedDescription }
         return "\(context)：\(error.localizedDescription)"
     }
 
     private func fail(_ error: any Error) {
+        finishTrace(.failed, error: error)
         let message = userFacingError(error, context: "语音输入失败")
         captureError = message
         captureGeneration = nil
@@ -2695,12 +3281,13 @@ final class AppSession {
         activeHotkeyOrigin = nil
         pendingHotkeysAfterCancellation.removeAll()
         isStartingCapture = false
+        isWaitingForSpeechResources = false
         isCleaningCapture = true
         activeSession = nil
         isHandsFreeCapture = false
         isQuickDictateCapture = false
         quickDictateDetectedSpeech = false
-        isHUDSuppressed = false
+        resetSilenceWarning()
         dependencies.hotkeys.resetTransientState()
         eventTask?.cancel()
         captureTimerTask?.cancel()
@@ -2752,6 +3339,13 @@ final class AppSession {
         if changes.hotkeys {
             dependencies.hotkeys.update(definitions: updated.hotkeys)
         }
+        if previous.recognitionLocaleIdentifier != updated.recognitionLocaleIdentifier {
+            Task { @MainActor [weak self] in
+                guard let self,
+                      self.preferences.recognitionLocaleIdentifier == updated.recognitionLocaleIdentifier else { return }
+                await self.refreshLanguageResources(invalidatePreparations: true)
+            }
+        }
     }
 
     private func configureAppearance(_ appearance: AppAppearance) {
@@ -2766,47 +3360,93 @@ final class AppSession {
         NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
     }
 
-    private var hudInteractionSize: CGSize {
-        let state = CaptureHUDVisualState.resolve(
-            phase: phase,
-            isStartingCapture: isStartingCapture,
-            isHandsFreeCapture: isHandsFreeCapture,
-            hasRecoveryPresentation: recoveryPresentation != nil,
-            hasDictionaryLearningToast: dictionaryLearningToast != nil,
-            isSuppressed: isHUDSuppressed
-        )
-        if !partialTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           state == .listening || state == .handsFree || state == .processing {
-            return CGSize(width: 420, height: 84)
-        }
-        var size = state.interactionSize(
-            countdownVisible: phase == .listening && captureElapsed >= 8 * 60
-        )
-        if activeToneProfileApplicationName != nil,
-           state == .waiting || state == .listening || state == .handsFree || state == .processing {
-            size.width += 78
-        }
-        return size
-    }
-
-    private var currentHUDVisualState: CaptureHUDVisualState {
-        CaptureHUDVisualState.resolve(
-            phase: phase,
-            isStartingCapture: isStartingCapture,
-            isHandsFreeCapture: isHandsFreeCapture,
-            hasRecoveryPresentation: recoveryPresentation != nil,
-            hasDictionaryLearningToast: dictionaryLearningToast != nil,
-            isSuppressed: isHUDSuppressed
-        )
-    }
-
-    private func suppressHUD(for sessionID: UUID) {
-        guard activeSession?.id == sessionID, !isHUDSuppressed else { return }
-        isHUDSuppressed = true
-        audioLevel = 0
+    private func presentDeliveryFeedback(_ feedback: HUDDeliveryFeedback) {
+        hudDeliveryFeedbackTask?.cancel()
+        let token = UUID()
+        hudDeliveryFeedbackToken = token
+        hudDeliveryFeedback = feedback
         updateHUD()
+        guard let displayDuration = feedback.displayDuration else {
+            hudDeliveryFeedbackTask = nil
+            return
+        }
+        hudDeliveryFeedbackTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: displayDuration)
+            guard let self, !Task.isCancelled, self.hudDeliveryFeedbackToken == token else { return }
+            self.hudDeliveryFeedback = nil
+            self.hudDeliveryFeedbackToken = nil
+            self.hudDeliveryFeedbackTask = nil
+            self.updateHUD()
+        }
     }
 
+    private func clearDeliveryFeedback() {
+        hudDeliveryFeedbackTask?.cancel()
+        hudDeliveryFeedbackTask = nil
+        hudDeliveryFeedbackToken = nil
+        hudDeliveryFeedback = nil
+    }
+
+    private func presentRecovery(_ presentation: RecoveryPresentation) {
+        recoveryDismissTask?.cancel()
+        recoveryPresentation = presentation
+        recoveryDismissTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(8))
+            guard let self, !Task.isCancelled, self.recoveryPresentation?.id == presentation.id else { return }
+            self.dismissRecovery()
+        }
+    }
+
+    private func scheduleDictionaryLearningToastDismissal(toastID: UUID) {
+        dictionaryLearningToastTask?.cancel()
+        dictionaryLearningToastTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard let self, !Task.isCancelled, self.dictionaryLearningToast?.id == toastID else { return }
+            self.dictionaryLearningToast = nil
+            self.updateHUD()
+        }
+    }
+
+    private func startSilenceMonitor(for session: CaptureSession) {
+        silenceMonitorTask?.cancel()
+        lastVoiceAt = .now
+        silenceMonitorTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard let self, !Task.isCancelled,
+                      self.activeSession?.id == session.id,
+                      self.phase == .listening else { return }
+                if !self.isSilenceWarningVisible,
+                   Date.now.timeIntervalSince(self.lastVoiceAt) >= Self.silenceWarningDelay {
+                    self.showSilenceWarning(for: session)
+                }
+            }
+        }
+    }
+
+    private func showSilenceWarning(for session: CaptureSession) {
+        isSilenceWarningVisible = true
+        if let selectedUID = preferences.microphoneDeviceUID {
+            silenceWarningDeviceName = audioInputDevices.first { $0.uid == selectedUID }?.name
+            return
+        }
+        silenceWarningDeviceName = nil
+        Task { @MainActor [weak self, dependencies] in
+            let devices = await dependencies.microphoneTest.availableInputDevices()
+            guard let self,
+                  self.activeSession?.id == session.id,
+                  self.isSilenceWarningVisible else { return }
+            self.silenceWarningDeviceName = devices.first(where: \.isDefault)?.name
+        }
+    }
+
+    private func resetSilenceWarning() {
+        silenceMonitorTask?.cancel()
+        silenceMonitorTask = nil
+        isSilenceWarningVisible = false
+        silenceWarningDeviceName = nil
+        lastVoiceAt = .now
+    }
 }
 
 private actor AppSessionAudioFileStore {

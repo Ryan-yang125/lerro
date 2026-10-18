@@ -222,7 +222,7 @@ public actor MLXLanguageModelRuntime: LocalLanguageModelRuntime {
         return output
     }
 
-    public func generateStream(
+    private func generateStream(
         systemPrompt: String,
         userPrompt: String,
         maxTokens: Int

@@ -156,7 +156,7 @@ source config/maintainer.local.env
 
 - `config/Info.plist` 的 version/build。
 - `CHANGELOG.md`。
-- `site/app/changelog/releases.ts` 的双语条目与不可变下载 URL。
+- `site/src/data/releases.ts` 的双语条目与不可变下载 URL。
 - 本版验收记录；可从 [`release-evidence-template.md`](release-evidence-template.md) 复制到被忽略的 `work/release-evidence/`。
 
 提交并冻结 source tree 后：

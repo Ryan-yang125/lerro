@@ -128,26 +128,39 @@ Lerro -> LerroIntelligence -> LerroCore
 
 ## Apple-native UI 不变量
 
+- 主窗口使用 `NavigationSplitView`：侧栏导航为首页、历史、词典、应用语气（`SidebarDestination.appTones`），
+  底部为 AI 状态行、设置齿轮与版本号。设置位于独立的 `Settings` 场景窗口（⌘,），标签为通用、快捷键、
+  智能、用量、隐私、关于（`SettingsTab`），任何视图通过 `session.settingsTab` 与 `openSettings` 打开。
 - 主窗口界面使用 `LerroTheme` 自适应黑白灰色板；警告、错误和成功继续使用 macOS
   system status colors。Aqua、Dark Aqua 与 Increase Contrast 各自解析对应灰阶值。
 - 浅色正文层级依次为 `#292929`、`#5D5D5D`、`#9E9E9E`；承担必要信息的
   12 pt 小字使用 `#6B6B6B`，避免把低对比 tertiary text 用于关键内容。
-- App UI 使用 SF Pro、苹方与 SF Mono。主窗口字号只使用 24、14、13、12 pt，
-  tracking 统一为 `-0.15`。
-- 导航图标为 14 pt、导航圆角为 8 pt；卡片图标为 20 pt、卡片圆角为 16 pt；
-  主要 CTA 使用 pill 形态。
-- 主窗口 hover 以 150 ms ease-out 更新填充、边界或阴影；pointer-down 立即下沉
-  1 pt。Reduce Motion 下取消按压位移，并保留清晰的透明度反馈。
+- 强调色为品牌墨水蓝：`LerroTheme.accent`（浅色 `#2F5BFF`、深色 `#4A6BFF`），主按钮底色
+  `accentButton`（深色 `#3557F0`，保证白字对比），选中背景 `accentSoft`。同一颜色编译进
+  `Assets.car` 的 `AccentColor`（源稿 `Brand/source/app-icon/Accent.xcassets`，`Info.plist`
+  `NSAccentColorName = AccentColor`），系统控件继承它；根视图同时设置 `.tint(LerroTheme.accent)`。
+- App UI 使用 SF Pro、苹方与 SF Mono。主窗口字号使用 `LerroFont` 刻度：pageTitle 15 semibold、
+  body 13、detail 16、stat 30、caption 12、footnote 11、sectionLabel 11 semibold；tracking 统一为 `-0.15`。
+- 列表、表格和表单使用原生样式（`List`、`Table`、`Form(.grouped)`、`TabView`）；卡片只用于应用语气对象。
+  主要 CTA 使用 pill 形态（`LerroButtonStyle`）。共享控件位于 `MainWindowComponents.swift`：
+  `LerroButtonStyle`、`LerroIconButton`、`LerroShortcutKeys`/`LerroKeycap`、`LerroAppIcon`、
+  `LerroStatusDot`、`LerroChip`、`LerroEmptyState`、`LerroSectionHeader`。
+- 主窗口 hover 以 150 ms ease-out 更新填充；pointer-down 以 100 ms 将不透明度降到 0.8。
+  控件不产生位移，Reduce Motion 下保持同一透明度反馈。
 - 仓库不分发 Apple 字体；App UI 不捆绑第三方字体。
 - 品牌固定色仅用于可导出的品牌资产预览；主 UI 内容层使用 `LerroTheme` 灰阶，
-  主要动作与焦点继承系统 Accent Color，success、warning、error 使用系统语义色。
+  主要动作与焦点使用墨水蓝强调色，success、warning、error 使用系统语义色。
 - App Icon、菜单栏四态、HUD、窗口和公开截图全部使用 Lerro 品牌资产。
-- HUD 外壳、声线、processing 节奏、状态切换、静音反馈与 Reduce Motion 行为继续以
-  `CaptureHUDView.swift` 和既有 HUD fixture 为准；processing 三点继承系统 Accent Color。
+- 产品概念图标使用 `LerroGlyph`（`Brand/source/icons/Glyphs.xcassets`，16 pt 网格、1.4 pt 圆头描边，
+  光标层着墨水蓝）；通用操作使用 SF Symbols 描边版本，只有状态图标和播放控制用实心。
+- HUD 是固定墨黑 Liquid Glass 胶囊，所有状态在同一胶囊内形变，最大宽度 480 pt；
+  录音显示墨水蓝光标，写入成功在 commit point 直接淡出。状态模型以 `CaptureHUDModel.swift` 和
+  `AppSession.currentHUDVisualState` 为准，外观以 `CaptureHUDView.swift` 和 HUD fixture 为准，
+  决策见 ADR 0013。
 - 颜色、尺寸、圆角和字体先更新 `DesignTokens.swift` 或共享组件，再更新页面。
 - 视觉 fixture 只使用 inert adapters，不能触发系统权限、真实录音、真实文本交付或用户数据写入。
 - UI 改动至少验证 1080×750、988×658、浅色、深色、Increase Contrast、
-  Reduce Transparency、Reduce Motion、VoiceOver，以及受影响的 HUD、恢复卡和设置状态。
+  Reduce Transparency、Reduce Motion、VoiceOver，以及受影响的 HUD、恢复卡和设置窗口标签。
 
 品牌源稿、使用规则、动效与许可见 [`Brand/`](Brand)。
 
