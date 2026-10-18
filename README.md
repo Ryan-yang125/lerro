@@ -76,17 +76,16 @@ Details are in the [Privacy Policy](PRIVACY.md).
 
 1. [Download the latest signed and notarized build](https://updates.lerroapp.com/download/macos/latest).
 2. Move **Lerro.app** to Applications and open it.
-3. Follow the setup to grant Microphone, Speech Recognition, and Accessibility.
+3. Follow the setup to grant Microphone and Accessibility.
 
 Requires an Apple silicon Mac with macOS 26 or later. Lerro updates itself
 from inside the app.
 
 ## Build from source
 
-See [Build and testing](docs/build.md). Engineering docs:
-[architecture](docs/architecture.md), [core flow](docs/core-flow.md),
-[models and BYOK](docs/models.md), [privacy and security](docs/privacy-security.md),
-and [contributing](CONTRIBUTING.md).
+See [Development](docs/development.md) for building, testing and releasing,
+[Architecture](docs/architecture.md) for how the app is put together, and
+[Contributing](CONTRIBUTING.md).
 
 ## License
 

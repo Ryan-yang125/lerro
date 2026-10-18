@@ -1,45 +1,21 @@
 import Foundation
 
 public actor PipelineIntelligenceService: IntelligenceProcessing {
-    private let runtime: any LocalLanguageModelRuntime
     private let remoteRuntime: (any RemoteLanguageModelRuntime)?
-    private let composer: PromptComposer
     private let cloudComposer: CloudPromptComposer
     private let dictionaryLearningComposer: DictionaryLearningPromptComposer
     private let usageRecorder: (any AIUsageRepository)?
-    private var modelIdentifier: String
 
     public init(
-        runtime: any LocalLanguageModelRuntime,
         remoteRuntime: (any RemoteLanguageModelRuntime)? = nil,
-        modelIdentifier: String,
-        pipeline: TextPipeline = TextPipeline(),
-        composer: PromptComposer = PromptComposer(),
         cloudComposer: CloudPromptComposer = CloudPromptComposer(),
         dictionaryLearningComposer: DictionaryLearningPromptComposer = DictionaryLearningPromptComposer(),
         usageRecorder: (any AIUsageRepository)? = nil
     ) {
-        self.runtime = runtime
         self.remoteRuntime = remoteRuntime
-        self.modelIdentifier = modelIdentifier
-        self.composer = composer
         self.cloudComposer = cloudComposer
         self.dictionaryLearningComposer = dictionaryLearningComposer
         self.usageRecorder = usageRecorder
-        _ = pipeline
-    }
-
-    public func prepare(modelIdentifier: String) async throws {
-        self.modelIdentifier = modelIdentifier
-        try await runtime.load(modelIdentifier: modelIdentifier)
-    }
-
-    public func pauseLocalModelPreparation() async {
-        await runtime.pauseLoad()
-    }
-
-    public func discardLocalModelDownload() async throws {
-        try await runtime.discardDownload()
     }
 
     public func process(_ request: IntelligenceRequest) async throws -> IntelligenceResult {
@@ -62,34 +38,23 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         }
 
         let invocation = try invocation(for: request)
-        let generated: String
-        switch invocation.runtime {
-        case .local:
-            try await runtime.load(modelIdentifier: invocation.modelIdentifier)
-            generated = try await runtime.generate(
+        guard let remoteRuntime else {
+            throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
+        }
+        let generated = try await recordingUsage(
+            feature: request.usageFeature,
+            configuration: invocation.configuration,
+            tokens: \.tokens
+        ) {
+            try await remoteRuntime.generate(
+                configuration: invocation.configuration,
                 systemPrompt: invocation.systemPrompt,
                 userPrompt: invocation.userPrompt,
                 maxTokens: invocation.maxTokens
             )
-        case .remote(let configuration):
-            guard let remoteRuntime else {
-                throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
-            }
-            generated = try await recordingUsage(
-                feature: request.usageFeature,
-                configuration: configuration,
-                tokens: \.tokens
-            ) {
-                try await remoteRuntime.generate(
-                    configuration: configuration,
-                    systemPrompt: invocation.systemPrompt,
-                    userPrompt: invocation.userPrompt,
-                    maxTokens: invocation.maxTokens
-                )
-            }.text
-        }
+        }.text
 
-        let generatedText = invocation.source == .remote && request.task == .polish
+        let generatedText = request.task == .polish
             ? CloudPromptComposer.dictateText(from: generated)
             : generated
 
@@ -97,12 +62,11 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
             text: try Self.finalText(
                 from: generatedText,
                 fallbackTranscript: rawTranscript,
-                task: request.task,
-                source: invocation.source
+                task: request.task
             ),
             disposition: disposition,
-            modelIdentifier: invocation.modelIdentifier,
-            source: invocation.source
+            modelIdentifier: invocation.configuration.modelIdentifier,
+            source: .remote
         )
     }
 
@@ -119,37 +83,24 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         }
 
         let prompts = try dictionaryLearningComposer.prompts(for: request)
-        let generated: String
-        switch request.mode {
-        case .raw:
-            preconditionFailure("Raw correction requests are rejected before runtime routing")
-        case .local:
-            try await runtime.load(modelIdentifier: modelIdentifier)
-            generated = try await runtime.generate(
+        guard let configuration = request.remoteProvider else {
+            throw LerroError.remoteUnavailable("远程模型配置缺失")
+        }
+        guard let remoteRuntime else {
+            throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
+        }
+        let generated = try await recordingUsage(
+            feature: .dictionaryLearning,
+            configuration: configuration,
+            tokens: \.tokens
+        ) {
+            try await remoteRuntime.generate(
+                configuration: configuration,
                 systemPrompt: prompts.system,
                 userPrompt: prompts.user,
                 maxTokens: DictionaryLearningPromptComposer.maximumOutputTokens
             )
-        case .remote:
-            guard let configuration = request.remoteProvider else {
-                throw LerroError.remoteUnavailable("远程模型配置缺失")
-            }
-            guard let remoteRuntime else {
-                throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
-            }
-            generated = try await recordingUsage(
-                feature: .dictionaryLearning,
-                configuration: configuration,
-                tokens: \.tokens
-            ) {
-                try await remoteRuntime.generate(
-                    configuration: configuration,
-                    systemPrompt: prompts.system,
-                    userPrompt: prompts.user,
-                    maxTokens: DictionaryLearningPromptComposer.maximumOutputTokens
-                )
-            }.text
-        }
+        }.text
         let decision = try DictionaryLearningDecision.decodeStrictJSON(generated)
         guard decision.candidates.allSatisfy({ candidate in
             original.localizedCaseInsensitiveContains(candidate.phrase)
@@ -158,10 +109,6 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
             throw DictionaryLearningValidationError.invalidCandidate
         }
         return decision
-    }
-
-    public func modelStatus() async -> LocalModelStatus {
-        await runtime.status()
     }
 
     public func testRemoteConnection(
@@ -221,37 +168,16 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
     }
 
     private func invocation(for request: IntelligenceRequest) throws -> Invocation {
-        let maxTokens = 768
-        switch request.mode {
-        case .raw:
-            preconditionFailure("Raw requests are resolved before runtime routing")
-        case .local:
-            let prompts = composer.prompts(
-                for: request,
-                cleanedTranscript: request.transcript
-            )
-            return Invocation(
-                runtime: .local,
-                systemPrompt: prompts.system,
-                userPrompt: prompts.user,
-                maxTokens: maxTokens,
-                modelIdentifier: modelIdentifier,
-                source: .local
-            )
-        case .remote:
-            guard let configuration = request.remoteProvider else {
-                throw LerroError.remoteUnavailable("远程模型配置缺失")
-            }
-            let prompts = try cloudComposer.prompts(for: request)
-            return Invocation(
-                runtime: .remote(configuration),
-                systemPrompt: prompts.system,
-                userPrompt: prompts.user,
-                maxTokens: maxTokens,
-                modelIdentifier: configuration.modelIdentifier,
-                source: .remote
-            )
+        guard let configuration = request.remoteProvider else {
+            throw LerroError.remoteUnavailable("远程模型配置缺失")
         }
+        let prompts = try cloudComposer.prompts(for: request)
+        return Invocation(
+            configuration: configuration,
+            systemPrompt: prompts.system,
+            userPrompt: prompts.user,
+            maxTokens: 768
+        )
     }
 
     private nonisolated static func disposition(for task: IntelligenceTask) -> IntelligenceDisposition {
@@ -263,8 +189,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
     private nonisolated static func finalText(
         from generated: String,
         fallbackTranscript: String,
-        task: IntelligenceTask,
-        source: IntelligenceResultSource
+        task: IntelligenceTask
     ) throws -> String {
         let sanitized = sanitize(generated, fallback: "")
         if !sanitized.isEmpty {
@@ -273,10 +198,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         if case .polish = task {
             return fallbackTranscript
         }
-        if source == .remote {
-            throw LerroError.remoteUnavailable("远程模型没有生成有效内容")
-        }
-        throw LerroError.modelUnavailable("本地模型没有生成有效内容")
+        throw LerroError.remoteUnavailable("远程模型没有生成有效内容")
     }
 
     private nonisolated static func sanitize(_ generated: String, fallback: String) -> String {
@@ -296,16 +218,9 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
     }
 
     private struct Invocation: Sendable {
-        enum Runtime: Sendable {
-            case local
-            case remote(RemoteProviderConfiguration)
-        }
-
-        let runtime: Runtime
+        let configuration: RemoteProviderConfiguration
         let systemPrompt: String
         let userPrompt: String
         let maxTokens: Int
-        let modelIdentifier: String
-        let source: IntelligenceResultSource
     }
 }

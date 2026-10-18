@@ -4,50 +4,6 @@ import Testing
 
 @Suite("Pipeline intelligence service")
 struct PipelineIntelligenceServiceTests {
-    @Test("Loads the local model and preserves the exact transcript in the prompt")
-    func loadsThenGeneratesFromExactTranscript() async throws {
-        let runtime = FakeLanguageModelRuntime(output: "Polished result")
-        let service = PipelineIntelligenceService(
-            runtime: runtime,
-            modelIdentifier: "test-model"
-        )
-        let request = IntelligenceRequest(
-            task: .polish,
-            transcript: "  uh   hello hello ,   type less  ",
-            context: CapturedContext(
-                applicationName: "Notes",
-                bundleIdentifier: "com.apple.Notes"
-            ),
-            dictionary: [DictionaryEntry(phrase: "type less", replacement: "Lerro")]
-        )
-
-        let result = try await service.process(request)
-        let events = await runtime.recordedEvents()
-
-        #expect(result.text == "Polished result")
-        #expect(result.modelIdentifier == "test-model")
-        #expect(result.source == .local)
-        #expect(events.count == 2)
-
-        let firstEvent = try #require(events.first)
-        guard case .load(let modelIdentifier) = firstEvent else {
-            Issue.record("Expected model loading to be the first runtime event")
-            return
-        }
-        #expect(modelIdentifier == "test-model")
-
-        let lastEvent = try #require(events.last)
-        guard case .generate(let systemPrompt, let userPrompt, let maxTokens) = lastEvent else {
-            Issue.record("Expected generation to follow model loading")
-            return
-        }
-        #expect(systemPrompt.contains("local writing engine"))
-        #expect(userPrompt.contains("Application: Notes"))
-        #expect(userPrompt.contains("Dictation:\n  uh   hello hello ,   type less  "))
-        #expect(userPrompt.contains("hello hello"))
-        #expect(maxTokens == 768)
-    }
-
     @Test("Maps every task to its delivery disposition and token budget")
     func mapsTaskDispositions() async throws {
         let cases: [(IntelligenceTask, IntelligenceDisposition, Int)] = [
@@ -56,17 +12,14 @@ struct PipelineIntelligenceServiceTests {
         ]
 
         for (task, expectedDisposition, expectedMaxTokens) in cases {
-            let runtime = FakeLanguageModelRuntime(output: "result")
-            let service = PipelineIntelligenceService(
-                runtime: runtime,
-                modelIdentifier: "model-\(task.rawValue)"
-            )
-            let result = try await service.process(makeRequest(task: task))
-            let events = await runtime.recordedEvents()
+            let remote = FakeRemoteLanguageModelRuntime(output: "result")
+            let service = makeRemoteService(remote: remote, usage: InMemoryAIUsageRepository())
+            let result = try await service.process(remoteRequest(task: task))
+            let events = await remote.recordedEvents()
 
             #expect(result.disposition == expectedDisposition)
             let lastEvent = try #require(events.last)
-            guard case .generate(_, _, let maxTokens) = lastEvent else {
+            guard case .generate(_, _, _, let maxTokens) = lastEvent else {
                 Issue.record("Expected a generation event for \(task.rawValue)")
                 continue
             }
@@ -76,33 +29,34 @@ struct PipelineIntelligenceServiceTests {
 
     @Test("Falls back to the exact transcript for an empty generation")
     func fallsBackForEmptyGeneration() async throws {
-        let runtime = FakeLanguageModelRuntime(output: "  \n  ")
-        let service = PipelineIntelligenceService(runtime: runtime, modelIdentifier: "test-model")
-        let request = makeRequest(task: .polish, transcript: " uh fallback fallback ")
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(output: "  \n  "),
+            usage: InMemoryAIUsageRepository()
+        )
+        let request = remoteRequest(task: .polish)
 
         let result = try await service.process(request)
 
-        #expect(result.text == " uh fallback fallback ")
-        #expect(result.source == .local)
+        #expect(result.text == request.transcript)
+        #expect(result.source == .remote)
     }
 
-    @Test(
-        "Rejects empty non-polish generations",
-        arguments: [IntelligenceTask.translate]
-    )
-    func rejectsEmptyNonPolishGeneration(task: IntelligenceTask) async {
-        let runtime = FakeLanguageModelRuntime(output: "  \n  ")
-        let service = PipelineIntelligenceService(runtime: runtime, modelIdentifier: "test-model")
+    @Test("Rejects an empty translation generation")
+    func rejectsEmptyTranslationGeneration() async {
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(output: "  \n  "),
+            usage: InMemoryAIUsageRepository()
+        )
 
         do {
-            _ = try await service.process(makeRequest(task: task))
-            Issue.record("Expected an empty \(task.rawValue) generation to fail")
+            _ = try await service.process(remoteRequest(task: .translate))
+            Issue.record("Expected an empty translate generation to fail")
         } catch {
-            guard case LerroError.modelUnavailable(let message) = error else {
+            guard case LerroError.remoteUnavailable(let message) = error else {
                 Issue.record("Received an unexpected error: \(error)")
                 return
             }
-            #expect(message == "本地模型没有生成有效内容")
+            #expect(message == "远程模型没有生成有效内容")
         }
     }
 
@@ -116,49 +70,30 @@ struct PipelineIntelligenceServiceTests {
         ]
 
         for (generated, expected) in cases {
-            let runtime = FakeLanguageModelRuntime(output: generated)
-            let service = PipelineIntelligenceService(runtime: runtime, modelIdentifier: "test-model")
+            let service = makeRemoteService(
+                remote: FakeRemoteLanguageModelRuntime(output: generated),
+                usage: InMemoryAIUsageRepository()
+            )
 
-            let result = try await service.process(makeRequest(task: .polish))
+            let result = try await service.process(remoteRequest(task: .translate))
 
             #expect(result.text == expected)
         }
     }
 
-    @Test("Propagates model loading errors before generation")
-    func propagatesLoadError() async {
-        let runtime = FakeLanguageModelRuntime(
-            output: "unused",
-            loadError: .loadFailed
-        )
-        let service = PipelineIntelligenceService(runtime: runtime, modelIdentifier: "test-model")
-        var receivedError: FakeRuntimeError?
-
-        do {
-            _ = try await service.process(makeRequest(task: .polish))
-            Issue.record("Expected model loading to fail")
-        } catch let error as FakeRuntimeError {
-            receivedError = error
-        } catch {
-            Issue.record("Received an unexpected error type: \(error)")
-        }
-
-        #expect(receivedError == .loadFailed)
-        let events = await runtime.recordedEvents()
-        #expect(events == [.load("test-model")])
-    }
-
-    @Test("Propagates generation errors after loading the model")
+    @Test("Propagates generation errors")
     func propagatesGenerationError() async {
-        let runtime = FakeLanguageModelRuntime(
-            output: "unused",
-            generationError: .generationFailed
+        let service = makeRemoteService(
+            remote: FakeRemoteLanguageModelRuntime(
+                output: "unused",
+                generationError: FakeRuntimeError.generationFailed
+            ),
+            usage: InMemoryAIUsageRepository()
         )
-        let service = PipelineIntelligenceService(runtime: runtime, modelIdentifier: "test-model")
         var receivedError: FakeRuntimeError?
 
         do {
-            _ = try await service.process(makeRequest(task: .polish))
+            _ = try await service.process(remoteRequest(task: .polish))
             Issue.record("Expected generation to fail")
         } catch let error as FakeRuntimeError {
             receivedError = error
@@ -167,24 +102,12 @@ struct PipelineIntelligenceServiceTests {
         }
 
         #expect(receivedError == .generationFailed)
-        let events = await runtime.recordedEvents()
-        #expect(events.count == 2)
-        guard events.count == 2 else { return }
-        guard case .load = events[0], case .generate = events[1] else {
-            Issue.record("Expected model loading followed by generation")
-            return
-        }
     }
 
     @Test("Raw mode preserves transcript bytes and bypasses every model runtime")
     func rawModeBypassesModelRuntimes() async throws {
-        let local = FakeLanguageModelRuntime(output: "unused", loadError: .loadFailed)
         let remote = FakeRemoteLanguageModelRuntime(output: "unused")
-        let service = PipelineIntelligenceService(
-            runtime: local,
-            remoteRuntime: remote,
-            modelIdentifier: "local-model"
-        )
+        let service = PipelineIntelligenceService(remoteRuntime: remote)
         let request = IntelligenceRequest(
             task: .polish,
             mode: .raw,
@@ -197,19 +120,13 @@ struct PipelineIntelligenceServiceTests {
         #expect(result.text == "  exact raw transcript  ")
         #expect(result.modelIdentifier == "raw-transcript")
         #expect(result.source == .raw)
-        #expect(await local.recordedEvents().isEmpty)
         #expect(await remote.recordedEvents().isEmpty)
     }
 
     @Test("Remote mode routes only to the configured provider with the exact transcript")
     func remoteModeRoutesToConfiguredProvider() async throws {
-        let local = FakeLanguageModelRuntime(output: "unused", loadError: .loadFailed)
         let remote = FakeRemoteLanguageModelRuntime(output: "Remote result")
-        let service = PipelineIntelligenceService(
-            runtime: local,
-            remoteRuntime: remote,
-            modelIdentifier: "local-model"
-        )
+        let service = PipelineIntelligenceService(remoteRuntime: remote)
         let configuration = RemoteProviderConfiguration(
             provider: .deepSeek,
             apiKey: "test-key",
@@ -229,7 +146,6 @@ struct PipelineIntelligenceServiceTests {
         #expect(result.text == "Remote result")
         #expect(result.modelIdentifier == "deepseek-flash")
         #expect(result.source == .remote)
-        #expect(await local.recordedEvents().isEmpty)
         #expect(events.count == 1)
         guard case .generate(let savedConfiguration, _, let userPrompt, 768) = events.first else {
             Issue.record("Expected one remote generation")
@@ -292,31 +208,27 @@ struct PipelineIntelligenceServiceTests {
 
     @Test("Remote connection testing delegates to the remote runtime")
     func delegatesRemoteConnectionTest() async throws {
-        let local = FakeLanguageModelRuntime(output: "unused")
         let outcome = RemoteConnectionTestOutcome.success(
             latencyMilliseconds: 42,
             modelIdentifier: "deepseek-v4-flash"
         )
         let remote = FakeRemoteLanguageModelRuntime(output: "unused", connectionOutcome: outcome)
-        let service = PipelineIntelligenceService(
-            runtime: local,
-            remoteRuntime: remote,
-            modelIdentifier: "local-model"
-        )
+        let service = PipelineIntelligenceService(remoteRuntime: remote)
         let configuration = RemoteProviderConfiguration(apiKey: "test-key")
 
         #expect(try await service.testRemoteConnection(configuration: configuration) == outcome)
         #expect(await remote.recordedEvents() == [.testConnection(configuration)])
     }
 
-    @Test("Local AI classifies a bounded correction into a dictionary candidate")
-    func classifiesLocalCorrection() async throws {
-        let runtime = FakeLanguageModelRuntime(
+    @Test("Remote AI classifies a bounded correction into a dictionary candidate")
+    func classifiesRemoteCorrectionCandidate() async throws {
+        let remote = FakeRemoteLanguageModelRuntime(
             output: #"{"candidates":[{"phrase":"乐若","replacement":"Lerro","confidence":0.97}]}"#
         )
-        let service = PipelineIntelligenceService(runtime: runtime, modelIdentifier: "local-model")
+        let service = PipelineIntelligenceService(remoteRuntime: remote)
         let request = DictionaryLearningRequest(
-            mode: .local,
+            mode: .remote,
+            remoteProvider: RemoteProviderConfiguration(apiKey: "test-key"),
             originalSpan: "乐若",
             correctedSpan: "Lerro",
             contextBefore: String(repeating: "前", count: 200),
@@ -332,9 +244,9 @@ struct PipelineIntelligenceServiceTests {
         ])
         #expect(request.contextBefore?.count == DictionaryLearningRequest.maximumContextCharacters)
         #expect(request.contextAfter?.count == DictionaryLearningRequest.maximumContextCharacters)
-        let events = await runtime.recordedEvents()
-        #expect(events.count == 2)
-        guard case .generate(let system, let user, let tokens) = events.last else {
+        let events = await remote.recordedEvents()
+        #expect(events.count == 1)
+        guard case .generate(_, let system, let user, let tokens) = events.last else {
             Issue.record("Expected correction generation")
             return
         }
@@ -347,13 +259,8 @@ struct PipelineIntelligenceServiceTests {
 
     @Test("Remote correction classification sends only the bounded correction payload")
     func classifiesRemoteCorrection() async throws {
-        let local = FakeLanguageModelRuntime(output: "unused", loadError: .loadFailed)
         let remote = FakeRemoteLanguageModelRuntime(output: #"{"candidates":[]}"#)
-        let service = PipelineIntelligenceService(
-            runtime: local,
-            remoteRuntime: remote,
-            modelIdentifier: "local-model"
-        )
+        let service = PipelineIntelligenceService(remoteRuntime: remote)
         let configuration = RemoteProviderConfiguration(apiKey: "test-key")
         let decision = try await service.classifyCorrection(DictionaryLearningRequest(
             mode: .remote,
@@ -367,7 +274,6 @@ struct PipelineIntelligenceServiceTests {
         ))
 
         #expect(decision == .noLearning)
-        #expect(await local.recordedEvents().isEmpty)
         let events = await remote.recordedEvents()
         #expect(events.count == 1)
         guard case .generate(let saved, _, let user, let tokens) = events.first else {
@@ -382,13 +288,8 @@ struct PipelineIntelligenceServiceTests {
 
     @Test("Raw mode rejects automatic dictionary learning without model calls")
     func rawModeRejectsDictionaryLearning() async {
-        let local = FakeLanguageModelRuntime(output: "unused")
         let remote = FakeRemoteLanguageModelRuntime(output: "unused")
-        let service = PipelineIntelligenceService(
-            runtime: local,
-            remoteRuntime: remote,
-            modelIdentifier: "local-model"
-        )
+        let service = PipelineIntelligenceService(remoteRuntime: remote)
 
         await #expect(throws: LerroError.self) {
             try await service.classifyCorrection(DictionaryLearningRequest(
@@ -398,15 +299,13 @@ struct PipelineIntelligenceServiceTests {
                 applicationName: "Notes"
             ))
         }
-        #expect(await local.recordedEvents().isEmpty)
         #expect(await remote.recordedEvents().isEmpty)
     }
 
     @Test("Raw mode keeps translation unavailable")
     func rawModeRejectsTranslation() async {
         let service = PipelineIntelligenceService(
-            runtime: FakeLanguageModelRuntime(output: "unused"),
-            modelIdentifier: "local-model"
+            remoteRuntime: FakeRemoteLanguageModelRuntime(output: "unused")
         )
         await #expect(throws: LerroError.self) {
             try await service.process(IntelligenceRequest(
@@ -434,14 +333,14 @@ struct PipelineIntelligenceServiceTests {
         }
 
         let service = PipelineIntelligenceService(
-            runtime: FakeLanguageModelRuntime(
+            remoteRuntime: FakeRemoteLanguageModelRuntime(
                 output: #"{"candidates":[{"phrase":"invented","replacement":"Lerro","confidence":0.9}]}"#
-            ),
-            modelIdentifier: "local-model"
+            )
         )
         await #expect(throws: DictionaryLearningValidationError.self) {
             try await service.classifyCorrection(DictionaryLearningRequest(
-                mode: .local,
+                mode: .remote,
+                remoteProvider: RemoteProviderConfiguration(apiKey: "test-key"),
                 originalSpan: "乐若",
                 correctedSpan: "Lerro",
                 applicationName: "Notes"
@@ -607,17 +506,14 @@ struct PipelineIntelligenceServiceTests {
         #expect(records.first?.tokens == nil)
     }
 
-    @Test("Local and raw modes record nothing")
-    func localAndRawRecordNothing() async throws {
+    @Test("Raw mode records nothing")
+    func rawModeRecordsNothing() async throws {
         let usage = InMemoryAIUsageRepository()
         let service = PipelineIntelligenceService(
-            runtime: FakeLanguageModelRuntime(output: "Local result"),
             remoteRuntime: FakeRemoteLanguageModelRuntime(output: "unused"),
-            modelIdentifier: "local-model",
             usageRecorder: usage
         )
 
-        _ = try await service.process(makeRequest(task: .polish))
         _ = try await service.process(IntelligenceRequest(
             task: .polish,
             mode: .raw,
@@ -632,12 +528,7 @@ struct PipelineIntelligenceServiceTests {
         remote: FakeRemoteLanguageModelRuntime,
         usage: InMemoryAIUsageRepository
     ) -> PipelineIntelligenceService {
-        PipelineIntelligenceService(
-            runtime: FakeLanguageModelRuntime(output: "unused", loadError: .loadFailed),
-            remoteRuntime: remote,
-            modelIdentifier: "local-model",
-            usageRecorder: usage
-        )
+        PipelineIntelligenceService(remoteRuntime: remote, usageRecorder: usage)
     }
 
     private func remoteRequest(
@@ -656,82 +547,10 @@ struct PipelineIntelligenceServiceTests {
         )
     }
 
-    private func makeRequest(
-        task: IntelligenceTask,
-        transcript: String = "Test transcript"
-    ) -> IntelligenceRequest {
-        IntelligenceRequest(
-            task: task,
-            transcript: transcript,
-            targetLanguage: task == .translate ? "en_US" : nil,
-            context: CapturedContext(applicationName: "Tests")
-        )
-    }
 }
 
 private enum FakeRuntimeError: Error, Equatable, Sendable {
-    case loadFailed
     case generationFailed
-}
-
-private actor FakeLanguageModelRuntime: LocalLanguageModelRuntime {
-    enum Event: Equatable, Sendable {
-        case load(String)
-        case generate(systemPrompt: String, userPrompt: String, maxTokens: Int)
-    }
-
-    private let output: String
-    private let loadError: FakeRuntimeError?
-    private let generationError: FakeRuntimeError?
-    private var events: [Event] = []
-
-    init(
-        output: String,
-        loadError: FakeRuntimeError? = nil,
-        generationError: FakeRuntimeError? = nil
-    ) {
-        self.output = output
-        self.loadError = loadError
-        self.generationError = generationError
-    }
-
-    func load(modelIdentifier: String) throws {
-        events.append(.load(modelIdentifier))
-        if let loadError {
-            throw loadError
-        }
-    }
-
-    func generate(
-        systemPrompt: String,
-        userPrompt: String,
-        maxTokens: Int
-    ) throws -> String {
-        events.append(
-            .generate(
-                systemPrompt: systemPrompt,
-                userPrompt: userPrompt,
-                maxTokens: maxTokens
-            )
-        )
-        if let generationError {
-            throw generationError
-        }
-        return output
-    }
-
-    func status() -> LocalModelStatus {
-        LocalModelStatus(
-            state: .ready,
-            modelIdentifier: "fake-runtime",
-            progress: 1,
-            message: "ready"
-        )
-    }
-
-    func recordedEvents() -> [Event] {
-        events
-    }
 }
 
 private actor FakeRemoteLanguageModelRuntime: RemoteLanguageModelRuntime {

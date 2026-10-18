@@ -12,8 +12,6 @@ V1.6 主窗口使用自绘 sidebar、卡片、pill 与窗口内设置浮层。�
 个性化页是应用 Grid，没有默认语气。设置浮层与主窗口争用同一块内容区，系统控件使用系统蓝，
 与 V1.7 品牌（ADR 0013）的墨水蓝不一致。
 
-设计稿位于 `work/design-v1.7/main-window.html`，开发接口约定位于
-`work/design-v1.7/main-window-contract.md`。
 
 ## 决策驱动因素
 
@@ -34,7 +32,7 @@ V1.6 主窗口使用自绘 sidebar、卡片、pill 与窗口内设置浮层。�
 - 词典：原生 `Table`，7 天内学到的词带「新」标记；CSV 导入导出使用 `phrase,replacement` 两列。
 - 应用语气：卡片只用于应用语气对象。新增 `UserPreferences.defaultToneInstruction`，没有匹配到已启用的
   应用语气时使用；编辑器可用自定义示例句运行 AI 预览。
-- 设置：标准 `Settings` 场景窗口（⌘,），标签为通用 / 快捷键 / 智能 / 隐私 / 关于（`SettingsTab`）。
+- 设置：标准 `Settings` 场景窗口（⌘,），标签为通用 / 快捷键 / 智能 / 用量 / 隐私 / 关于（`SettingsTab`）。
   打开方式固定为设置 `session.settingsTab` 后调用 `openSettings()`。删除 `SettingsDestination`、
   `SettingsEntryPoint`、`isSettingsPresented`、`presentSettings(_:)`、`dismissSettings()`。
 - 强调色：`LerroTheme.accent`（浅 `#2F5BFF`、深 `#4A6BFF`）、`accentButton`（深色 `#3557F0`）、
@@ -47,7 +45,7 @@ V1.6 主窗口使用自绘 sidebar、卡片、pill 与窗口内设置浮层。�
   `LerroButtonStyle`、`LerroIconButton`、`LerroShortcutKeys`/`LerroKeycap`、`LerroAppIcon`、
   `LerroStatusDot`、`LerroChip`、`LerroEmptyState`、`LerroSectionHeader`。旧的卡片、pill 与自绘导航组件已删除。
 - Fixture：`LERRO_FIXTURE_DESTINATION=home|history|dictionary|appTones` 选择主窗口页面；
-  `LERRO_FIXTURE_PRESENTATION=settings-general|settings-shortcuts|settings-intelligence|settings-privacy|settings-about`
+  `LERRO_FIXTURE_PRESENTATION=settings-general|settings-shortcuts|settings-intelligence|settings-usage|settings-privacy|settings-about`
   打开设置窗口对应标签。HUD fixture 不变。
 
 ## 备选方案
@@ -87,10 +85,9 @@ swift test
 ./script/build_and_run.sh --release --no-launch
 ```
 
-fixture 覆盖四个主窗口页面与五个设置标签，在 1080×750、988×658、浅色、深色、Increase Contrast、
+fixture 覆盖四个主窗口页面与六个设置标签，在 1080×750、988×658、浅色、深色、Increase Contrast、
 Reduce Transparency、Reduce Motion 下截图，并用 Release app 检查真实窗口、⌘, 和 VoiceOver。
 
 ## 文档同步
 
-`AGENTS.md` Apple-native UI 不变量、`docs/ui-parity.md`、`docs/testing.md`、`docs/core-flow.md`、
-`docs/architecture.md`、`docs/README.md`、`CHANGELOG.md`。
+`AGENTS.md` 的 UI 规则、[`docs/architecture.md`](../architecture.md) 与 [`docs/development.md`](../development.md) 的 fixture 表。

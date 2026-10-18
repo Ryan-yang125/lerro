@@ -36,7 +36,6 @@ Lerro 的文案保持直接、平静、可信。每句话优先回答当前发�
 | Success | 已写入当前光标 | Inserted at the cursor |
 | Empty | 没有检测到可写入的内容 | No text was detected |
 | Permission | 开启麦克风权限以开始听写 | Allow microphone access to dictate |
-| Local model | 下载约 3.03 GB 的本地模型 | Download the 3.03 GB local model |
 | Error | 写入失败。复制结果后可继续使用。 | Insertion failed. Copy the result to continue. |
 
 ## 按钮

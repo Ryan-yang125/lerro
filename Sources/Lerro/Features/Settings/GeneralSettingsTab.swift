@@ -186,7 +186,7 @@ struct GeneralSettingsTab: View {
                     Button("重试", action: session.prepareSpeechResources)
                         .buttonStyle(LerroButtonStyle(.secondary))
                 }
-                .help(Text(verbatim: LerroInterfaceLocalization.statusString(status.message, locale: locale)))
+                .help(Text(verbatim: LerroInterfaceLocalization.string(status.message, locale: locale)))
             case .unsupported:
                 Text("当前不可用")
                     .foregroundStyle(LerroTheme.secondaryText)

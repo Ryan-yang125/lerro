@@ -127,22 +127,4 @@ public protocol PermissionChecking: Sendable {
 public protocol LoginItemManaging: Sendable {
     func isEnabled() -> Bool
     func setEnabled(_ enabled: Bool) throws
-    func reconcileAfterIdentityMigration(
-        enabled: Bool
-    ) throws -> LoginItemIdentityMigrationStatus
-}
-
-public extension LoginItemManaging {
-    func reconcileAfterIdentityMigration(
-        enabled: Bool
-    ) throws -> LoginItemIdentityMigrationStatus {
-        if isEnabled() != enabled {
-            try setEnabled(enabled)
-        }
-        return .completed
-    }
-}
-
-public protocol ApplicationIdentityMonitoring: Sendable {
-    func legacyApplicationIsRunning() -> Bool
 }

@@ -45,8 +45,6 @@ public enum HistoryRetention: String, CaseIterable, Codable, Sendable {
 }
 
 public struct UserPreferences: Codable, Equatable, Sendable {
-    public var localProfileEmail: String
-    public var localInvitationCode: String
     public var recognitionLocaleIdentifier: String
     public var translationLanguageIdentifiers: [String]
     public var appLanguage: AppLanguage
@@ -57,32 +55,13 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     public var showInDock: Bool
     public var saveAudio: Bool
     public var historyRetention: HistoryRetention
-    public var enhancementEnabled: Bool {
-        didSet {
-            let resolvedMode: IntelligenceMode = enhancementEnabled
-                ? (intelligenceMode == .raw ? .local : intelligenceMode)
-                : .raw
-            if intelligenceMode != resolvedMode {
-                intelligenceMode = resolvedMode
-            }
-        }
-    }
-    public var intelligenceMode: IntelligenceMode {
-        didSet {
-            let resolvedEnhancement = intelligenceMode != .raw
-            if enhancementEnabled != resolvedEnhancement {
-                enhancementEnabled = resolvedEnhancement
-            }
-        }
-    }
-    public var localModelIdentifier: String
+    public var intelligenceMode: IntelligenceMode
     public var remoteProvider: RemoteProviderConfiguration
     public var hotkeys: [HotkeyDefinition]
     public var appToneProfiles: [AppToneProfile]
     public var defaultToneInstruction: String
     public var automaticDictionaryLearningEnabled: Bool
     public var quickDictateEnabled: Bool
-    public var hasApprovedModelDownload: Bool
     public var hasCompletedOnboarding: Bool
     public var onboardingStepIndex: Int?
     public var handsFreeStopHintUseCount: Int
@@ -98,8 +77,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     }
 
     public init(
-        localProfileEmail: String = "",
-        localInvitationCode: String = "",
         recognitionLocaleIdentifier: String = "zh_CN",
         translationLanguageIdentifiers: [String] = ["en_US"],
         appLanguage: AppLanguage = .system,
@@ -110,23 +87,18 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         showInDock: Bool = true,
         saveAudio: Bool = false,
         historyRetention: HistoryRetention = .forever,
-        enhancementEnabled: Bool = false,
-        intelligenceMode: IntelligenceMode? = nil,
-        localModelIdentifier: String = "mlx-community/Qwen3.5-4B-MLX-4bit",
+        intelligenceMode: IntelligenceMode = .raw,
         remoteProvider: RemoteProviderConfiguration = RemoteProviderConfiguration(),
         hotkeys: [HotkeyDefinition] = UserPreferences.defaultHotkeys,
         appToneProfiles: [AppToneProfile] = [],
         defaultToneInstruction: String = "",
         automaticDictionaryLearningEnabled: Bool = true,
         quickDictateEnabled: Bool = false,
-        hasApprovedModelDownload: Bool = false,
         hasCompletedOnboarding: Bool = false,
         onboardingStepIndex: Int? = nil,
         handsFreeStopHintUseCount: Int = 0,
         modelPrices: [AIModelPrice] = []
     ) {
-        self.localProfileEmail = localProfileEmail
-        self.localInvitationCode = localInvitationCode
         self.recognitionLocaleIdentifier = recognitionLocaleIdentifier
         self.translationLanguageIdentifiers = Array(translationLanguageIdentifiers.prefix(3))
         self.appLanguage = appLanguage
@@ -137,17 +109,13 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         self.showInDock = showInDock
         self.saveAudio = saveAudio
         self.historyRetention = historyRetention
-        let resolvedMode = intelligenceMode ?? (enhancementEnabled ? .local : .raw)
-        self.enhancementEnabled = resolvedMode != .raw
-        self.intelligenceMode = resolvedMode
-        self.localModelIdentifier = localModelIdentifier
+        self.intelligenceMode = intelligenceMode
         self.remoteProvider = remoteProvider
         self.hotkeys = hotkeys
         self.appToneProfiles = appToneProfiles
         self.defaultToneInstruction = defaultToneInstruction
         self.automaticDictionaryLearningEnabled = automaticDictionaryLearningEnabled
         self.quickDictateEnabled = quickDictateEnabled
-        self.hasApprovedModelDownload = hasApprovedModelDownload
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.onboardingStepIndex = onboardingStepIndex
         self.handsFreeStopHintUseCount = handsFreeStopHintUseCount
@@ -155,8 +123,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case localProfileEmail
-        case localInvitationCode
         case recognitionLocaleIdentifier
         case translationLanguageIdentifiers
         case appLanguage
@@ -167,16 +133,13 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         case showInDock
         case saveAudio
         case historyRetention
-        case enhancementEnabled
         case intelligenceMode
-        case localModelIdentifier
         case remoteProvider
         case hotkeys
         case appToneProfiles
         case defaultToneInstruction
         case automaticDictionaryLearningEnabled
         case quickDictateEnabled
-        case hasApprovedModelDownload
         case hasCompletedOnboarding
         case onboardingStepIndex
         case handsFreeStopHintUseCount
@@ -186,23 +149,12 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     public init(from decoder: any Decoder) throws {
         let defaults = UserPreferences()
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let legacyEnhancementEnabled = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .enhancementEnabled
-        ) ?? defaults.enhancementEnabled
-        let intelligenceMode = try container.decodeIfPresent(
+        // An unknown saved mode (for example a removed one) falls back to raw.
+        let intelligenceMode = (try? container.decode(
             IntelligenceMode.self,
             forKey: .intelligenceMode
-        ) ?? (legacyEnhancementEnabled ? .local : .raw)
+        )) ?? defaults.intelligenceMode
         self.init(
-            localProfileEmail: try container.decodeIfPresent(
-                String.self,
-                forKey: .localProfileEmail
-            ) ?? defaults.localProfileEmail,
-            localInvitationCode: try container.decodeIfPresent(
-                String.self,
-                forKey: .localInvitationCode
-            ) ?? defaults.localInvitationCode,
             recognitionLocaleIdentifier: try container.decodeIfPresent(
                 String.self,
                 forKey: .recognitionLocaleIdentifier
@@ -243,17 +195,12 @@ public struct UserPreferences: Codable, Equatable, Sendable {
                 HistoryRetention.self,
                 forKey: .historyRetention
             ) ?? defaults.historyRetention,
-            enhancementEnabled: intelligenceMode != .raw,
             intelligenceMode: intelligenceMode,
-            localModelIdentifier: try container.decodeIfPresent(
-                String.self,
-                forKey: .localModelIdentifier
-            ) ?? defaults.localModelIdentifier,
             remoteProvider: try container.decodeIfPresent(
                 RemoteProviderConfiguration.self,
                 forKey: .remoteProvider
             ) ?? defaults.remoteProvider,
-            hotkeys: Self.migrateHotkeys(
+            hotkeys: Self.normalizeHotkeys(
                 try container.decodeIfPresent(
                     [HotkeyDefinition].self,
                     forKey: .hotkeys
@@ -275,10 +222,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
                 Bool.self,
                 forKey: .quickDictateEnabled
             ) ?? defaults.quickDictateEnabled,
-            hasApprovedModelDownload: try container.decodeIfPresent(
-                Bool.self,
-                forKey: .hasApprovedModelDownload
-            ) ?? defaults.hasApprovedModelDownload,
             hasCompletedOnboarding: try container.decodeIfPresent(
                 Bool.self,
                 forKey: .hasCompletedOnboarding
@@ -322,25 +265,9 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         )
     ]
 
-    private static func migrateHotkeys(_ hotkeys: [HotkeyDefinition]) -> [HotkeyDefinition] {
-        let migrated = hotkeys.map { saved in
+    private static func normalizeHotkeys(_ hotkeys: [HotkeyDefinition]) -> [HotkeyDefinition] {
+        let normalized = hotkeys.map { saved in
             var definition = saved
-
-            if let baseAction = definition.action.legacyHandsFreeBaseAction {
-                definition.action = baseAction
-                definition.activation = .toggle
-            } else {
-                switch definition.activation {
-                case .press:
-                    definition.activation = definition.usesFunctionKey && definition.action.isCaptureAction
-                        ? .hold
-                        : .toggle
-                case .doublePress:
-                    definition.activation = .toggle
-                case .hold, .toggle:
-                    break
-                }
-            }
 
             if definition.usesFunctionKey {
                 definition.modifiers |= 1 << 23
@@ -354,10 +281,8 @@ public struct UserPreferences: Codable, Equatable, Sendable {
             return definition
         }
         var signatures = Set<HotkeySignature>()
-        return migrated.filter { definition in
-            guard definition.action != .ask, definition.action != .askHandsFree else {
-                return false
-            }
+        return normalized.filter { definition in
+            guard definition.action != .ask else { return false }
             return signatures.insert(definition.signature).inserted
         }
     }
@@ -370,27 +295,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         case 59, 62: 1 << 18
         case 63: 1 << 23
         default: nil
-        }
-    }
-}
-
-private extension HotkeyAction {
-    var legacyHandsFreeBaseAction: HotkeyAction? {
-        switch self {
-        case .dictateHandsFree: .dictate
-        case .translateHandsFree: .translate
-        case .askHandsFree: .ask
-        case .dictate, .translate, .ask, .pasteLastResult, .cancel: nil
-        }
-    }
-
-    var isCaptureAction: Bool {
-        switch self {
-        case .dictate, .translate, .ask,
-             .dictateHandsFree, .translateHandsFree, .askHandsFree:
-            true
-        case .pasteLastResult, .cancel:
-            false
         }
     }
 }

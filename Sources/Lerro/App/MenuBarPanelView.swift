@@ -343,9 +343,6 @@ struct MenuBarPanelView: View {
                     Text(verbatim: session.preferences.remoteProvider.provider.lerroDisplayName)
                         .disabled(!session.preferences.remoteProvider.isReadyForUse)
                         .tag(IntelligenceMode.remote)
-                    Text(verbatim: localized("本地 AI"))
-                        .disabled(!session.localAIIsReady)
-                        .tag(IntelligenceMode.local)
                 } label: {
                     Text(verbatim: localized("智能处理"))
                 }

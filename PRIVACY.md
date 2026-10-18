@@ -1,13 +1,13 @@
 # Privacy
 
-Lerro is a local-first macOS voice-writing application with optional local and
-BYOK AI text processing. This document describes official source builds and
+Lerro is a local-first macOS voice-writing application with optional bring-your-own-key
+(BYOK) AI text processing. This document describes official source builds and
 release artifacts.
 
 ## Data stored on the Mac
 
 Lerro stores preferences, history, personal dictionary entries, per-app tone
-profiles, optional audio, and local-model files below its Application Support
+profiles, optional audio, and AI usage records below its Application Support
 directory. Provider settings and user-supplied API keys are plaintext fields in
 `preferences.json`. The directory uses mode `0700`; the preferences file uses
 mode `0600`. Software running as the same macOS user can read this file.
@@ -32,7 +32,7 @@ built-in or user-edited price table; nothing about usage is sent anywhere.
 
 ## System permissions
 
-Lerro requests two macOS permissions:
+Lerro requests two macOS permissions (Apple Speech needs no separate authorization):
 
 - Microphone, after an explicit Dictate or Translate action.
 - Accessibility, for global shortcuts, limited target context, strict text
@@ -60,7 +60,7 @@ original delivered text has a unique location. Leaving the app or field, secure
 input, unavailable Accessibility data, unsupported editors, oversized values,
 new capture, timeout, or disabled AI ends observation quietly.
 
-The selected local or remote AI receives the original and corrected spans, up
+The configured AI provider receives the original and corrected spans, up
 to 80 UTF-16 units before the change, up to 40 after it, the application name,
 and optional bundle identifier. It returns zero to three structured candidates.
 Only small lexical corrections with confidence at least 0.7 are stored.
@@ -73,27 +73,14 @@ authorization headers, invitation codes, and personal identifiers.
 
 ## Apple Speech
 
-Apple Speech performs transcription on the Mac from the microphone audio only;
-Lerro does not pass dictionary entries to it. Quick Dictate optionally uses
+Apple Speech performs transcription from the microphone audio only; Lerro does
+not pass dictionary entries to it. Quick Dictate optionally uses
 Apple `SpeechDetector` to end after about 1.2 seconds of continuous silence; it
 starts disabled and adds no permission.
 
 Lerro automatically prepares the selected Speech language resources at launch,
 when the recognition language changes, and before capture as needed. macOS
 downloads missing resources through Apple-managed services.
-
-## Local model and Hugging Face
-
-After explicit consent, Lerro downloads the selected MLX model from its public
-Hugging Face repository with no account bearer token. Hugging Face receives
-ordinary connection metadata such as IP address, User-Agent, and request time.
-Audio, transcripts, focused text, changed spans, dictionary entries, and prompts
-are not sent to Hugging Face.
-
-The default model is approximately 3.03 GB. Download continues while Lerro runs
-and supports pause, resume, stop, and restart continuation. Stop removes only
-incomplete data, resume state, and the download checkpoint; complete cached
-blobs remain. Local generation runs on the Mac.
 
 ## BYOK remote providers
 
@@ -117,10 +104,9 @@ and the optional Bundle ID to the selected AI. Suggestions, ignored suggestions,
 and the IDs of scanned entries are stored in `dictionary-suggestions.json`. The provider receives this
 content plus normal connection and billing metadata under its terms.
 
-Remote or local AI is required for refinement, translation, automatic
-correction learning, and per-app tone. Apple-only mode still provides raw
-transcription, manual dictionary management,
-preview, strict delivery, and recovery.
+AI is required for refinement, translation, automatic correction learning, and
+per-app tone. Without it, Lerro still provides raw transcription, manual dictionary
+management, preview, strict delivery, and recovery.
 
 ## Updates
 
@@ -134,19 +120,13 @@ The update service does not receive audio, transcripts, focused text, changed
 spans, dictionary entries, prompts, model output, or provider API keys. Sparkle
 verifies each update archive with the embedded Ed25519 public key.
 
-## Legacy data migration, backups, and removal
-
-An upgrade can migrate compatible data from an earlier local application
-identity. Migration runs before repositories and the model runtime initialize,
-uses a lock and receipt, and keeps rollback information. Model files move or are
-reused on the same volume to avoid a second multi-gigabyte copy. No migrated data
-leaves the Mac.
+## Backups and removal
 
 macOS backup software can include Application Support data, including plaintext
 API keys in `preferences.json`. Removing the app bundle leaves local data in
 place. For complete local removal, remove Lerro's Application Support directory
 after preserving desired exports. “Clear saved key” removes the API key and
-returns Lerro to Apple-only Dictate.
+returns Lerro to Apple-only (raw) Dictate.
 
 Material changes to data collection, networking, permissions, or retention must
 update this file, `PrivacyInfo.xcprivacy`, usage descriptions, entitlements,

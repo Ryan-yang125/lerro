@@ -232,7 +232,7 @@ public struct CaptureSession: Identifiable, Hashable, Sendable {
         startedAt: Date = .now,
         context: CapturedContext,
         targetLanguage: String? = nil,
-        intelligenceMode: IntelligenceMode = .local,
+        intelligenceMode: IntelligenceMode = .raw,
         remoteProvider: RemoteProviderConfiguration? = nil,
         toneInstruction: String? = nil,
         toneProfileApplicationName: String? = nil
@@ -294,9 +294,6 @@ public enum HotkeyAction: String, CaseIterable, Codable, Sendable {
     case dictate
     case translate
     case ask
-    case dictateHandsFree
-    case translateHandsFree
-    case askHandsFree
     case pasteLastResult
     case cancel
 }
@@ -304,20 +301,6 @@ public enum HotkeyAction: String, CaseIterable, Codable, Sendable {
 public enum ShortcutActivation: String, CaseIterable, Codable, Sendable {
     case hold
     case toggle
-
-    // Kept for decoding preferences written before the shortcut recorder
-    // exposed an explicit interaction mode.
-    case press
-    case doublePress
-
-    public var resolved: ShortcutActivation {
-        switch self {
-        case .hold:
-            .hold
-        case .toggle, .press, .doublePress:
-            .toggle
-        }
-    }
 }
 
 public enum HotkeyGesturePhase: String, Codable, Sendable {
@@ -342,7 +325,7 @@ public struct HotkeyTrigger: Equatable, Sendable {
         pressedAt: ContinuousClock.Instant? = nil
     ) {
         self.action = action
-        self.activation = activation.resolved
+        self.activation = activation
         self.phase = phase
         self.definitionID = definitionID
         self.pressedAt = pressedAt
@@ -436,7 +419,7 @@ public struct HotkeyDefinition: Codable, Hashable, Sendable, Identifiable {
         activation = try container.decodeIfPresent(
             ShortcutActivation.self,
             forKey: .activation
-        ) ?? .press
+        ) ?? .toggle
         displayName = try container.decode(String.self, forKey: .displayName)
     }
 

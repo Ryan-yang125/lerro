@@ -18,7 +18,7 @@ V1.7 品牌重做选定方向 A「光标 L」：一根光标立在一条文字�
 ## 方案
 
 - 所有状态在同一个 40 pt 高的胶囊内完成，宽度以 spring 变化，最大 480 pt。状态模型位于
-  [`CaptureHUDModel.swift`](../../Sources/Lerro/Features/Ask/CaptureHUDModel.swift)，
+  [`CaptureHUDModel.swift`](../../Sources/Lerro/Features/HUD/CaptureHUDModel.swift)，
   `AppSession.currentHUDVisualState` 是唯一来源。
 - 胶囊固定为墨黑 Liquid Glass，浅色与深色外观一致；Reduce Transparency 使用不透明墨黑，
   Increase Contrast 增加纸白描边。
@@ -72,4 +72,4 @@ AI 失败与多显示器各走一遍。
 
 ## 文档同步
 
-`AGENTS.md` Apple-native UI 不变量、`docs/core-flow.md` HUD 章节、`docs/ui-parity.md` fixture 列表。
+`AGENTS.md` 的 UI 规则与 [`docs/architecture.md`](../architecture.md) 的 UI 一节。

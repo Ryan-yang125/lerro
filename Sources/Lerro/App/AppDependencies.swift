@@ -5,7 +5,6 @@ import LerroMac
 
 struct AppDependencies: Sendable {
     let applicationPaths: ApplicationPaths?
-    let dataMigrationResult: ApplicationDataMigrationResult?
     let startupStorageError: String?
     let speech: any SpeechTranscribing
     let microphoneTest: any MicrophoneLevelTesting
@@ -17,14 +16,12 @@ struct AppDependencies: Sendable {
     let hotkeys: any HotkeyMonitoring
     let permissions: any PermissionChecking
     let loginItem: any LoginItemManaging
-    let identityMonitor: any ApplicationIdentityMonitoring
     let history: any HistoryRepository
     let dictionary: any DictionaryRepository
     let dictionarySuggestions: any DictionarySuggestionRepository
     let preferences: any PreferencesRepository
     let aiUsage: any AIUsageRepository
     let intelligence: any IntelligenceProcessing
-    let deviceCapabilities: any DeviceCapabilityAssessing
     let captureTrace: any CaptureTraceObserving
 
     static func live() -> AppDependencies {
@@ -33,36 +30,16 @@ struct AppDependencies: Sendable {
         }
 
         let paths = ApplicationPaths.live()
-        let identityMonitor = MacApplicationIdentityMonitor()
-        guard !identityMonitor.legacyApplicationIsRunning() else {
-            return fixture(
-                startupStorageError: "旧版 Lerro 工程身份仍在运行。请退出旧版后重新启动 Lerro，以安全迁移本地数据。"
-            )
-        }
-        let migrationResult: ApplicationDataMigrationResult
         do {
-            migrationResult = try ApplicationDataMigrator().migrateIfNeeded(
-                from: .legacy(),
-                to: paths
-            )
             try paths.prepareDirectories()
         } catch {
             return fixture(startupStorageError: error.localizedDescription)
         }
 
-        // The file repositories and MLX runtime are intentionally initialized
-        // only after identity migration and directory preparation succeed.
         let preferences = FilePreferencesRepository(fileURL: paths.preferencesFile)
-        let defaultPreferences = UserPreferences()
-        let modelRuntime = MLXLanguageModelRuntime(
-            defaultModelIdentifier: defaultPreferences.localModelIdentifier,
-            modelCacheDirectory: paths.modelsDirectory
-        )
-        let remoteModelRuntime = OpenAICompatibleRemoteLanguageModelRuntime()
         let aiUsage = FileAIUsageRepository(fileURL: paths.aiUsageFile)
         return AppDependencies(
             applicationPaths: paths,
-            dataMigrationResult: migrationResult,
             startupStorageError: nil,
             speech: AppleSpeechService(applicationPaths: paths),
             microphoneTest: MicrophoneLevelTester(),
@@ -74,19 +51,15 @@ struct AppDependencies: Sendable {
             hotkeys: GlobalHotkeyMonitor(),
             permissions: MacPermissionService(),
             loginItem: MacLoginItemManager(),
-            identityMonitor: identityMonitor,
             history: FileHistoryRepository(fileURL: paths.historyFile),
             dictionary: FileDictionaryRepository(fileURL: paths.dictionaryFile),
             dictionarySuggestions: FileDictionarySuggestionRepository(fileURL: paths.dictionarySuggestionsFile),
             preferences: preferences,
             aiUsage: aiUsage,
             intelligence: PipelineIntelligenceService(
-                runtime: modelRuntime,
-                remoteRuntime: remoteModelRuntime,
-                modelIdentifier: defaultPreferences.localModelIdentifier,
+                remoteRuntime: OpenAICompatibleRemoteLanguageModelRuntime(),
                 usageRecorder: aiUsage
             ),
-            deviceCapabilities: MacDeviceCapabilityAssessor(storageURL: paths.rootDirectory),
             captureTrace: OSLogCaptureTraceObserver()
         )
     }
@@ -119,7 +92,6 @@ struct AppDependencies: Sendable {
 
         return AppDependencies(
             applicationPaths: nil,
-            dataMigrationResult: nil,
             startupStorageError: startupStorageError,
             speech: FixtureSpeechTranscriber(),
             microphoneTest: FixtureMicrophoneLevelTester(),
@@ -131,14 +103,12 @@ struct AppDependencies: Sendable {
             hotkeys: FixtureHotkeyMonitor(),
             permissions: FixturePermissionChecker(),
             loginItem: FixtureLoginItemManager(),
-            identityMonitor: FixtureApplicationIdentityMonitor(),
             history: InMemoryHistoryRepository(entries: history),
             dictionary: InMemoryDictionaryRepository(entries: dictionary),
             dictionarySuggestions: InMemoryDictionarySuggestionRepository(value: fixtureDictionarySuggestions()),
             preferences: InMemoryPreferencesRepository(value: preferences),
             aiUsage: InMemoryAIUsageRepository(records: fixtureAIUsageRecords()),
-            intelligence: RuleBasedIntelligenceService(),
-            deviceCapabilities: FixtureDeviceCapabilityAssessor(),
+            intelligence: FixtureIntelligence(),
             captureTrace: DiscardingCaptureTraceObserver()
         )
     }
@@ -353,7 +323,7 @@ struct AppDependencies: Sendable {
                 useCount: 4
             ),
             DictionaryEntry(
-                phrase: "MLX",
+                phrase: "SwiftPM",
                 source: .learned,
                 createdAt: ago(20),
                 updatedAt: ago(20),
@@ -585,18 +555,19 @@ private struct FixtureLoginItemManager: LoginItemManaging {
     func setEnabled(_ enabled: Bool) throws {}
 }
 
-private struct FixtureApplicationIdentityMonitor: ApplicationIdentityMonitoring {
-    func legacyApplicationIsRunning() -> Bool { false }
-}
-
-private struct FixtureDeviceCapabilityAssessor: DeviceCapabilityAssessing {
-    func snapshot() -> DeviceCapabilitySnapshot {
-        DeviceCapabilitySnapshot(
-            chipName: "Apple M4",
-            isAppleSilicon: true,
-            supportsMetal: true,
-            physicalMemoryBytes: 24 * 1_024 * 1_024 * 1_024,
-            availableStorageBytes: 80 * 1_024 * 1_024 * 1_024
+private struct FixtureIntelligence: IntelligenceProcessing {
+    func process(_ request: IntelligenceRequest) async throws -> IntelligenceResult {
+        guard !request.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw LerroError.emptyTranscription
+        }
+        guard request.task == .polish else {
+            throw LerroError.modelUnavailable("Fixture intelligence does not translate")
+        }
+        return IntelligenceResult(
+            text: request.transcript,
+            disposition: .insert,
+            modelIdentifier: "fixture",
+            source: .raw
         )
     }
 }

@@ -120,17 +120,17 @@ def main() -> None:
         first_document = json.loads(first.read_text(encoding="utf-8"))
         if first_document.get("version") != 1 or "timestamp" in first_document.get("metadata", {}):
             raise SystemExit("deterministic SBOM document metadata is incorrect")
-        eventsource = next(
+        sparkle = next(
             component
             for component in first_document["components"]
-            if component_property(component, "lerro:package:identity") == "eventsource"
+            if component_property(component, "lerro:package:identity") == "sparkle"
         )
         resolved = json.loads((project / "Package.resolved").read_text(encoding="utf-8"))
-        eventsource_pin = next(pin for pin in resolved["pins"] if pin["identity"] == "eventsource")
-        _, namespace, repository = generate_sbom.public_github_vcs(eventsource_pin["location"])
-        expected_version = eventsource_pin["state"].get("version") or eventsource_pin["state"]["revision"]
+        sparkle_pin = next(pin for pin in resolved["pins"] if pin["identity"] == "sparkle")
+        _, namespace, repository = generate_sbom.public_github_vcs(sparkle_pin["location"])
+        expected_version = sparkle_pin["state"].get("version") or sparkle_pin["state"]["revision"]
         expected_purl = generate_sbom.swift_purl(namespace, repository, expected_version)
-        if eventsource.get("name") != repository or eventsource.get("purl") != expected_purl:
+        if sparkle.get("name") != repository or sparkle.get("purl") != expected_purl:
             raise SystemExit("Swift PURL or native repository name is incorrect")
 
         invalid_purl = temporary / "invalid-purl.cdx.json"
@@ -138,10 +138,10 @@ def main() -> None:
         invalid_component = next(
             component
             for component in invalid_document["components"]
-            if component_property(component, "lerro:package:identity") == "eventsource"
+            if component_property(component, "lerro:package:identity") == "sparkle"
         )
-        invalid_component["purl"] = f"pkg:swift/eventsource@{expected_version}"
-        invalid_component["bom-ref"] = f"pkg:swift/eventsource@{expected_version}"
+        invalid_component["purl"] = f"pkg:swift/sparkle@{expected_version}"
+        invalid_component["bom-ref"] = f"pkg:swift/sparkle@{expected_version}"
         rebind_serial(invalid_document)
         invalid_purl.write_text(json.dumps(invalid_document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         invalid_purl_manifest = temporary / "invalid-purl-manifest.json"

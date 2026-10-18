@@ -6,51 +6,53 @@ brand
 
 ## Users
 
-Lerro is for Apple silicon Mac users who write throughout the day and want
-speech to become editable text at the active cursor. They value speed, native
-macOS behavior, local control, transparent permissions, and the freedom to
-choose direct transcription, on-device processing, or their own cloud model.
+Lerro is for Apple silicon Mac users on macOS 26 who write throughout the day
+and want speech to become correct, editable text at the active cursor. Many mix
+Chinese and English in one sentence. They value speed, native macOS behavior,
+transparent permissions, and the freedom to bring their own AI provider.
 
-## Product Purpose
+## Product purpose
 
-Lerro turns natural speech into useful text in any Mac app with the shortest
-practical path from voice to cursor. Success means a user can press a familiar
-shortcut, speak, and continue writing without managing an account, subscription,
-or hosted Lerro workspace.
+Lerro turns speech into text in any Mac app by the shortest path from voice to
+cursor. A user presses a shortcut, speaks, presses it again, and keeps writing.
+There is no account, subscription, or hosted Lerro service.
 
-The product leads with macOS 26 Apple Speech and Apple Translation. Optional MLX
-processing keeps refinement on the Mac, while BYOK providers remain an explicit
-user choice. Lerro has no product analytics or telemetry pipeline.
+- Apple `SpeechTranscriber` transcribes live, with the microphone opening first.
+- Optional AI (the user's own OpenAI-compatible API key, DeepSeek by default)
+  fixes misheard words, polishes, and translates, using a personal dictionary and
+  per-app tone.
+- Delivery goes to the exact target field through the clipboard and Command-V.
+  If the target changed, the text stays on the clipboard with a Copy again card.
+- Corrections the user makes after a write can become dictionary entries.
+- Lerro has no analytics or telemetry. The network is used for Apple's Speech
+  language assets, the user's own AI endpoint, and signed update checks.
 
-## Brand Personality
+Lerro is open source (Apache-2.0) and in maintenance mode.
 
-Native, decisive, private. The voice is concise and specific, with the quiet
-confidence of a well-made Mac utility. Product claims explain exactly which
-paths stay local and when resource setup, updates, or BYOK use the network.
+## Brand personality
+
+Native, decisive, private. The voice is concise and specific, like a well-made Mac
+utility. Claims state exactly which paths stay local and when the network is used.
 
 ## Anti-references
 
 - Generic AI landing pages built from repeated equal cards, gradients, and vague
   promises.
-- The previous Lerro website's cool-gray SaaS styling, static fake product
-  proof, and engineering-heavy product story.
-- Absolute privacy or offline claims that hide Apple resource downloads, signed
-  update checks, or user-selected BYOK traffic.
-- Decorative effects that compete with the actual application screenshots.
+- Absolute privacy or offline claims that hide Apple resource downloads, update
+  checks, or the user's AI provider traffic.
+- Decorative effects that compete with the real application screenshots.
 
-## Design Principles
+## Design principles
 
-- Show the shipped Mac app and its real interaction states.
-- Lead with the native Apple Speech path and the voice-to-cursor outcome.
-- Make local, optional-network, and BYOK boundaries immediately understandable.
-- Keep every page compact, direct, and useful enough to support a download
-  decision.
-- Share one product story across the website, README, metadata, screenshots, and
-  release notes.
+- Show the shipped Mac app and its real states.
+- Lead with the voice-to-cursor outcome.
+- Make local, optional-network, and bring-your-own-key boundaries clear.
+- Keep each page compact and useful for a download decision.
+- Keep one product story across the website, README, metadata, screenshots, and
+  release notes. Product claims match [`PRIVACY.md`](PRIVACY.md).
 
-## Accessibility & Inclusion
+## Accessibility
 
-Target WCAG 2.2 AA for the public website. Preserve keyboard navigation, visible
-focus, semantic landmarks, sufficient contrast, responsive layouts from 320 px
-upward, meaningful image descriptions, and reduced-motion alternatives. Product
-screenshots use synthetic examples and contain no personal content.
+Target WCAG 2.2 AA on the website: keyboard navigation, visible focus, semantic
+landmarks, sufficient contrast, layouts from 320 px, image descriptions, and
+reduced-motion alternatives. Screenshots use synthetic content.

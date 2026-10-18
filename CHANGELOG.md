@@ -6,6 +6,24 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+### Removed
+
+- The local AI mode (Qwen through MLX), its 3.03 GB model download, device-aware
+  recommendations, and the vendored Hugging Face packages. AI polish and
+  translation use the API you configure. A saved local mode loads as Apple-only.
+- The data migration from the pre-Lerro app identity and the unused rule-based
+  text pipeline.
+
+### Changed
+
+- The app archive is about 4 MB, down from 11.7 MB.
+- Development happens in the public repository; the private mirror, export and
+  scan scripts are gone. CI is one Linux job for scripts, documentation links,
+  Python tests and the website; Swift builds, tests and packaging run locally in
+  `script/verify_release.sh`.
+- Documentation is reduced to `docs/architecture.md`, `docs/development.md` and
+  the current decision records.
+
 ## [1.7.0] - 2026-10-19
 
 ### Added

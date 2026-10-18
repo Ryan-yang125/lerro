@@ -123,13 +123,7 @@ def main() -> None:
             fail(f"duplicate notice-table identity: {identity}")
         table[key] = expression
 
-    vendor_root = repo / "Vendor"
-    vendors = {
-        child.name.casefold(): child
-        for child in vendor_root.iterdir()
-        if child.is_dir() and (child / "Package.swift").is_file()
-    }
-    expected = set(pins) | set(vendors)
+    expected = set(pins)
     missing_rows = sorted(expected - set(table))
     extra_rows = sorted(set(table) - expected)
     if missing_rows:
@@ -160,21 +154,6 @@ def main() -> None:
         expression = detected_license(license_path)
         if expression == "UNKNOWN":
             fail(f"unrecognized license text: {license_path}")
-        if table[identity] != expression:
-            fail(
-                f"license claim mismatch for {identity}: "
-                f"table={table[identity]}, file={expression}"
-            )
-        verified.append((identity, expression, sha256(license_path)))
-
-    for identity, directory in sorted(vendors.items()):
-        license_path = first_license(directory)
-        upstream = directory / "UPSTREAM.md"
-        if not upstream.is_file() or upstream.stat().st_size == 0:
-            fail(f"missing nonempty Vendor provenance: {upstream}")
-        expression = detected_license(license_path)
-        if expression == "UNKNOWN":
-            fail(f"unrecognized vendored license text: {license_path}")
         if table[identity] != expression:
             fail(
                 f"license claim mismatch for {identity}: "

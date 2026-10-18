@@ -9,15 +9,12 @@ cd "$project_dir"
 required_files=(
     AGENTS.md
     CLAUDE.md
+    README.md
     docs/README.md
-    docs/handoff/README.md
-    docs/handoff/current-state.md
-    docs/handoff/maintainer-readiness.md
-    docs/handoff/release-evidence-template.md
+    docs/development.md
+    docs/architecture.md
     .agents/skills/lerro-development/SKILL.md
-    .agents/skills/lerro-development/agents/openai.yaml
     .claude/skills/lerro-development/SKILL.md
-    config/maintainer.env.example
 )
 
 for relative in "${required_files[@]}"; do
@@ -92,34 +89,12 @@ if not claude_lines or claude_lines[0] != "@AGENTS.md":
 
 agents_text = read("AGENTS.md")
 for marker in (
-    "docs/handoff/README.md",
+    "docs/development.md",
     ".agents/skills/lerro-development/SKILL.md",
     "script/validate_agent_workspace.sh",
 ):
     if marker not in agents_text:
         errors.append(f"AGENTS.md is missing bootstrap marker: {marker}")
-
-openai_yaml = read(".agents/skills/lerro-development/agents/openai.yaml")
-for marker in ("display_name:", "short_description:", "$lerro-development"):
-    if marker not in openai_yaml:
-        errors.append(f"openai.yaml is missing: {marker}")
-
-allowlist = {
-    line.strip()
-    for line in read("script/public_repo_allowlist.txt").splitlines()
-    if line.strip() and not line.lstrip().startswith("#")
-}
-for entry in (
-    "AGENTS.md",
-    "CLAUDE.md",
-    ".agents/",
-    ".claude/",
-    "docs/handoff/",
-    "script/check_maintainer_readiness.sh",
-    "script/validate_agent_workspace.sh",
-):
-    if entry not in allowlist:
-        errors.append(f"public allowlist is missing agent workspace entry: {entry}")
 
 markdown_files = [
     root / "AGENTS.md",
@@ -147,6 +122,6 @@ if errors:
 
 print(
     f"Agent workspace validation passed: {len(markdown_files)} Markdown files, "
-    f"{checked_links} local links, canonical Claude/Codex skill."
+    f"{checked_links} local links, canonical Claude skill entry."
 )
 PY

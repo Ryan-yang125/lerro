@@ -160,8 +160,8 @@ struct CaptureTraceTests {
         recorder.begin(trace)
         recorder.setProcessingRoute(.remote, id: UUID())
         #expect(recorder.current?.processingRoute == nil)
-        recorder.setProcessingRoute(.local, id: trace.id)
-        #expect(recorder.current?.processingRoute == .local)
+        recorder.setProcessingRoute(.raw, id: trace.id)
+        #expect(recorder.current?.processingRoute == .raw)
     }
 
     // MARK: Segments

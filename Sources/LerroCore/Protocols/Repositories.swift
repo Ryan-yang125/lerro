@@ -56,25 +56,13 @@ public protocol PreferencesRepository: Sendable {
 }
 
 public protocol IntelligenceProcessing: Sendable {
-    func prepare(modelIdentifier: String) async throws
-    func pauseLocalModelPreparation() async
-    func discardLocalModelDownload() async throws
     func process(_ request: IntelligenceRequest) async throws -> IntelligenceResult
     func classifyCorrection(
         _ request: DictionaryLearningRequest
     ) async throws -> DictionaryLearningDecision
-    func modelStatus() async -> LocalModelStatus
     func testRemoteConnection(
         configuration: RemoteProviderConfiguration
     ) async throws -> RemoteConnectionTestOutcome
-}
-
-public protocol LocalLanguageModelRuntime: Sendable {
-    func load(modelIdentifier: String) async throws
-    func pauseLoad() async
-    func discardDownload() async throws
-    func generate(systemPrompt: String, userPrompt: String, maxTokens: Int) async throws -> String
-    func status() async -> LocalModelStatus
 }
 
 public protocol RemoteLanguageModelRuntime: Sendable {
@@ -96,60 +84,10 @@ public extension IntelligenceProcessing {
         _ = request
         throw LerroError.modelUnavailable("当前智能服务不支持自动词典学习")
     }
-}
-
-public extension IntelligenceProcessing {
-    func pauseLocalModelPreparation() async {}
-
-    func discardLocalModelDownload() async throws {}
 
     func testRemoteConnection(
         configuration: RemoteProviderConfiguration
     ) async throws -> RemoteConnectionTestOutcome {
         throw LerroError.remoteUnavailable("当前智能服务没有配置远程模型运行时")
-    }
-}
-
-public extension LocalLanguageModelRuntime {
-    func pauseLoad() async {}
-
-    func discardDownload() async throws {}
-}
-
-public enum LocalModelState: String, Codable, Sendable {
-    case unavailable
-    case downloading
-    case paused
-    case ready
-    case loading
-    case loaded
-    case failed
-}
-
-public struct LocalModelStatus: Codable, Sendable, Equatable {
-    public var state: LocalModelState
-    public var modelIdentifier: String
-    public var progress: Double
-    public var message: String
-    public var downloadedBytes: Int64
-    public var totalBytes: Int64
-    public var bytesPerSecond: Double?
-
-    public init(
-        state: LocalModelState,
-        modelIdentifier: String,
-        progress: Double = 0,
-        message: String = "",
-        downloadedBytes: Int64 = 0,
-        totalBytes: Int64 = 0,
-        bytesPerSecond: Double? = nil
-    ) {
-        self.state = state
-        self.modelIdentifier = modelIdentifier
-        self.progress = progress
-        self.message = message
-        self.downloadedBytes = max(0, downloadedBytes)
-        self.totalBytes = max(0, totalBytes)
-        self.bytesPerSecond = bytesPerSecond
     }
 }

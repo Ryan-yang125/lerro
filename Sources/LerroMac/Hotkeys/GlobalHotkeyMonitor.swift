@@ -494,9 +494,9 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
                 return finalizeModifierResult(result, current: current, ownedBeforeEvent: ownedBeforeEvent)
             }
 
-            if active.activation.resolved == .hold, shrank {
+            if active.activation == .hold, shrank {
                 result.triggers.append(trigger(for: active, phase: .ended))
-            } else if active.activation.resolved == .hold {
+            } else if active.activation == .hold {
                 result.triggers.append(
                     HotkeyTrigger(action: .cancel, activation: .toggle, phase: .began)
                 )
@@ -521,7 +521,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
                 return finalizeModifierResult(result, current: current, ownedBeforeEvent: ownedBeforeEvent)
             }
 
-            if pending.activation.resolved == .toggle,
+            if pending.activation == .toggle,
                shrank,
                !modifierSequenceBlocked {
                 result.triggers.append(
@@ -623,7 +623,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         pendingModifierDefinition = definition
         pendingModifierPressedAt = currentEventAt
         modifierSequenceOwned = true
-        if definition.activation.resolved == .hold {
+        if definition.activation == .hold {
             result.timerDirective = .schedule(definitionID: definition.id)
         }
     }
@@ -636,7 +636,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         result.timerDirective = .cancel
         result.triggers.append(trigger(for: definition, phase: .began, pressedAt: currentEventAt))
         result.upgradeContinuation = .modifier(definition: definition)
-        if definition.activation.resolved == .hold {
+        if definition.activation == .hold {
             activeModifierDefinition = definition
         } else {
             modifierSequenceBlocked = true
@@ -732,7 +732,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         claimedKeyCodes.insert(keyCode)
         result.suppressEvent = true
         result.triggers.append(trigger(for: definition, phase: .began, pressedAt: currentEventAt))
-        if definition.activation.resolved == .hold {
+        if definition.activation == .hold {
             activeKeyDefinitions[keyCode] = definition
         }
     }
@@ -763,7 +763,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         let wasClaimed = claimedKeyCodes.remove(keyCode) != nil
         var result = ProcessingResult(suppressEvent: wasClaimed)
         if let definition = activeKeyDefinitions.removeValue(forKey: keyCode),
-           definition.activation.resolved == .hold {
+           definition.activation == .hold {
             result.triggers.append(trigger(for: definition, phase: .ended))
         }
         finishPhysicalDrainIfPossible()
@@ -791,11 +791,11 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         switch continuation {
         case let .regular(keyCode, definition):
             claimedKeyCodes.insert(keyCode)
-            if definition.activation.resolved == .hold {
+            if definition.activation == .hold {
                 activeKeyDefinitions[keyCode] = definition
             }
         case let .modifier(definition):
-            if definition.activation.resolved == .hold {
+            if definition.activation == .hold {
                 activeModifierDefinition = definition
             } else {
                 modifierSequenceBlocked = true
@@ -840,7 +840,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
               let expectedDefinitionID,
               let pending = pendingModifierDefinition,
               pending.id == expectedDefinitionID,
-              pending.activation.resolved == .hold,
+              pending.activation == .hold,
               requiredFlags(for: pending) == currentModifierFlags,
               !modifierSequenceBlocked else {
             return nil

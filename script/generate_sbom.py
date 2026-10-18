@@ -22,7 +22,6 @@ from urllib.parse import quote, urlsplit
 
 
 CYCLONEDX_SCHEMA = "https://cyclonedx.org/schema/bom-1.7.schema.json"
-EXPECTED_COMPONENT_COUNT = 17
 SYSTEM_FRAMEWORKS = (
     "ApplicationServices,AVFoundation,Carbon,ServiceManagement,Speech,Translation"
 )
@@ -192,24 +191,6 @@ def package_maps(project: pathlib.Path) -> tuple[dict[str, pathlib.Path], dict[s
     return checkouts, artifacts
 
 
-def vendor_metadata(vendor: pathlib.Path) -> tuple[str, str, str]:
-    """Return public upstream URL, release version, and immutable revision."""
-    upstream_path = vendor / "UPSTREAM.md"
-    if not upstream_path.is_file() or upstream_path.stat().st_size == 0:
-        fail(f"missing Vendor provenance: {vendor.name}/UPSTREAM.md")
-    text = upstream_path.read_text(encoding="utf-8")
-    url_match = re.search(r"https://github\.com/[^\s)>`]+", text)
-    release_match = re.search(
-        r"(?:Upstream release baseline|Release):\s*`?([0-9][0-9A-Za-z.+-]*)`?", text
-    )
-    revision_match = re.search(
-        r"(?:Upstream baseline commit|Commit):\s*`?([0-9a-f]{40})`?", text
-    )
-    if url_match is None or release_match is None or revision_match is None:
-        fail(f"incomplete Vendor provenance for {vendor.name}")
-    return url_match.group(0), release_match.group(1), revision_match.group(1)
-
-
 def resolved_graph(
     project: pathlib.Path, expected: set[str], graph_path: pathlib.Path | None = None
 ) -> tuple[dict[str, set[str]], set[str], set[str]]:
@@ -297,7 +278,6 @@ def package_component(
     license_path: pathlib.Path,
     source_license_hash: str,
     resources: pathlib.Path,
-    source_kind: str,
     graph_reachable: bool,
 ) -> dict[str, object]:
     vcs_url, namespace, repository = public_github_vcs(upstream)
@@ -314,7 +294,7 @@ def package_component(
         "externalReferences": [{"type": "vcs", "url": vcs_url}],
         "properties": [
             {"name": "lerro:package:identity", "value": identity},
-            {"name": "lerro:package:source", "value": source_kind},
+            {"name": "lerro:package:source", "value": "swiftpm-resolved"},
             {"name": "lerro:package:revision", "value": revision},
             {
                 "name": "lerro:package:license-evidence",
@@ -402,14 +382,9 @@ def main() -> None:
     }
     if len(pins) != len(resolved.get("pins", [])):
         fail("Package.resolved has a pin without identity or revision")
-    vendors = {
-        path.name.casefold(): path
-        for path in (project / "Vendor").iterdir()
-        if path.is_dir() and (path / "Package.swift").is_file()
-    }
-    expected = set(pins) | set(vendors)
-    if len(expected) != EXPECTED_COMPONENT_COUNT:
-        fail(f"expected {EXPECTED_COMPONENT_COUNT} package components, found {len(expected)}")
+    expected = set(pins)
+    if not expected:
+        fail("Package.resolved contains no package components")
 
     claims = license_claims(notices_path)
     if set(claims) != expected:
@@ -453,27 +428,18 @@ def main() -> None:
         actual_license = detected_license(resources / license_path)
         if actual_license != claims[identity]:
             fail(f"packaged license claim mismatch for {identity}: {actual_license}")
-        if identity in pins:
-            pin = pins[identity]
-            state = pin["state"]
-            revision = str(state["revision"])
-            component_version = str(state.get("version") or revision)
-            upstream = str(pin["location"])
-            _, _, component_name = public_github_vcs(upstream)
-            evidence = artifacts.get(identity, checkouts.get(identity))
-            if evidence is None:
-                fail(f"missing source license evidence for {identity}")
-            source_license = first_license(evidence)
-            if detected_license(source_license) != actual_license:
-                fail(f"source and packaged license claims differ for {identity}")
-            source_kind = "swiftpm-resolved"
-        else:
-            upstream, component_version, revision = vendor_metadata(vendors[identity])
-            _, _, component_name = public_github_vcs(upstream)
-            source_license = first_license(vendors[identity])
-            if detected_license(source_license) != actual_license:
-                fail(f"source and packaged license claims differ for {identity}")
-            source_kind = "vendored"
+        pin = pins[identity]
+        state = pin["state"]
+        revision = str(state["revision"])
+        component_version = str(state.get("version") or revision)
+        upstream = str(pin["location"])
+        _, _, component_name = public_github_vcs(upstream)
+        evidence = artifacts.get(identity, checkouts.get(identity))
+        if evidence is None:
+            fail(f"missing source license evidence for {identity}")
+        source_license = first_license(evidence)
+        if detected_license(source_license) != actual_license:
+            fail(f"source and packaged license claims differ for {identity}")
         source_license_hash = sha256(source_license)
         if source_license_hash != sha256(resources / license_path):
             fail(f"source and packaged license hashes differ for {identity}")
@@ -487,7 +453,6 @@ def main() -> None:
             license_path=license_path,
             source_license_hash=source_license_hash,
             resources=resources,
-            source_kind=source_kind,
             graph_reachable=identity in reachable,
         )
         references[identity] = str(component["bom-ref"])

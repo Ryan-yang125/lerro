@@ -4,7 +4,6 @@ import LerroCore
 private enum OnboardingAIRoute: String, CaseIterable, Identifiable {
     case apple
     case remote
-    case local
 
     var id: String { rawValue }
 }
@@ -18,14 +17,11 @@ struct OnboardingAISetupView: View {
     @State private var connectionOutcome: RemoteConnectionTestOutcome?
     @State private var isTestingConnection = false
     @State private var isSavingProvider = false
-    @State private var isDiscardConfirmationPresented = false
 
     init(session: AppSession) {
         self.session = session
         let selectedRoute: OnboardingAIRoute = switch session.preferences.intelligenceMode {
         case .raw: .apple
-        case .local where !session.preferences.hasApprovedModelDownload: .apple
-        case .local: .local
         case .remote: .remote
         }
         _selectedRoute = State(initialValue: selectedRoute)
@@ -36,12 +32,9 @@ struct OnboardingAISetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            deviceSummary
             routePicker
 
             switch selectedRoute {
-            case .local:
-                localSetup
             case .remote:
                 remoteSetup
             case .apple:
@@ -59,48 +52,6 @@ struct OnboardingAISetupView: View {
         .onAppear {
             keepIncompleteRouteOnBaseDictation()
         }
-        .confirmationDialog(
-            "停止本地模型下载？",
-            isPresented: $isDiscardConfirmationPresented,
-            titleVisibility: .visible
-        ) {
-            Button("停止并删除断点", role: .destructive) {
-                session.discardLocalModelDownload()
-            }
-            Button("保留下载", role: .cancel) {}
-        } message: {
-            Text("已完成的模型文件会继续保留，未完成文件和下载断点将被删除。")
-        }
-    }
-
-    private var deviceSummary: some View {
-        HStack(alignment: .top, spacing: 12) {
-            OnboardingIconView(icon: recommendationIcon, size: 16)
-                .foregroundStyle(recommendationColor)
-                .frame(width: 24)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(LocalizedStringKey(recommendationTitle))
-                    .font(LerroFont.bodyEmphasis)
-                if let readiness = session.localAIReadiness {
-                    Text(verbatim: deviceFacts(readiness.device))
-                        .font(LerroFont.caption)
-                        .foregroundStyle(LerroTheme.secondaryText)
-                    Text(LocalizedStringKey(recommendationDetail))
-                        .font(LerroFont.caption)
-                        .foregroundStyle(LerroTheme.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    ProgressView("正在检测这台 Mac…")
-                        .controlSize(.small)
-                }
-            }
-            Spacer()
-        }
-        .padding(14)
-        .onboardingSurface(radius: 12)
-        .accessibilityElement(children: .combine)
     }
 
     private var routePicker: some View {
@@ -115,11 +66,6 @@ struct OnboardingAISetupView: View {
                 title: "远端 AI",
                 detail: "快速启用 · 使用自己的 Key"
             )
-            routeButton(
-                .local,
-                title: "本地 AI",
-                detail: "设备运行 · 约 3.03 GB"
-            )
         }
         .accessibilityElement(children: .contain)
     }
@@ -130,17 +76,11 @@ struct OnboardingAISetupView: View {
         detail: String
     ) -> some View {
         let selected = selectedRoute == route
-        let disabled = route == .local
-            && session.localAIReadiness?.recommendation == .localUnavailable
         return Button {
             selectedRoute = route
-            if route == .apple
-                || (route == .local && !session.preferences.hasApprovedModelDownload)
-                || (route == .remote && !providerDraft.configuration.isReadyForUse) {
+            if route == .apple || !providerDraft.configuration.isReadyForUse {
                 session.activateIntelligenceMode(.raw)
-            } else if route == .local, session.preferences.hasApprovedModelDownload {
-                session.activateIntelligenceMode(.local)
-            } else if route == .remote {
+            } else {
                 session.activateIntelligenceMode(.remote)
             }
         } label: {
@@ -167,66 +107,9 @@ struct OnboardingAISetupView: View {
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(LerroPressButtonStyle())
-        .disabled(disabled)
         .accessibilityLabel(Text(LocalizedStringKey(title)))
         .accessibilityValue(Text(LocalizedStringKey(selected ? "已选择" : "未选择")))
         .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    private var localSetup: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Qwen3.5 4B")
-                        .font(LerroFont.bodyEmphasis)
-                    Text(LocalizedStringKey(localStatusText))
-                        .font(LerroFont.caption)
-                        .foregroundStyle(LerroTheme.secondaryText)
-                }
-                Spacer()
-
-                if session.modelStatus.state == .downloading
-                    || session.modelStatus.state == .loading {
-                    Button("暂停") { session.pauseLocalModelPreparation() }
-                        .buttonStyle(LerroButtonStyle(.secondary))
-                } else {
-                    Button(LocalizedStringKey(localActionTitle)) {
-                        session.requestLocalModelPreparation()
-                    }
-                    .buttonStyle(LerroButtonStyle(.primary))
-                    .disabled(session.localAIIsReady)
-                }
-
-                if session.modelStatus.state == .paused
-                    || session.modelStatus.state == .downloading
-                    || session.modelStatus.state == .loading {
-                    Button("停止", role: .destructive) {
-                        isDiscardConfirmationPresented = true
-                    }
-                    .buttonStyle(LerroButtonStyle(.destructive))
-                }
-            }
-
-            if showsLocalProgress {
-                ProgressView(value: max(0, min(1, session.modelStatus.progress)))
-                    .tint(LerroTheme.accent)
-                    .accessibilityLabel("本地模型下载进度")
-                HStack {
-                    Text(verbatim: progressText)
-                    Spacer()
-                    Text("可关闭此页面，Lerro 运行期间会继续下载")
-                }
-                .font(LerroFont.caption)
-                .foregroundStyle(LerroTheme.secondaryText)
-            }
-
-            Text("下载期间可以继续使用 Apple 听写。模型就绪后可使用 AI 润色、翻译、自动词典和应用语气。")
-                .font(LerroFont.caption)
-                .foregroundStyle(LerroTheme.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(14)
-        .onboardingSurface(radius: 12)
     }
 
     private var remoteSetup: some View {
@@ -381,14 +264,10 @@ struct OnboardingAISetupView: View {
 
     private func keepIncompleteRouteOnBaseDictation() {
         switch selectedRoute {
-        case .local where !session.preferences.hasApprovedModelDownload:
-            session.activateIntelligenceMode(.raw)
         case .remote where !providerDraft.configuration.isReadyForUse:
             session.activateIntelligenceMode(.raw)
         case .apple:
             session.activateIntelligenceMode(.raw)
-        case .local:
-            session.activateIntelligenceMode(.local)
         case .remote:
             session.activateIntelligenceMode(.remote)
         }
@@ -401,93 +280,5 @@ struct OnboardingAISetupView: View {
             _ = providerDraft.updateBaseURL(updated)
             connectionOutcome = nil
         }
-    }
-
-    private var recommendationTitle: String {
-        switch session.localAIReadiness?.recommendation {
-        case .localRecommended: "这台 Mac 适合本地 AI"
-        case .remoteRecommended: "推荐使用 API 模型"
-        case .localUnavailable: "这台 Mac 需要 API 模型"
-        case nil: "正在检测这台 Mac"
-        }
-    }
-
-    private var recommendationDetail: String {
-        guard let readiness = session.localAIReadiness else { return "" }
-        return switch readiness.recommendation {
-        case .localRecommended:
-            "内存与磁盘空间充足，本地模型可以兼顾隐私和离线使用。"
-        case .remoteRecommended:
-            readiness.hasEnoughStorage
-                ? "当前内存配置更适合 API 模型，本地模式仍可手动选择。"
-                : "可用磁盘空间低于建议值，API 模型可以节省本机空间。"
-        case .localUnavailable:
-            "当前硬件缺少本地模型运行条件，请配置 OpenAI-compatible API。"
-        }
-    }
-
-    private var recommendationIcon: OnboardingIcon {
-        switch session.localAIReadiness?.recommendation {
-        case .localRecommended: .system("checkmark.circle.fill")
-        case .remoteRecommended: .system("speedometer")
-        case .localUnavailable: .system("exclamationmark.triangle.fill")
-        case nil: .system("ellipsis.circle")
-        }
-    }
-
-    private var recommendationColor: Color {
-        switch session.localAIReadiness?.recommendation {
-        case .localRecommended: LerroTheme.success
-        case .remoteRecommended, .localUnavailable: LerroTheme.warning
-        case nil: LerroTheme.secondaryText
-        }
-    }
-
-    private func deviceFacts(_ device: DeviceCapabilitySnapshot) -> String {
-        let memory = ByteCountFormatter.string(
-            fromByteCount: Int64(clamping: device.physicalMemoryBytes),
-            countStyle: .memory
-        )
-        let storage = ByteCountFormatter.string(
-            fromByteCount: device.availableStorageBytes,
-            countStyle: .file
-        )
-        return LerroInterfaceLocalization.format(
-            "%@ · %@ 内存 · %@ 可用空间",
-            locale: locale,
-            arguments: device.chipName, memory, storage
-        )
-    }
-
-    private var localStatusText: String {
-        session.modelStatus.message.isEmpty ? "等待准备" : session.modelStatus.message
-    }
-
-    private var localActionTitle: String {
-        if session.localAIIsReady { return "已就绪" }
-        return switch session.modelStatus.state {
-        case .paused: "继续下载"
-        case .failed: "重试"
-        case .ready where session.modelStatus.progress >= 1: "加载模型"
-        case .unavailable, .ready: "下载并启用"
-        case .downloading, .loading: "准备中"
-        case .loaded: "已就绪"
-        }
-    }
-
-    private var showsLocalProgress: Bool {
-        session.modelStatus.state == .downloading
-            || session.modelStatus.state == .loading
-            || session.modelStatus.state == .paused
-    }
-
-    private var progressText: String {
-        let status = session.modelStatus
-        guard status.downloadedBytes > 0, status.totalBytes > 0 else {
-            return "\(Int(status.progress * 100))%"
-        }
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return "\(formatter.string(fromByteCount: status.downloadedBytes)) / \(formatter.string(fromByteCount: status.totalBytes))"
     }
 }

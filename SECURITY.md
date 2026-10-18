@@ -8,8 +8,7 @@ impact, and the feasibility of a safe backport.
 
 ## Reporting a vulnerability
 
-After the public repository enables GitHub Private Vulnerability Reporting,
-open the repository's **Security** tab, choose **Advisories**, then select
+Open the repository's **Security** tab on GitHub, choose **Advisories**, then select
 **Report a vulnerability**. This is the preferred channel and keeps the report
 inside a private GitHub Security Advisory.
 
@@ -27,26 +26,27 @@ Maintainers will coordinate status and disclosure through the private advisory.
 
 Lerro is a local-first macOS voice-writing application. This policy covers:
 
-- `LerroCore` domain rules, persistence, migration, and text-processing code.
-- `LerroIntelligence` model download, cache, loading, and generation paths.
-- `LerroMac` audio, Speech, Accessibility, clipboard, global-hotkey,
-  permission, login-item, panel, and lifecycle adapters.
+- `LerroCore` rules, persistence, and text-processing code.
+- `LerroIntelligence`, the OpenAI-compatible remote runtime.
+- `LerroMac` audio, Speech, Accessibility, clipboard, global-hotkey, permission,
+  login-item, panel, and lifecycle adapters.
 - The `Lerro` SwiftUI app, dependency composition, resources, and session
   orchestration.
-- Build, signing, notarization, packaging, release, and public-export scripts.
+- Build, signing, notarization, packaging, and release scripts, and the
+  `distribution/` update Worker.
 - First-party release artifacts distributed by the project.
 
 The security boundary includes local user text and audio, macOS permission
-identity, focused application identity, clipboard contents, model artifacts,
-release credentials supplied by the maintainer's environment, and the integrity
+identity, focused application identity, clipboard contents, the user's provider
+API key, release credentials in the maintainer's environment, and the integrity
 of published archives.
 
 ## Threat model and trust boundaries
 
 Potentially untrusted inputs include microphone samples, recognized text,
 focused-element content, clipboard types, CSV imports, stored JSON documents,
-model responses, downloaded model files and metadata, environment variables,
-filesystem state, and archive contents.
+remote model responses, environment variables, filesystem state, and archive
+contents.
 
 macOS frameworks, the active user's explicit actions, and release credentials
 provided through an authorized maintainer environment form distinct trust
@@ -56,39 +56,32 @@ user consent by themselves.
 
 ## Security invariants
 
-- Secure capture targets fail closed before recording. Selection-aware Rewrite
-  revalidates the target, focused element, secure state, and original selection
-  before text delivery.
-- Plain insertion sends Command-V to the keyboard focus present at commit time.
-- Plain insertion restores its best-effort clipboard archive after the 500 ms
-  consumption window. Selection-aware Rewrite preserves every readable item and
-  type and restores only while the active session still owns its marker.
+- Secure capture targets fail closed before recording. Delivery revalidates the
+  target application, focused element, value, selection, and secure state against
+  the fingerprint taken at capture start; any change stops the write and leaves
+  the final text on the clipboard.
+- Text delivery uses a session-owned clipboard transaction. The previous clipboard
+  is restored after the 500 ms consumption window only while the session still
+  owns the temporary content.
 - Cancellation reaches activation, pre-commit clipboard waits, key-event checks,
-  speech, output-audio restoration, temporary recording cleanup, and model loading.
-  A committed Command-V finishes its consumption wait and clipboard restoration.
+  speech, output-audio restoration, and temporary recording cleanup. A committed
+  Command-V finishes its consumption wait and clipboard restoration.
 - A stale session or generation cannot update a newer capture.
-- Logs exclude transcripts, focused or selected text, prompts, answers, audio,
-  credentials, personal paths, email addresses, and invitation codes.
-- User-supplied provider API keys are plaintext fields in the local
-  `preferences.json`. The Application Support root uses mode `0700`, the file
-  uses mode `0600`, and every atomic replacement reapplies the file mode.
-- Remote-provider requests use an ephemeral URL session, HTTPS endpoint policy,
-  bounded responses, cancellation, and credential-safe errors. Connection tests
-  carry only fixed synthetic content.
-- Raw-audio retention stays opt-in. A “never save” history policy prevents new
+- Logs exclude transcripts, focused or selected text, prompts, model output,
+  audio, credentials, personal paths, and email addresses.
+- The provider API key is a plaintext field in the local `preferences.json`. The
+  Application Support root uses mode `0700`, the file uses mode `0600`, and every
+  atomic replacement reapplies the file mode.
+- Remote requests use an ephemeral URL session, an HTTPS endpoint policy (HTTP only
+  for loopback), bounded responses, blocked cross-origin redirects, cancellation,
+  and credential-safe errors. Connection tests carry only fixed synthetic content.
+- Raw-audio retention is opt-in. A "never save" history policy prevents new
   history and recording writes.
-- Public Hugging Face downloads use `bearerToken: nil` and do not inherit local
-  CLI credentials.
-- Model installation validates expected metadata and uses same-directory
-  staging with atomic publication where the filesystem supports it.
-- Legacy-data migration runs before repositories and the model runtime open the
-  new data root, remains idempotent, records a receipt, and preserves rollback
-  information.
-- Release credentials stay outside the repository. Developer ID artifacts use
+- Updates are verified with an embedded Ed25519 public key before installation.
+- Release credentials stay outside the repository (`config/maintainer.local.env`
+  and `distribution/wrangler.toml` are git-ignored). Developer ID artifacts use
   Hardened Runtime, secure timestamping, notarization, stapling, and Gatekeeper
   validation.
-- A public export contains only allowlisted files and starts with an independent
-  Git object database and no configured remote.
 
 ## Reportable findings and severity context
 
@@ -96,11 +89,10 @@ Reports are especially useful when they demonstrate a reachable path to:
 
 - Capture or persistence of voice or text without the expected user action.
 - Text delivery into a secure, wrong, or stale target application.
-- Loss, disclosure, or corruption of clipboard, history, dictionary, audio, or
-  model-cache data across users or sessions.
-- Credential exposure, signing bypass, malicious release substitution, or
-  public-export leakage.
-- Executing untrusted content through imported data, model metadata, archives,
+- Loss, disclosure, or corruption of clipboard, history, dictionary, or audio data
+  across users or sessions.
+- Credential exposure, signing bypass, or malicious release substitution.
+- Executing untrusted content through imported data, remote responses, archives,
   update paths, or system integration.
 - Permission escalation or meaningful evasion of a fail-closed control.
 

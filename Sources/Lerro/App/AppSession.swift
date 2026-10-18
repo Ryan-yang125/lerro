@@ -84,13 +84,6 @@ final class AppSession {
     var preferences = UserPreferences()
     private(set) var usageStatistics = UsageStatistics(entries: [])
     private(set) var recentHistoryEntries: [HistoryEntry] = []
-    var modelStatus = LocalModelStatus(
-        state: .unavailable,
-        modelIdentifier: "",
-        message: "正在检查本地模型"
-    )
-    private(set) var localAIReadiness: LocalAIReadiness?
-    var isModelDownloadConsentPresented = false
     var visualFixturePresentation: String?
     var isPanelOnlyVisualFixture = false
     var visualFixtureReduceMotion = false
@@ -164,12 +157,12 @@ final class AppSession {
     }
 
     var preferredDictationActivation: ShortcutActivation {
-        preferences.hotkeys.first(where: { $0.action == .dictate })?.activation.resolved ?? .hold
+        preferences.hotkeys.first(where: { $0.action == .dictate })?.activation ?? .hold
     }
 
     func preferredActivation(for mode: CaptureMode) -> ShortcutActivation {
         let action = hotkeyAction(for: mode)
-        return preferences.hotkeys.first(where: { $0.action == action })?.activation.resolved ?? .hold
+        return preferences.hotkeys.first(where: { $0.action == action })?.activation ?? .hold
     }
 
     var shortcutConfigurationAvailable: Bool {
@@ -224,7 +217,6 @@ final class AppSession {
     private(set) var isStartingCapture = false
     private(set) var isWaitingForSpeechResources = false
     private var isCleaningCapture = false
-    private var modelLoadTask: Task<Void, Never>?
     private var captureTimerTask: Task<Void, Never>?
     private var microphoneTestTask: Task<Void, Never>?
     private var speechPreparationTask: Task<Void, Never>?
@@ -236,7 +228,6 @@ final class AppSession {
     private var preferenceSaveTask: Task<Void, Never>?
     private var preferenceSaveWaiters: [CheckedContinuation<Void, Never>] = []
     private var lastAppliedSystemPreferences: UserPreferences?
-    private var pendingModelCaptureMode: CaptureMode?
     private var pendingRetentionApplication: HistoryRetention?
     private var historyUsageEntries: [HistoryEntry] = []
     private var usageStatisticsDay = Calendar.current.startOfDay(for: .now)
@@ -283,10 +274,6 @@ final class AppSession {
             && accessibilityPermission
     }
 
-    var canContinueWithBaseDictation: Bool {
-        pendingModelCaptureMode == .dictation
-    }
-
     private var hasActiveCapture: Bool {
         isStartingCapture
             || activeSession != nil
@@ -300,17 +287,10 @@ final class AppSession {
         !hasActiveCapture
     }
 
-    var localAIIsReady: Bool {
-        modelStatus.state == .loaded
-            || (modelStatus.state == .ready && modelStatus.progress >= 1)
-    }
-
     var selectedAIIsReady: Bool {
         switch preferences.intelligenceMode {
         case .raw:
             false
-        case .local:
-            localAIIsReady
         case .remote:
             preferences.remoteProvider.isReadyForUse
         }
@@ -347,24 +327,6 @@ final class AppSession {
                 detail: localized(isReady ? "AI 润色已开启" : "未配置 API"),
                 isReady: isReady
             )
-        case .local:
-            let title = localized("本地 AI")
-            if localAIIsReady {
-                return IntelligenceStatus(title: title, detail: localized("AI 润色已开启"), isReady: true)
-            }
-            let detail: String = switch modelStatus.state {
-            case .downloading:
-                LerroInterfaceLocalization.format(
-                    "下载中 %lld%%",
-                    locale: interfaceLocale,
-                    arguments: Int64((min(1, max(0, modelStatus.progress)) * 100).rounded())
-                )
-            case .loading: localized("正在加载")
-            case .paused: localized("下载已暂停")
-            case .failed: localized("需要重试")
-            case .ready, .loaded, .unavailable: localized("未下载")
-            }
-            return IntelligenceStatus(title: title, detail: detail, isReady: false)
         }
     }
 
@@ -433,12 +395,8 @@ final class AppSession {
             currentError = "设置文件读取失败，已使用安全默认值。原文件保持不变：\(error.localizedDescription)"
         }
         preferenceSaveQueue.reset(confirmed: preferences)
-        reconcileLoginItemAfterIdentityMigrationIfNeeded()
         let audioInputDevicesTask = Task { [dependencies] in
             await dependencies.microphoneTest.availableInputDevices()
-        }
-        let deviceCapabilityTask = Task { [dependencies] in
-            await dependencies.deviceCapabilities.snapshot()
         }
         do {
             try await applyRetentionAndClean(preferences.historyRetention, now: .now)
@@ -448,7 +406,6 @@ final class AppSession {
         await refreshData()
         await refreshLanguageResources()
         audioInputDevices = await audioInputDevicesTask.value
-        localAIReadiness = LocalAIReadiness(device: await deviceCapabilityTask.value)
         if let selectedUID = preferences.microphoneDeviceUID,
            !audioInputDevices.contains(where: { $0.uid == selectedUID }) {
             preferences.microphoneDeviceUID = nil
@@ -469,9 +426,6 @@ final class AppSession {
         let dictionaryTask = Task { [dependencies] in
             try await dependencies.dictionary.entries()
         }
-        let modelStatusTask = Task { [dependencies] in
-            await dependencies.intelligence.modelStatus()
-        }
 
         await refreshHistoryAndUsage()
         do {
@@ -483,7 +437,6 @@ final class AppSession {
         }
         await loadDictionarySuggestions()
         updateUsageSummary()
-        modelStatus = await modelStatusTask.value
     }
 
     func refreshLanguageResources(invalidatePreparations: Bool = false) async {
@@ -666,7 +619,7 @@ final class AppSession {
             keyCode: keyCode,
             modifiers: modifiers,
             usesFunctionKey: usesFunctionKey,
-            activation: activation.resolved,
+            activation: activation,
             displayName: displayName
         )
         let conflict = preferences.hotkeys.contains {
@@ -702,7 +655,7 @@ final class AppSession {
             keyCode: keyCode,
             modifiers: modifiers,
             usesFunctionKey: usesFunctionKey,
-            activation: activation.resolved,
+            activation: activation,
             displayName: displayName
         )
         guard addHotkey(
@@ -714,12 +667,12 @@ final class AppSession {
             activation: activation,
             displayName: displayName
         ) else { return false }
-        let expectedActivation = activation.resolved
+        let expectedActivation = activation
         await waitForPreferencePersistence()
         let confirmed = preferenceSaveQueue.confirmed.hotkeys.contains {
             $0.action == action
                 && $0.signature == expectedDefinition.signature
-                && $0.activation.resolved == expectedActivation
+                && $0.activation == expectedActivation
                 && $0.displayName == displayName
         }
         guard confirmed else {
@@ -760,8 +713,7 @@ final class AppSession {
     func endShortcutConfiguration() {
         guard isShortcutConfigurationActive else { return }
         isShortcutConfigurationActive = false
-        guard accessibilityPermission,
-              !legacyApplicationIsRunning() else { return }
+        guard accessibilityPermission else { return }
         configureHotkeys(reportError: false)
     }
 
@@ -786,11 +738,7 @@ final class AppSession {
             : await dependencies.permissions.microphoneAuthorized()
         accessibilityPermission = dependencies.permissions.accessibilityAuthorized(prompt: prompt)
         if accessibilityPermission {
-            if legacyApplicationIsRunning() {
-                cancelCaptureBeforeStoppingHotkeysIfNeeded()
-            } else {
-                configureHotkeys(reportError: prompt)
-            }
+            configureHotkeys(reportError: prompt)
         } else {
             cancelCaptureBeforeStoppingHotkeysIfNeeded()
         }
@@ -953,53 +901,6 @@ final class AppSession {
         }
     }
 
-    func requestLocalModelPreparation() {
-        guard preferences.hasApprovedModelDownload else {
-            presentModelDownloadConsent(for: nil)
-            return
-        }
-        prepareLocalModel()
-    }
-
-    func pauseLocalModelPreparation() {
-        guard modelStatus.state == .downloading || modelStatus.state == .loading else { return }
-        modelStatus.state = .paused
-        modelStatus.message = "本地模型下载已暂停，可继续下载"
-        modelStatus.bytesPerSecond = nil
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            await pauseLocalModelPreparationAndWait()
-        }
-    }
-
-    func prepareForApplicationTermination() async {
-        guard modelStatus.state == .downloading || modelStatus.state == .loading else { return }
-        await pauseLocalModelPreparationAndWait()
-    }
-
-    func discardLocalModelDownload() {
-        guard modelStatus.state == .downloading
-                || modelStatus.state == .loading
-                || modelStatus.state == .paused
-                || (modelStatus.state == .failed && modelStatus.progress > 0) else { return }
-        modelLoadTask?.cancel()
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                try await dependencies.intelligence.discardLocalModelDownload()
-                modelStatus = await dependencies.intelligence.modelStatus()
-            } catch {
-                currentError = userFacingError(error, context: "本地模型下载无法停止")
-            }
-        }
-    }
-
-    private func pauseLocalModelPreparationAndWait() async {
-        modelLoadTask?.cancel()
-        await dependencies.intelligence.pauseLocalModelPreparation()
-        modelStatus = await dependencies.intelligence.modelStatus()
-    }
-
     func activateIntelligenceMode(_ mode: IntelligenceMode) {
         guard !hasActiveCapture else {
             currentError = "请在当前听写完成后切换智能处理方式"
@@ -1007,11 +908,6 @@ final class AppSession {
         }
         preferences.intelligenceMode = mode
         savePreferences()
-        if mode == .local,
-           preferences.hasApprovedModelDownload,
-           modelStatus.state != .paused {
-            prepareLocalModel()
-        }
     }
 
     func saveRemoteProvider(_ configuration: RemoteProviderConfiguration) async -> Bool {
@@ -1061,36 +957,6 @@ final class AppSession {
         } catch {
             return .failure(userFacingError(error, context: "远程模型暂不可用"))
         }
-    }
-
-    func approveLocalModelDownload() {
-        pendingModelCaptureMode = nil
-        isModelDownloadConsentPresented = false
-        preferences.hasApprovedModelDownload = true
-        preferences.intelligenceMode = .local
-        savePreferences()
-        if !isOnboardingPresented {
-            settingsTab = .intelligence
-        }
-        NSApp.activate(ignoringOtherApps: true)
-        prepareLocalModel()
-    }
-
-    func continueWithBaseDictation() {
-        guard pendingModelCaptureMode == .dictation else {
-            cancelModelDownloadConsent()
-            return
-        }
-        pendingModelCaptureMode = nil
-        isModelDownloadConsentPresented = false
-        preferences.intelligenceMode = .raw
-        savePreferences()
-        startCapture(.dictation, handsFree: false)
-    }
-
-    func cancelModelDownloadConsent() {
-        pendingModelCaptureMode = nil
-        isModelDownloadConsentPresented = false
     }
 
     func cancelCapture(resetHotkeyState: Bool = true) {
@@ -1373,39 +1239,6 @@ final class AppSession {
         let waiters = preferenceSaveWaiters
         preferenceSaveWaiters.removeAll()
         for waiter in waiters { waiter.resume() }
-    }
-
-    private func prepareLocalModel() {
-        guard dependencies.startupStorageError == nil else {
-            currentError = "本地数据目录尚未准备完成"
-            return
-        }
-        guard preferences.hasApprovedModelDownload else {
-            presentModelDownloadConsent(for: nil)
-            return
-        }
-        guard modelLoadTask == nil else { return }
-        currentError = nil
-        modelLoadTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            let monitor = startModelStatusMonitor()
-
-            defer {
-                monitor.cancel()
-                self.modelLoadTask = nil
-            }
-
-            do {
-                try await dependencies.intelligence.prepare(
-                    modelIdentifier: preferences.localModelIdentifier
-                )
-            } catch is CancellationError {
-                return
-            } catch {
-                currentError = userFacingError(error, context: "本地模型暂不可用")
-            }
-            modelStatus = await dependencies.intelligence.modelStatus()
-        }
     }
 
     @discardableResult
@@ -1744,7 +1577,7 @@ final class AppSession {
             return
         }
         guard preferences.intelligenceMode != .raw else {
-            currentError = "请先在“智能处理”中选择本地 AI 或 API 模型"
+            currentError = "请先在“智能处理”中配置 API 模型"
             return
         }
         guard authorizeIntelligenceIfNeeded(for: entry.mode) else {
@@ -1772,8 +1605,6 @@ final class AppSession {
                 dictionary: dictionaryEntries.filter { !$0.isSnippet },
                 toneInstruction: resolvedTone(bundleIdentifier: entry.bundleIdentifier).instruction
             )
-            let monitor = intelligenceMode == .local ? startModelStatusMonitor() : nil
-            defer { monitor?.cancel() }
             do {
                 let result = try await dependencies.intelligence.process(request)
                 var updated = entry
@@ -1887,7 +1718,7 @@ final class AppSession {
         guard let definitionID = trigger.definitionID else { return false }
         return preferences.hotkeys.contains { definition in
             definition.action == trigger.action
-                && definition.activation.resolved == trigger.activation.resolved
+                && definition.activation == trigger.activation
                 && (definition.id == definitionID
                     || runtimeHotkeyDefinitionID(definition) == definitionID)
         }
@@ -1902,7 +1733,6 @@ final class AppSession {
             definition.keyCode = nil
             definition.modifiers |= modifier
         }
-        definition.activation = definition.activation.resolved
         return definition.id
     }
 
@@ -1926,12 +1756,6 @@ final class AppSession {
             handleCaptureHotkey(trigger, mode: .translation)
         case .ask:
             return
-        case .dictateHandsFree:
-            handleLegacyHandsFreeHotkey(trigger, mode: .dictation, action: .dictate)
-        case .translateHandsFree:
-            handleLegacyHandsFreeHotkey(trigger, mode: .translation, action: .translate)
-        case .askHandsFree:
-            return
         case .pasteLastResult:
             if trigger.phase == .began { pasteLastResult() }
         case .cancel:
@@ -1946,29 +1770,13 @@ final class AppSession {
         }
     }
 
-    private func handleLegacyHandsFreeHotkey(
-        _ trigger: HotkeyTrigger,
-        mode: CaptureMode,
-        action: HotkeyAction
-    ) {
-        handleCaptureHotkey(
-            HotkeyTrigger(
-                action: action,
-                activation: .toggle,
-                phase: trigger.phase,
-                definitionID: trigger.definitionID
-            ),
-            mode: mode
-        )
-    }
-
     private func handleCaptureHotkey(_ trigger: HotkeyTrigger, mode: CaptureMode) {
         if isCleaningCapture {
             reducePendingHotkeyAfterCancellation(trigger, mode: mode)
             return
         }
 
-        switch trigger.activation.resolved {
+        switch trigger.activation {
         case .hold:
             switch trigger.phase {
             case .began:
@@ -1997,7 +1805,7 @@ final class AppSession {
                     toggleCapture(mode)
                 }
             }
-        case .toggle, .press, .doublePress:
+        case .toggle:
             guard trigger.phase == .began else { return }
             if hasActiveCapture {
                 guard activeMode == mode else { return }
@@ -2022,14 +1830,14 @@ final class AppSession {
         _ trigger: HotkeyTrigger,
         mode: CaptureMode
     ) {
-        switch trigger.activation.resolved {
+        switch trigger.activation {
         case .hold:
             switch trigger.phase {
             case .began:
                 let alreadyQueued = pendingHotkeysAfterCancellation.contains {
                     $0.mode == mode
                         && $0.trigger.action == trigger.action
-                        && $0.trigger.activation.resolved == .hold
+                        && $0.trigger.activation == .hold
                         && $0.trigger.definitionID == trigger.definitionID
                 }
                 if !alreadyQueued {
@@ -2042,16 +1850,16 @@ final class AppSession {
                 pendingHotkeysAfterCancellation.removeAll {
                     $0.mode == mode
                         && $0.trigger.action == trigger.action
-                        && $0.trigger.activation.resolved == .hold
+                        && $0.trigger.activation == .hold
                         && $0.trigger.definitionID == trigger.definitionID
                 }
             }
-        case .toggle, .press, .doublePress:
+        case .toggle:
             guard trigger.phase == .began else { return }
             if let index = pendingHotkeysAfterCancellation.firstIndex(where: {
                 $0.mode == mode
                     && $0.trigger.action == trigger.action
-                    && $0.trigger.activation.resolved == .toggle
+                    && $0.trigger.activation == .toggle
             }) {
                 pendingHotkeysAfterCancellation.remove(at: index)
             } else {
@@ -2097,7 +1905,6 @@ final class AppSession {
             currentError = "本地数据目录尚未准备完成"
             return
         }
-        guard !legacyApplicationIsRunning() else { return }
         guard !isCleaningCapture else { return }
         guard !hasActiveCapture else { return }
         guard mode != .ask else { return }
@@ -2110,13 +1917,7 @@ final class AppSession {
         clearDeliveryFeedback()
         resetSilenceWarning()
         hudController.anchorScreenPoint = nil
-        let intelligenceMode: IntelligenceMode = if mode == .dictation,
-                                                    preferences.intelligenceMode == .local,
-                                                    !localAIIsReady {
-            .raw
-        } else {
-            preferences.intelligenceMode
-        }
+        let intelligenceMode = preferences.intelligenceMode
         let remoteProvider = intelligenceMode == .remote
             ? normalizedRemoteProvider(preferences.remoteProvider)
             : nil
@@ -2380,10 +2181,6 @@ final class AppSession {
         } else if session.intelligenceMode == .raw {
             result = try rawResult(for: request, task: task)
         } else {
-            let modelStatusMonitor = session.intelligenceMode == .local
-                ? startModelStatusMonitor()
-                : nil
-            defer { modelStatusMonitor?.cancel() }
             do {
                 result = try await dependencies.intelligence.process(request)
             } catch is CancellationError {
@@ -2395,9 +2192,6 @@ final class AppSession {
                 } else {
                     throw error
                 }
-            }
-            if session.intelligenceMode == .local {
-                modelStatus = await dependencies.intelligence.modelStatus()
             }
         }
         traceRecorder.setProcessingRoute(historyProcessingRoute(result: result), id: generation)
@@ -2709,7 +2503,6 @@ final class AppSession {
         if result.modelIdentifier == "local-snippet" { return .localSnippet }
         return switch result.source {
         case .raw: .raw
-        case .local: .local
         case .remote: .remote
         }
     }
@@ -2816,48 +2609,11 @@ final class AppSession {
         return true
     }
 
-    private func reconcileLoginItemAfterIdentityMigrationIfNeeded() {
-        guard let migration = dependencies.dataMigrationResult,
-              migration.requiresLoginItemReconciliation,
-              let receiptURL = migration.receiptURL else {
-            return
-        }
-        let migrator = ApplicationDataMigrator()
-        do {
-            let status = try dependencies.loginItem.reconcileAfterIdentityMigration(
-                enabled: preferences.launchAtLogin
-            )
-            try migrator.recordLoginItemReconciliation(status, receiptURL: receiptURL)
-            if status == .requiresUserReview {
-                currentError = "请在系统设置的登录项中确认 Lerro，并移除仍显示的旧工程身份条目。"
-            }
-        } catch {
-            try? migrator.recordLoginItemReconciliation(
-                .requiresUserReview,
-                receiptURL: receiptURL
-            )
-            currentError = "登录项迁移需要在系统设置中确认：\(error.localizedDescription)"
-        }
-    }
-
-    @discardableResult
-    private func legacyApplicationIsRunning() -> Bool {
-        guard dependencies.identityMonitor.legacyApplicationIsRunning() else { return false }
-        currentError = "检测到旧版 Lerro 工程身份仍在运行。请退出旧版后继续使用，以避免两个全局 Fn 监听器同时生效。"
-        return true
-    }
-
     private func authorizeIntelligenceIfNeeded(for mode: CaptureMode) -> Bool {
         switch preferences.intelligenceMode {
         case .raw:
             guard mode == .dictation else {
-                fail(LerroError.modelUnavailable("请在“智能处理”中选择本地 AI 或 API 模型"))
-                return false
-            }
-            return true
-        case .local:
-            guard preferences.hasApprovedModelDownload else {
-                presentModelDownloadConsent(for: mode)
+                fail(LerroError.modelUnavailable("请在“智能处理”中配置 API 模型"))
                 return false
             }
             return true
@@ -2883,12 +2639,6 @@ final class AppSession {
         )
         normalized.apiKey = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         return normalized
-    }
-
-    private func presentModelDownloadConsent(for mode: CaptureMode?) {
-        pendingModelCaptureMode = mode
-        isModelDownloadConsentPresented = true
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func intelligenceTask(mode: CaptureMode, transcript: String, context: CapturedContext) -> IntelligenceTask {
@@ -2917,32 +2667,6 @@ final class AppSession {
             modelIdentifier: "raw-apple-speech",
             source: .raw
         )
-    }
-
-    private func startModelStatusMonitor() -> Task<Void, Never> {
-        Task { @MainActor [weak self] in
-            var initialTerminalSamples = 0
-            var observedActiveState = false
-            while !Task.isCancelled {
-                guard let self else { return }
-                let status = await self.dependencies.intelligence.modelStatus()
-                if self.modelStatus != status {
-                    self.modelStatus = status
-                }
-                switch status.state {
-                case .downloading, .loading:
-                    observedActiveState = true
-                case .loaded, .failed, .paused:
-                    return
-                case .ready, .unavailable:
-                    if observedActiveState || initialTerminalSamples >= 2 {
-                        return
-                    }
-                    initialTerminalSamples += 1
-                }
-                try? await Task.sleep(for: .milliseconds(250))
-            }
-        }
     }
 
     private func applyRetentionAndClean(_ retention: HistoryRetention, now: Date) async throws {

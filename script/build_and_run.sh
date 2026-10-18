@@ -250,13 +250,6 @@ for identity in sorted(pin["identity"].casefold() for pin in resolved.get("pins"
     print(identity)
 PY
 )
-while IFS= read -r -d $'\0' vendor_path; do
-    copy_dependency_records "$vendor_path" "$(basename "$vendor_path")"
-done < <(find "$project_dir/Vendor" -mindepth 1 -maxdepth 1 -type d -print0)
-while IFS= read -r provenance_path; do
-    package_name="$(basename "$(dirname "$provenance_path")")"
-    ditto "$provenance_path" "$third_party_licenses_path/$package_name-UPSTREAM.md"
-done < <(find "$project_dir/Vendor" -mindepth 2 -maxdepth 2 -type f -name UPSTREAM.md | sort)
 for icon_resource_name in AppIcon.icns Assets.car; do
     source_icon_resource="$project_dir/Sources/Lerro/Resources/$icon_resource_name"
     [[ -s "$source_icon_resource" ]] || {
@@ -313,10 +306,6 @@ done < <(
         -path "*/$configuration_directory/*/DerivedSources/resource_bundle_accessor.swift" \
         -print0
 )
-if (( accessor_count == 0 )); then
-    print -u2 "No SwiftPM resource accessors were found for $configuration_directory."
-    exit 1
-fi
 
 unexpected_root_entry=$(
     find "$app_path" -mindepth 1 -maxdepth 1 ! -name Contents -print -quit

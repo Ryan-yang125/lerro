@@ -61,13 +61,13 @@ Lerro 不收订阅费。AI 润色走你自己的 [DeepSeek](https://platform.dee
 
 1. [下载最新的已签名、已公证版本](https://updates.lerroapp.com/download/macos/latest)。
 2. 把 **Lerro.app** 拖到“应用程序”并打开。
-3. 按引导授权麦克风、语音识别和辅助功能。
+3. 按引导授权麦克风和辅助功能。
 
 需要 Apple 芯片的 Mac 和 macOS 26 或更新版本。之后的版本在 app 里就能更新。
 
 ## 从源码构建
 
-见[构建与测试](docs/build.md)。工程文档：[架构](docs/architecture.md)、[核心流程](docs/core-flow.md)、[模型与 BYOK](docs/models.md)、[隐私与安全](docs/privacy-security.md)、[参与贡献](CONTRIBUTING.md)。
+构建、测试和发版见[开发指南](docs/development.md)，代码结构见[架构说明](docs/architecture.md)，参与贡献见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可
 

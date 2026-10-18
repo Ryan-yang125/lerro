@@ -1,6 +1,6 @@
 cfcd5bbdfac9eeb7151846bed60449e10347475fe8a7a37316fcce42174879d4  ./README.md
 be0df9c30964dccb4f1703fa116b9302825c00c39e74c1ac64583bf879f044df  ./exports/app-icon/AppIcon.icns
-dfe14fdd7ebc83d30e61b31b319e116529e724bd0a68abcb1c97a92084f597f9  ./exports/app-icon/Assets.car
+c4481de8469f3012dde5549ef3013b22028379fd039c117668a8118cb0ef994b  ./exports/app-icon/Assets.car
 138f44f202df46ddd6c9307e688cae61cc8fdc1f07393b55f76fa3d38275497c  ./exports/app-icon/lerro-app-icon-1024.png
 b57d2afaec86318fed93d9c0c942f5f7fece6a50b25169e98228a4a42f861b05  ./exports/app-icon/lerro-app-icon-flat.svg
 726d74a588aed4045cd78e6701549e1316ac432aeab60fb9e659dfa843e2c2fe  ./exports/logo/lerro-construction.pdf
@@ -63,7 +63,7 @@ c29a8f0a269bc953154c466b9502b04274ff0896ed881e376042579b626d8063  ./exports/menu
 85ed927d1b7123412846a8adf206414d9d05150ad43773b02ad00a28743158b9  ./guidelines/color-accessibility.md
 2f162069820d382932fb0d7ff6d10b01837841acf397630f8767e2110a8c4242  ./guidelines/logo-usage.md
 54e9b97e20d60adde46c855c2d52142ca4dc52225505ba8288270895a16f7e99  ./guidelines/motion.md
-0ccd88d34b7aaf27e1c36fa98e63794dfe8418b00c4b4e57b8162dc1ce6487ce  ./guidelines/voice-and-copy.md
+4622cc5934a3ea11ab404504bcd91b9cd1235061ee90077080d8b661492a7615  ./guidelines/voice-and-copy.md
 c71bd938aeae6ff298f445c76467f6630206b7e2c8ebf0342a862011e45cb13d  ./licenses/ASSET-LICENSES.json
 262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a  ./licenses/Inter-OFL.txt
 fd45405731327448c3adf8686a3df9eb78b7d018e1517f92524ae1f1ca566b7f  ./scripts/generate-assets.sh

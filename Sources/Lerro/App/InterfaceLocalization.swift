@@ -37,23 +37,6 @@ enum LerroInterfaceLocalization {
         String(format: string(key, locale: locale), locale: locale, arguments: arguments)
     }
 
-    static func statusString(_ message: String, locale: Locale) -> String {
-        let downloadPrefix = "正在下载本地模型 · "
-        if message.hasPrefix(downloadPrefix), message.hasSuffix("%") {
-            let progressText = message
-                .dropFirst(downloadPrefix.count)
-                .dropLast()
-            if let progress = Int64(progressText) {
-                return format(
-                    "正在下载本地模型 · %lld%%",
-                    locale: locale,
-                    arguments: progress
-                )
-            }
-        }
-        return string(message, locale: locale)
-    }
-
     /// Converts app-facing errors from Core, Mac, and Intelligence without
     /// teaching those lower layers about the interface language. Dynamic
     /// payloads such as system error text, filenames, and device identifiers
@@ -69,7 +52,7 @@ enum LerroInterfaceLocalization {
             ("语音识别暂不可用：", "语音识别暂不可用：%@"),
             ("文本写入失败：", "文本写入失败：%@"),
             ("本地数据处理失败：", "本地数据处理失败：%@"),
-            ("本地模型暂不可用：", "本地模型暂不可用：%@"),
+            ("AI 模型暂不可用：", "AI 模型暂不可用：%@"),
             ("远程模型暂不可用：", "远程模型暂不可用：%@"),
             ("设备端翻译暂不可用：", "设备端翻译暂不可用：%@"),
             ("应用目录准备失败：", "应用目录准备失败：%@"),
@@ -81,7 +64,6 @@ enum LerroInterfaceLocalization {
             ("词条删除失败：", "词条删除失败：%@"),
             ("词典导入失败：", "词典导入失败：%@"),
             ("无法确认录音索引状态，已保留文件等待下次对账：", "无法确认录音索引状态，已保留文件等待下次对账：%@"),
-            ("登录项迁移需要在系统设置中确认：", "登录项迁移需要在系统设置中确认：%@"),
             ("自动词典保存失败：", "自动词典保存失败：%@"),
             ("无法完成录音目录清理：", "无法完成录音目录清理：%@"),
             ("麦克风测试错误：", "麦克风测试错误：%@"),

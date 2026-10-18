@@ -4,9 +4,6 @@ import LerroCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    var prepareForTermination: (() async -> Void)?
-    private var isPreparingForTermination = false
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
@@ -16,17 +13,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
-    }
-
-    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let prepareForTermination else { return .terminateNow }
-        guard !isPreparingForTermination else { return .terminateLater }
-        isPreparingForTermination = true
-        Task { @MainActor in
-            await prepareForTermination()
-            sender.reply(toApplicationShouldTerminate: true)
-        }
-        return .terminateLater
     }
 }
 
@@ -40,12 +26,7 @@ struct LerroApp: App {
         Window("Lerro", id: "main") {
             RootView(session: session)
                 .environment(\.locale, LerroInterfaceLocalization.locale(for: session.preferences.appLanguage))
-                .task {
-                    appDelegate.prepareForTermination = {
-                        await session.prepareForApplicationTermination()
-                    }
-                    await session.start()
-                }
+                .task { await session.start() }
                 .onReceive(NotificationCenter.default.publisher(
                     for: NSApplication.didBecomeActiveNotification
                 )) { _ in

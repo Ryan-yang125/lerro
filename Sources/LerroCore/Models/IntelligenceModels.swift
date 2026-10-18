@@ -20,7 +20,7 @@ public struct IntelligenceRequest: Sendable, Equatable {
     /// `usageFeature` defaults to `.dictate` for polish and `.translate` for translate.
     public init(
         task: IntelligenceTask,
-        mode: IntelligenceMode = .local,
+        mode: IntelligenceMode = .remote,
         remoteProvider: RemoteProviderConfiguration? = nil,
         transcript: String,
         selectedText: String? = nil,
@@ -194,7 +194,7 @@ public struct IntelligenceResult: Sendable, Equatable {
         disposition: IntelligenceDisposition,
         url: URL? = nil,
         modelIdentifier: String,
-        source: IntelligenceResultSource = .local
+        source: IntelligenceResultSource = .remote
     ) {
         self.text = text
         self.disposition = disposition
@@ -232,7 +232,7 @@ public enum LerroError: LocalizedError, Sendable {
         case .localData(let message):
             "本地数据处理失败：\(message)"
         case .modelUnavailable(let message):
-            "本地模型暂不可用：\(message)"
+            "AI 模型暂不可用：\(message)"
         case .remoteUnavailable(let message):
             "远程模型暂不可用：\(message)"
         case .translationUnavailable(let message):

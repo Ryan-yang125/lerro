@@ -242,7 +242,7 @@ struct AppSessionCoreFlowTests {
     @MainActor
     func onboardingCorrectionCanBeRepeated() async throws {
         var preferences = basePreferences()
-        preferences.intelligenceMode = .local
+        preferences.intelligenceMode = .remote
         let decision = try DictionaryLearningDecision(validating: [
             DictionaryLearningCandidate(phrase: "乐若", replacement: "Lerro", confidence: 0.98)
         ])
@@ -262,7 +262,7 @@ struct AppSessionCoreFlowTests {
     @MainActor
     func onboardingCorrectionReportsOutcome() async {
         var preferences = basePreferences()
-        preferences.intelligenceMode = .local
+        preferences.intelligenceMode = .remote
         let harness = makeHarness(text: "", preferences: preferences)
         await harness.session.start()
         let rejected = await harness.session.learnOnboardingCorrection(
@@ -286,7 +286,7 @@ struct AppSessionCoreFlowTests {
     @MainActor
     func onboardingCorrectionCancellation() async throws {
         var preferences = basePreferences()
-        preferences.intelligenceMode = .local
+        preferences.intelligenceMode = .remote
         let decision = try DictionaryLearningDecision(validating: [
             DictionaryLearningCandidate(phrase: "乐若", replacement: "Lerro", confidence: 0.98)
         ])
@@ -963,7 +963,6 @@ struct AppSessionCoreFlowTests {
         let preferences = preferences ?? basePreferences()
         let dependencies = AppDependencies(
             applicationPaths: nil,
-            dataMigrationResult: nil,
             startupStorageError: nil,
             speech: speech,
             microphoneTest: StubMicrophoneTester(),
@@ -975,14 +974,12 @@ struct AppSessionCoreFlowTests {
             hotkeys: StubHotkeyMonitor(),
             permissions: StubPermissions(),
             loginItem: StubLoginItem(),
-            identityMonitor: StubIdentityMonitor(),
             history: history,
             dictionary: dictionary,
             dictionarySuggestions: suggestions,
             preferences: InMemoryPreferencesRepository(value: preferences),
             aiUsage: aiUsage,
             intelligence: intelligence,
-            deviceCapabilities: StubDeviceCapabilities(),
             captureTrace: trace
         )
         return Harness(
@@ -1004,7 +1001,6 @@ struct AppSessionCoreFlowTests {
         UserPreferences(
             muteOtherAudio: false,
             historyRetention: .forever,
-            enhancementEnabled: false,
             hotkeys: [],
             hasCompletedOnboarding: true
         )
@@ -1220,7 +1216,6 @@ private actor StubIntelligence: IntelligenceProcessing {
         self.classificationDelay = classificationDelay
     }
 
-    func prepare(modelIdentifier: String) async throws {}
     func process(_ request: IntelligenceRequest) async throws -> IntelligenceResult {
         recordedRequests.append(request)
         if fails { throw TestFailure.intelligence }
@@ -1228,7 +1223,7 @@ private actor StubIntelligence: IntelligenceProcessing {
             text: resultText,
             disposition: .insert,
             modelIdentifier: "test-model",
-            source: request.mode == .remote ? .remote : .local
+            source: request.mode == .remote ? .remote : .raw
         )
     }
     func classifyCorrection(
@@ -1239,14 +1234,6 @@ private actor StubIntelligence: IntelligenceProcessing {
         // Return a late result even when cancellation interrupts the delay.
         if let classificationDelay { try? await Task.sleep(for: classificationDelay) }
         return learningDecision
-    }
-    func modelStatus() async -> LocalModelStatus {
-        LocalModelStatus(
-            state: .ready,
-            modelIdentifier: "test-model",
-            progress: 1,
-            message: "Ready"
-        )
     }
     func requests() -> [IntelligenceRequest] { recordedRequests }
     func classificationCount() -> Int { classifications }
@@ -1299,22 +1286,6 @@ private struct StubPermissions: PermissionChecking {
 private struct StubLoginItem: LoginItemManaging {
     func isEnabled() -> Bool { false }
     func setEnabled(_ enabled: Bool) throws {}
-}
-
-private struct StubIdentityMonitor: ApplicationIdentityMonitoring {
-    func legacyApplicationIsRunning() -> Bool { false }
-}
-
-private struct StubDeviceCapabilities: DeviceCapabilityAssessing {
-    func snapshot() -> DeviceCapabilitySnapshot {
-        DeviceCapabilitySnapshot(
-            chipName: "Test Apple silicon",
-            isAppleSilicon: true,
-            supportsMetal: true,
-            physicalMemoryBytes: 16 * 1_024 * 1_024 * 1_024,
-            availableStorageBytes: 40 * 1_024 * 1_024 * 1_024
-        )
-    }
 }
 
 private enum TestFailure: Error {

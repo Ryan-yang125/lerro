@@ -937,7 +937,6 @@ struct OnboardingView: View {
         switch session.preferences.intelligenceMode {
         case .raw: false
         case .remote: session.preferences.remoteProvider.isReadyForUse
-        case .local: session.localAIIsReady
         }
     }
 

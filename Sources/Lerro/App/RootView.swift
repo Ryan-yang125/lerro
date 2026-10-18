@@ -55,19 +55,6 @@ struct RootView: View {
                 NSApp.activate()
             }
         }
-        .alert("下载本地 AI 模型？", isPresented: $session.isModelDownloadConsentPresented) {
-            Button("下载并启用") {
-                let showsProgress = !session.isOnboardingPresented
-                session.approveLocalModelDownload()
-                if showsProgress { openSettings() }
-            }
-            if session.canContinueWithBaseDictation {
-                Button("使用基础听写") { session.continueWithBaseDictation() }
-            }
-            Button("稍后", role: .cancel) { session.cancelModelDownloadConsent() }
-        } message: {
-            Text("Lerro 将从 Hugging Face 下载约 3.03 GB 的 Qwen3.5 4B 模型并保存在这台 Mac。听写内容、选中文字与生成结果留在本机。")
-        }
         .alert("Lerro", isPresented: Binding(
             get: { session.currentError != nil },
             set: { if !$0 { session.currentError = nil } }

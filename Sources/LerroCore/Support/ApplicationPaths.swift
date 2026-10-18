@@ -3,7 +3,6 @@ import Foundation
 public enum ApplicationIdentity {
     public static let displayName = "Lerro"
     public static let bundleIdentifier = "app.lerro.mac"
-    public static let legacyBundleIdentifier = "com.ryanyang.typelessnative"
 }
 
 public struct ApplicationPaths: Sendable {
@@ -16,7 +15,6 @@ public struct ApplicationPaths: Sendable {
     public let preferencesFile: URL
     public let aiUsageFile: URL
     public let audioDirectory: URL
-    public let modelsDirectory: URL
 
     public init(rootDirectory: URL) {
         self.rootDirectory = rootDirectory
@@ -26,17 +24,12 @@ public struct ApplicationPaths: Sendable {
         self.preferencesFile = rootDirectory.appending(path: "preferences.json")
         self.aiUsageFile = rootDirectory.appending(path: "ai-usage.json")
         self.audioDirectory = rootDirectory.appending(path: "Audio", directoryHint: .isDirectory)
-        self.modelsDirectory = rootDirectory.appending(path: "Models", directoryHint: .isDirectory)
     }
 
     public static func live(bundleIdentifier: String = ApplicationIdentity.bundleIdentifier) -> ApplicationPaths {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Application Support")
         return ApplicationPaths(rootDirectory: base.appending(path: bundleIdentifier, directoryHint: .isDirectory))
-    }
-
-    public static func legacy() -> ApplicationPaths {
-        live(bundleIdentifier: ApplicationIdentity.legacyBundleIdentifier)
     }
 
     public func prepareDirectories() throws {
@@ -47,7 +40,6 @@ public struct ApplicationPaths: Sendable {
         )
         try hardenRootDirectoryPermissions()
         try FileManager.default.createDirectory(at: audioDirectory, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
     }
 
     func hardenRootDirectoryPermissions(fileManager: FileManager = .default) throws {

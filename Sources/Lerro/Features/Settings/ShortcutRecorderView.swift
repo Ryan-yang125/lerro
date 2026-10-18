@@ -553,8 +553,8 @@ struct ShortcutRecorderCard: View {
 
     private var activationBinding: Binding<ShortcutActivation> {
         Binding {
-            activation.resolved
-        } set: { activation = $0.resolved }
+            activation
+        } set: { activation = $0 }
     }
 
     private var displayedShortcut: ShortcutBindingDraft? {
@@ -623,7 +623,7 @@ struct ShortcutRecorderCard: View {
         } else {
             state = localized("检测已暂停")
         }
-        let mode = localized(activation.resolved == .hold ? "按住说话" : "按一下开关")
+        let mode = localized(activation == .hold ? "按住说话" : "按一下开关")
         return String(
             format: localized("快捷键状态：%@，%@，%@"),
             locale: locale,

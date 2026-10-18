@@ -111,7 +111,7 @@ struct ShortcutsSettingsTab: View {
         return HStack(spacing: 10) {
             LerroShortcutKeys(displayName: definition.displayName)
             Text(LocalizedStringKey(
-                definition.activation.resolved == .hold ? "按住说话" : "按一下开始，再按一下结束"
+                definition.activation == .hold ? "按住说话" : "按一下开始，再按一下结束"
             ))
             .font(LerroFont.caption)
             .foregroundStyle(LerroTheme.secondaryText)
@@ -204,7 +204,7 @@ struct ShortcutCaptureSheet: View {
         self.onSave = onSave
         self.onCancel = onCancel
         _shortcut = State(initialValue: existing.map(ShortcutBindingDraft.init))
-        _activation = State(initialValue: existing?.activation.resolved ?? .hold)
+        _activation = State(initialValue: existing?.activation ?? .hold)
     }
 
     var body: some View {
@@ -248,7 +248,7 @@ struct ShortcutCaptureSheet: View {
                     guard let shortcut else { return }
                     isSaving = true
                     Task { @MainActor in
-                        if let message = await onSave(shortcut, activation.resolved) {
+                        if let message = await onSave(shortcut, activation) {
                             validationMessage = message
                             isSaving = false
                         }
@@ -291,11 +291,11 @@ struct ShortcutCaptureSheet: View {
 
     private var actionTitle: String {
         switch action {
-        case .dictate, .dictateHandsFree:
+        case .dictate:
             "听写"
-        case .translate, .translateHandsFree:
+        case .translate:
             "翻译"
-        case .ask, .askHandsFree:
+        case .ask:
             "指令"
         case .pasteLastResult:
             "粘贴上次结果"

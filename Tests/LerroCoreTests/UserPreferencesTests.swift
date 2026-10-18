@@ -8,7 +8,6 @@ struct UserPreferencesTests {
     func validatesDefaults() {
         let preferences = UserPreferences()
 
-        #expect(preferences.localProfileEmail.isEmpty)
         #expect(preferences.recognitionLocaleIdentifier == "zh_CN")
         #expect(preferences.translationLanguageIdentifiers == ["en_US"])
         #expect(preferences.appLanguage == .system)
@@ -19,18 +18,15 @@ struct UserPreferencesTests {
         #expect(preferences.showInDock)
         #expect(!preferences.saveAudio)
         #expect(preferences.historyRetention == .forever)
-        #expect(!preferences.enhancementEnabled)
         #expect(preferences.intelligenceMode == .raw)
-        #expect(preferences.localModelIdentifier == "mlx-community/Qwen3.5-4B-MLX-4bit")
         #expect(preferences.remoteProvider == RemoteProviderConfiguration())
         #expect(preferences.appToneProfiles.isEmpty)
         #expect(preferences.automaticDictionaryLearningEnabled)
         #expect(!preferences.isAutomaticDictionaryLearningActive)
         #expect(!preferences.quickDictateEnabled)
-        #expect(!preferences.hasApprovedModelDownload)
         #expect(!preferences.hasCompletedOnboarding)
         #expect(preferences.onboardingStepIndex == nil)
-        #expect(IntelligenceMode.allCases == [.raw, .remote, .local])
+        #expect(IntelligenceMode.allCases == [.raw, .remote])
     }
 
     @Test("Audio capture requires explicit opt in and enabled history")
@@ -93,20 +89,20 @@ struct UserPreferencesTests {
         #expect(paste.activation == .toggle)
     }
 
-    @Test("Legacy shortcut activation and modifier key codes migrate without changing behavior")
-    func migratesLegacyHotkeys() throws {
-        let legacy = Data(#"""
+    @Test("Modifier key codes and the Fn flag normalize on load and the removed Ask shortcut is dropped")
+    func normalizesHotkeysOnLoad() throws {
+        let saved = Data(#"""
         {
           "hotkeys": [
-            {"action":"dictate","keyCode":null,"modifiers":0,"usesFunctionKey":true,"activation":"press","displayName":"Fn"},
-            {"action":"translate","keyCode":56,"modifiers":8388608,"usesFunctionKey":true,"activation":"press","displayName":"Fn Left Shift"},
-            {"action":"ask","keyCode":2,"modifiers":1048576,"usesFunctionKey":false,"activation":"press","displayName":"⌘D"},
-            {"action":"pasteLastResult","keyCode":9,"modifiers":1310720,"usesFunctionKey":false,"activation":"doublePress","displayName":"⌃⌘V"}
+            {"action":"dictate","keyCode":null,"modifiers":0,"usesFunctionKey":true,"activation":"hold","displayName":"Fn"},
+            {"action":"translate","keyCode":56,"modifiers":8388608,"usesFunctionKey":true,"activation":"hold","displayName":"Fn Left Shift"},
+            {"action":"ask","keyCode":2,"modifiers":1048576,"usesFunctionKey":false,"activation":"toggle","displayName":"⌘D"},
+            {"action":"pasteLastResult","keyCode":9,"modifiers":1310720,"usesFunctionKey":false,"activation":"toggle","displayName":"⌃⌘V"}
           ]
         }
         """#.utf8)
 
-        let preferences = try JSONDecoder().decode(UserPreferences.self, from: legacy)
+        let preferences = try JSONDecoder().decode(UserPreferences.self, from: saved)
         let dictate = try #require(preferences.hotkeys.first { $0.action == .dictate })
         let translate = try #require(preferences.hotkeys.first { $0.action == .translate })
         let paste = try #require(preferences.hotkeys.first { $0.action == .pasteLastResult })
@@ -118,36 +114,6 @@ struct UserPreferencesTests {
         #expect(translate.modifiers == (1 << 23) | (1 << 17))
         #expect(!preferences.hotkeys.contains { $0.action == .ask })
         #expect(paste.activation == .toggle)
-    }
-
-    @Test("Legacy hands-free shortcuts become base toggle bindings")
-    func migratesLegacyHandsFreeHotkeys() throws {
-        let legacy = Data(#"""
-        {
-          "hotkeys": [
-            {"action":"dictateHandsFree","keyCode":2,"modifiers":262144,"usesFunctionKey":false,"activation":"doublePress","displayName":"⌃D"},
-            {"action":"translateHandsFree","keyCode":17,"modifiers":524288,"usesFunctionKey":false,"activation":"press","displayName":"⌥T"},
-            {"action":"askHandsFree","keyCode":0,"modifiers":1048576,"usesFunctionKey":false,"activation":"hold","displayName":"⌘A"}
-          ]
-        }
-        """#.utf8)
-
-        let preferences = try JSONDecoder().decode(UserPreferences.self, from: legacy)
-
-        #expect(preferences.hotkeys.map(\.action) == [.dictate, .translate])
-        #expect(preferences.hotkeys.allSatisfy { $0.activation == .toggle })
-    }
-
-    @Test("Shortcut documents without activation use the legacy migration path")
-    func migratesMissingShortcutActivation() throws {
-        let legacy = Data(
-            #"{"hotkeys":[{"action":"dictate","modifiers":0,"usesFunctionKey":true,"displayName":"Fn"}]}"#.utf8
-        )
-
-        let preferences = try JSONDecoder().decode(UserPreferences.self, from: legacy)
-        let dictate = try #require(preferences.hotkeys.first)
-        #expect(dictate.activation == .hold)
-        #expect(dictate.modifiers == 1 << 23)
     }
 
     @Test("Physical shortcut aliases share one canonical signature and deduplicate on load")
@@ -190,8 +156,6 @@ struct UserPreferencesTests {
         #expect(transcription.audioRelativePath == "Audio/session-001.caf")
 
         let preferences = UserPreferences(
-            localProfileEmail: "local@example.com",
-            localInvitationCode: "LOCAL-2026",
             appLanguage: .english,
             intelligenceMode: .remote,
             remoteProvider: RemoteProviderConfiguration(
@@ -201,7 +165,6 @@ struct UserPreferencesTests {
                 apiKey: "secret-test-key",
                 contextSharing: .minimal
             ),
-            hasApprovedModelDownload: true,
             hasCompletedOnboarding: false,
             onboardingStepIndex: 17
         )
@@ -209,12 +172,8 @@ struct UserPreferencesTests {
         let decoded = try JSONDecoder().decode(UserPreferences.self, from: encoded)
 
         #expect(decoded == preferences)
-        #expect(decoded.localProfileEmail == "local@example.com")
-        #expect(decoded.localInvitationCode == "LOCAL-2026")
         #expect(decoded.intelligenceMode == .remote)
-        #expect(decoded.enhancementEnabled)
         #expect(decoded.remoteProvider.apiKey == "secret-test-key")
-        #expect(decoded.hasApprovedModelDownload)
         #expect(decoded.onboardingStepIndex == 17)
         #expect(decoded.appLanguage == .english)
         #expect(decoded.automaticDictionaryLearningEnabled)
@@ -235,20 +194,17 @@ struct UserPreferencesTests {
         #expect(decoded == preferences)
     }
 
-    @Test("Older preference documents keep their saved values and default model consent to off")
+    @Test("Older preference documents keep their saved values and drop retired keys")
     func migratesOlderDocuments() throws {
-        let legacy = Data(#"{"recognitionLocaleIdentifier":"en_US","interactionSoundsEnabled":true,"enhancementEnabled":false,"hasCompletedOnboarding":true}"#.utf8)
+        let legacy = Data(#"{"recognitionLocaleIdentifier":"en_US","interactionSoundsEnabled":true,"hasCompletedOnboarding":true}"#.utf8)
 
         let decoded = try JSONDecoder().decode(UserPreferences.self, from: legacy)
         let reencoded = String(decoding: try JSONEncoder().encode(decoded), as: UTF8.self)
 
         #expect(decoded.recognitionLocaleIdentifier == "en_US")
-        #expect(!decoded.enhancementEnabled)
         #expect(decoded.intelligenceMode == .raw)
         #expect(decoded.remoteProvider == RemoteProviderConfiguration())
         #expect(decoded.hasCompletedOnboarding)
-        #expect(!decoded.hasApprovedModelDownload)
-        #expect(decoded.localInvitationCode.isEmpty)
         #expect(decoded.translationLanguageIdentifiers == ["en_US"])
         #expect(decoded.appLanguage == .system)
         #expect(decoded.automaticDictionaryLearningEnabled)
@@ -256,21 +212,14 @@ struct UserPreferencesTests {
         #expect(!reencoded.contains("interactionSoundsEnabled"))
     }
 
-    @Test("Legacy enhancement and the explicit intelligence mode stay source compatible")
-    func synchronizesLegacyEnhancementFlag() {
-        var preferences = UserPreferences()
+    @Test("A saved intelligence mode that no longer exists decodes as raw")
+    func retiredIntelligenceModeDecodesAsRaw() throws {
+        let saved = Data(#"{"intelligenceMode":"local","hasCompletedOnboarding":true}"#.utf8)
 
-        preferences.enhancementEnabled = false
-        #expect(preferences.intelligenceMode == .raw)
+        let decoded = try JSONDecoder().decode(UserPreferences.self, from: saved)
 
-        preferences.enhancementEnabled = true
-        #expect(preferences.intelligenceMode == .local)
-
-        preferences.intelligenceMode = .remote
-        #expect(preferences.enhancementEnabled)
-
-        preferences.intelligenceMode = .raw
-        #expect(!preferences.enhancementEnabled)
+        #expect(decoded.intelligenceMode == .raw)
+        #expect(decoded.hasCompletedOnboarding)
     }
 
     @Test("Automatic dictionary learning requires an active AI mode")
@@ -283,14 +232,6 @@ struct UserPreferencesTests {
 
         preferences.automaticDictionaryLearningEnabled = false
         #expect(!preferences.isAutomaticDictionaryLearningActive)
-    }
-
-    @Test("Local model policy gates enhanced dictation, translation, and Ask")
-    func validatesLocalModelUsagePolicy() {
-        #expect(LocalModelUsagePolicy.requiresModel(for: .dictation, enhancementEnabled: true))
-        #expect(!LocalModelUsagePolicy.requiresModel(for: .dictation, enhancementEnabled: false))
-        #expect(LocalModelUsagePolicy.requiresModel(for: .translation, enhancementEnabled: false))
-        #expect(LocalModelUsagePolicy.requiresModel(for: .ask, enhancementEnabled: false))
     }
 
     @Test("Secure field errors explain the privacy boundary")

@@ -275,7 +275,7 @@ const zh: HomeCopy = {
     heading: "常见问题",
     items: [
       { q: "支持哪些 Mac？", a: "需要 Apple 芯片（M1 及以后）和 macOS 26 或更新版本。Lerro 用的苹果语音识别只有 macOS 26 才提供。" },
-      { q: "需要开哪些权限？", a: "三个：麦克风和语音识别用来听写；辅助功能用来响应全局快捷键，并把文字写进当前的输入框。第一次打开时会一步步引导你授权。" },
+      { q: "需要开哪些权限？", a: "两个：麦克风用来听写；辅助功能用来响应全局快捷键，并把文字写进当前的输入框。第一次打开时会一步步引导你授权。" },
       { q: "不联网能用吗？", a: "可以。语音识别在本机完成，语言资源下载好之后断网也能听写。AI 润色和翻译需要联网访问你配置的服务商。" },
       { q: "收费吗？", a: "Lerro 免费。AI 润色用的是你自己的 DeepSeek 账号，费用直接付给 DeepSeek，按上面的估算一千次听写约 1 块钱。" },
       { q: "写入失败了怎么办？", a: "写入前 Lerro 会确认你还在原来的输入框里。如果你中途切走了，它会停下来，把结果留在剪贴板里，并提示你粘贴。" },
@@ -415,7 +415,7 @@ const en: HomeCopy = {
     heading: "FAQ",
     items: [
       { q: "Which Macs are supported?", a: "A Mac with Apple silicon (M1 or later) running macOS 26 or newer. The Apple speech recognition that Lerro uses is only available on macOS 26." },
-      { q: "Which permissions does it need?", a: "Three. Microphone and Speech Recognition are used for dictation. Accessibility is used to respond to the global shortcut and to write text into the active input field. The first launch walks you through each permission." },
+      { q: "Which permissions does it need?", a: "Two. Microphone is used for dictation. Accessibility is used to respond to the global shortcut and to write text into the active input field. The first launch walks you through each permission." },
       { q: "Does it work offline?", a: "Yes. Speech recognition runs on your Mac, and once the language resources are downloaded you can dictate without a connection. AI polish and translation need a connection to the provider you configured." },
       { q: "Does it cost anything?", a: "Lerro is free. AI polish uses your own DeepSeek account and you pay DeepSeek directly, which is about ¥1 per 1,000 dictations by the estimate above." },
       { q: "What happens if writing fails?", a: "Before writing, Lerro checks that you are still in the original input field. If you switched away, it stops, keeps the result on the clipboard, and tells you to paste it." },

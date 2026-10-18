@@ -16,14 +16,7 @@ let package = Package(
         .package(
             url: "https://github.com/sparkle-project/Sparkle.git",
             exact: "2.9.4"
-        ),
-        .package(
-            url: "https://github.com/ml-explore/mlx-swift-lm.git",
-            revision: "3b3516d8fbc6451d6c444a5e03cd1e0ba8719964",
-            traits: []
-        ),
-        .package(path: "Vendor/swift-huggingface"),
-        .package(path: "Vendor/swift-transformers")
+        )
     ],
     targets: [
         .target(
@@ -32,14 +25,7 @@ let package = Package(
         ),
         .target(
             name: "LerroIntelligence",
-            dependencies: [
-                "LerroCore",
-                .product(name: "MLXLLM", package: "mlx-swift-lm"),
-                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
-                .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
-                .product(name: "HuggingFace", package: "swift-huggingface"),
-                .product(name: "Tokenizers", package: "swift-transformers")
-            ],
+            dependencies: ["LerroCore"],
             path: "Sources/LerroIntelligence"
         ),
         .target(
@@ -50,7 +36,6 @@ let package = Package(
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("Carbon"),
-                .linkedFramework("Metal"),
                 .linkedFramework("ServiceManagement"),
                 .linkedFramework("Speech")
             ]

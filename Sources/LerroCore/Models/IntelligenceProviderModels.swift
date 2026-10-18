@@ -3,7 +3,6 @@ import Foundation
 public enum IntelligenceMode: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
     case raw
     case remote
-    case local
 
     public var id: String { rawValue }
 }
@@ -229,6 +228,5 @@ public typealias RemoteConnectionTestResult = RemoteConnectionTestOutcome
 
 public enum IntelligenceResultSource: String, Codable, Hashable, Sendable {
     case raw
-    case local
     case remote
 }

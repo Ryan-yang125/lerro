@@ -15,7 +15,6 @@ import uuid
 from urllib.parse import quote, urlsplit
 
 
-EXPECTED_COMPONENT_COUNT = 17
 SYSTEM_FRAMEWORKS = (
     "ApplicationServices,AVFoundation,Carbon,ServiceManagement,Speech,Translation"
 )
@@ -143,22 +142,6 @@ def swift_purl(namespace: str, repository: str, version: str) -> str:
     )
 
 
-def vendor_metadata(path: pathlib.Path) -> tuple[str, str, str]:
-    upstream = path / "UPSTREAM.md"
-    text = upstream.read_text(encoding="utf-8")
-    url_match = re.search(r"https://github\.com/[^\s)>`]+", text)
-    release_match = re.search(
-        r"(?:Upstream release baseline|Release):\s*`?([0-9][0-9A-Za-z.+-]*)`?", text
-    )
-    revision_match = re.search(
-        r"(?:Upstream baseline commit|Commit):\s*`?([0-9a-f]{40})`?",
-        text,
-    )
-    if url_match is None or release_match is None or revision_match is None:
-        fail(f"Vendor provenance is incomplete: {path.name}")
-    return url_match.group(0), release_match.group(1), revision_match.group(1)
-
-
 def current_resolved(project: pathlib.Path) -> tuple[dict[str, object], str]:
     path = project / "Package.resolved"
     try:
@@ -186,7 +169,7 @@ def verify_manifest_resolved_binding(
 
 def expected_inputs(
     project: pathlib.Path, resolved: dict[str, object]
-) -> tuple[dict[str, dict[str, object]], dict[str, pathlib.Path], dict[str, str]]:
+) -> tuple[dict[str, dict[str, object]], dict[str, str]]:
     pins = {
         str(pin["identity"]).casefold(): pin
         for pin in resolved.get("pins", [])
@@ -194,18 +177,13 @@ def expected_inputs(
     }
     if len(pins) != len(resolved.get("pins", [])):
         fail("Package.resolved has a pin without identity or revision")
-    vendors = {
-        path.name.casefold(): path
-        for path in (project / "Vendor").iterdir()
-        if path.is_dir() and (path / "Package.swift").is_file()
-    }
     claims = notice_claims(project / "THIRD_PARTY_NOTICES.md")
-    expected = set(pins) | set(vendors)
-    if len(expected) != EXPECTED_COMPONENT_COUNT:
-        fail(f"expected {EXPECTED_COMPONENT_COUNT} package components, found {len(expected)}")
+    expected = set(pins)
+    if not expected:
+        fail("Package.resolved contains no package components")
     if set(claims) != expected:
         fail("third-party notice inventory differs from the resolved package inventory")
-    return pins, vendors, claims
+    return pins, claims
 
 
 def resolved_graph(
@@ -326,15 +304,15 @@ def main() -> None:
     if not isinstance(manifest_application, dict) or not isinstance(manifest_toolchains, dict):
         fail("canonical release manifest is missing application or toolchain metadata")
     resolved, lock_hash = verify_manifest_resolved_binding(project, manifest)
-    pins, vendors, claims = expected_inputs(project, resolved)
-    expected = set(pins) | set(vendors)
+    pins, claims = expected_inputs(project, resolved)
+    expected = set(pins)
     expected_graph, expected_direct_dependencies, reachable = resolved_graph(
         project, expected, args.swiftpm_graph.resolve() if args.swiftpm_graph else None
     )
     checkouts, artifacts = package_maps(project)
     components = document.get("components")
-    if not isinstance(components, list) or len(components) != EXPECTED_COMPONENT_COUNT:
-        fail("SBOM does not contain exactly 17 package components")
+    if not isinstance(components, list) or len(components) != len(expected):
+        fail("SBOM package component count differs from Package.resolved")
     by_identity: dict[str, dict[str, object]] = {}
     component_properties_by_identity: dict[str, dict[str, str]] = {}
     references: dict[str, str] = {}
@@ -352,7 +330,7 @@ def main() -> None:
             fail(f"SBOM component reference is invalid: {identity}")
         references[identity] = reference
     if set(by_identity) != expected:
-        fail("SBOM component inventory differs from Package.resolved and Vendor")
+        fail("SBOM component inventory differs from Package.resolved")
 
     resources = app / "Contents" / "Resources"
     for identity in sorted(expected):
@@ -389,25 +367,17 @@ def main() -> None:
             fail(f"SBOM license evidence hash differs for {identity}")
         if detected_license(evidence_path) != claims[identity]:
             fail(f"SBOM license evidence text differs for {identity}")
-        if identity in pins:
-            pin = pins[identity]
-            revision = str(pin["state"]["revision"])
-            upstream = str(pin["location"])
-            if component_properties.get("lerro:package:source") != "swiftpm-resolved":
-                fail(f"SBOM source kind differs for {identity}")
-            if component_properties.get("lerro:package:revision") != revision:
-                fail(f"SBOM revision differs from Package.resolved for {identity}")
-            expected_version = str(pin["state"].get("version") or revision)
-            source_directory = artifacts.get(identity, checkouts.get(identity))
-            if source_directory is None:
-                fail(f"source license evidence is unavailable for {identity}")
-        else:
-            upstream, expected_version, expected_revision = vendor_metadata(vendors[identity])
-            if component_properties.get("lerro:package:source") != "vendored":
-                fail(f"SBOM source kind differs for Vendor package {identity}")
-            if component_properties.get("lerro:package:revision") != expected_revision:
-                fail(f"SBOM revision differs from Vendor provenance for {identity}")
-            source_directory = vendors[identity]
+        pin = pins[identity]
+        revision = str(pin["state"]["revision"])
+        upstream = str(pin["location"])
+        if component_properties.get("lerro:package:source") != "swiftpm-resolved":
+            fail(f"SBOM source kind differs for {identity}")
+        if component_properties.get("lerro:package:revision") != revision:
+            fail(f"SBOM revision differs from Package.resolved for {identity}")
+        expected_version = str(pin["state"].get("version") or revision)
+        source_directory = artifacts.get(identity, checkouts.get(identity))
+        if source_directory is None:
+            fail(f"source license evidence is unavailable for {identity}")
         expected_vcs, namespace, repository = public_github_vcs(upstream)
         expected_purl = swift_purl(namespace, repository, expected_version)
         if component.get("name") != repository:
@@ -489,7 +459,7 @@ def main() -> None:
         fail("SBOM application hashes differ from the app binary")
 
     dependencies = document.get("dependencies")
-    if not isinstance(dependencies, list) or len(dependencies) != EXPECTED_COMPONENT_COUNT + 1:
+    if not isinstance(dependencies, list) or len(dependencies) != len(expected) + 1:
         fail("SBOM dependency graph has an unexpected entry count")
     dependency_map: dict[str, set[str]] = {}
     for entry in dependencies:
@@ -525,7 +495,7 @@ def main() -> None:
         fail("release manifest SBOM format differs")
     if sbom_artifact.get("bytes") != sbom_path.stat().st_size:
         fail("release manifest SBOM byte count differs from the SBOM")
-    print("Verified CycloneDX SBOM: application identity, 17 packages, graph, licenses, hashes, and safe content.")
+    print(f"Verified CycloneDX SBOM: application identity, {len(expected)} packages, graph, licenses, hashes, and safe content.")
 
 
 if __name__ == "__main__":

@@ -277,38 +277,21 @@ for icon_resource_name in AppIcon.icns Assets.car; do
         exit 1
     }
 done
-expected_bundles=(mlx-swift_Cmlx.bundle swift-crypto_Crypto.bundle swift-transformers_Hub.bundle)
-for bundle_name in "${expected_bundles[@]}"; do
-    bundle_path="$app_path/Contents/Resources/$bundle_name"
-    [[ -d "$bundle_path" ]] || { print -u2 "Missing SwiftPM resource bundle: $bundle_name"; exit 1; }
+while IFS= read -r -d $'\0' bundle_path; do
     plutil -lint "$bundle_path/Contents/Info.plist"
-done
-actual_bundle_count=$(find "$app_path/Contents/Resources" -mindepth 1 -maxdepth 1 -type d -name '*.bundle' | wc -l | tr -d ' ')
-(( actual_bundle_count >= ${#expected_bundles[@]} )) || { print -u2 "SwiftPM resource-bundle count is too small: $actual_bundle_count"; exit 1; }
-metal_library_path="$app_path/Contents/Resources/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib"
-[[ -r "$metal_library_path" && -s "$metal_library_path" ]] || { print -u2 "MLX default.metallib is missing or unreadable."; exit 1; }
-file "$metal_library_path" | grep -q 'MetalLib executable' || { print -u2 "MLX default.metallib has an unexpected file type."; exit 1; }
+done < <(find "$app_path/Contents/Resources" -mindepth 1 -maxdepth 1 -type d -name '*.bundle' -print0)
 license_count=$(find "$app_path/Contents/Resources/ThirdPartyLicenses" -type f | wc -l | tr -d ' ')
 (( license_count > 0 )) || { print -u2 "Third-party licenses are missing."; exit 1; }
-vendor_record_pairs=(
-    "$project_dir/Vendor/swift-huggingface/LICENSE|$app_path/Contents/Resources/ThirdPartyLicenses/swift-huggingface-LICENSE"
-    "$project_dir/Vendor/swift-huggingface/UPSTREAM.md|$app_path/Contents/Resources/ThirdPartyLicenses/swift-huggingface-UPSTREAM.md"
-    "$project_dir/Vendor/swift-transformers/LICENSE|$app_path/Contents/Resources/ThirdPartyLicenses/swift-transformers-LICENSE"
-    "$project_dir/Vendor/swift-transformers/UPSTREAM.md|$app_path/Contents/Resources/ThirdPartyLicenses/swift-transformers-UPSTREAM.md"
-    "$project_dir/.build/artifacts/sparkle/Sparkle/LICENSE|$app_path/Contents/Resources/ThirdPartyLicenses/sparkle-LICENSE"
-)
-for record_pair in "${vendor_record_pairs[@]}"; do
-    source_record="${record_pair%%|*}"
-    packaged_record="${record_pair#*|}"
-    [[ -s "$source_record" && -s "$packaged_record" ]] || {
-        print -u2 "Missing or empty vendored dependency record: $packaged_record"
-        exit 1
-    }
-    cmp -s "$source_record" "$packaged_record" || {
-        print -u2 "Vendored dependency record differs from source: $packaged_record"
-        exit 1
-    }
-done
+sparkle_license_source="$project_dir/.build/artifacts/sparkle/Sparkle/LICENSE"
+sparkle_license_packaged="$app_path/Contents/Resources/ThirdPartyLicenses/sparkle-LICENSE"
+[[ -s "$sparkle_license_source" && -s "$sparkle_license_packaged" ]] || {
+    print -u2 "Missing or empty Sparkle license record: $sparkle_license_packaged"
+    exit 1
+}
+cmp -s "$sparkle_license_source" "$sparkle_license_packaged" || {
+    print -u2 "Packaged Sparkle license differs from source: $sparkle_license_packaged"
+    exit 1
+}
 
 binary_uuid=$(xcrun dwarfdump --uuid "$binary_path" | awk '/UUID:/ {print $2}')
 dsym_uuid=$(xcrun dwarfdump --uuid "$dsym_path" | awk '/UUID:/ {print $2}')

@@ -11,6 +11,10 @@ xcuserdata/
 *.log
 config/local.json
 config/maintainer.local.env
+distribution/wrangler.toml
+site/node_modules/
+site/dist/
+site/.astro/
 .env
 .env.*
 !.env.example

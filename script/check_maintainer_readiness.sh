@@ -50,8 +50,6 @@ source "$local_config"
 required_variables=(
     LERRO_NOTARY_PROFILE
     LERRO_SPARKLE_KEY_ACCOUNT
-    LERRO_PUBLIC_REPO_DIR
-    LERRO_PUBLIC_REMOTE
 )
 for variable in "${required_variables[@]}"; do
     value=${(P)variable:-}
@@ -77,18 +75,8 @@ done
     print -u2 "Missing private distribution/wrangler.toml."
     exit 1
 }
-[[ -d "$LERRO_PUBLIC_REPO_DIR/.git" ]] || {
-    print -u2 "Configured public repository worktree is unavailable."
-    exit 1
-}
-[[ "${LERRO_PUBLIC_REPO_DIR:A}" != "${project_dir:A}" ]] || {
-    print -u2 "The public repository worktree must be separate from the source workspace."
-    exit 1
-}
-
-public_remote=$(git -C "$LERRO_PUBLIC_REPO_DIR" remote get-url origin 2>/dev/null || true)
-[[ "$public_remote" == "$LERRO_PUBLIC_REMOTE" ]] || {
-    print -u2 "The public worktree origin differs from the configured official remote."
+git -C "$project_dir" remote get-url origin >/dev/null 2>&1 || {
+    print -u2 "This repository has no origin remote."
     exit 1
 }
 
@@ -120,10 +108,6 @@ if [[ "$require_release" == true ]]; then
         print -u2 "The source workspace must be clean for release readiness."
         exit 1
     }
-    [[ -z "$(git -C "$LERRO_PUBLIC_REPO_DIR" status --short)" ]] || {
-        print -u2 "The public repository worktree must be clean for release readiness."
-        exit 1
-    }
 fi
 
 if [[ "$require_online" == true ]]; then
@@ -133,7 +117,7 @@ if [[ "$require_online" == true ]]; then
         --config "$project_dir/distribution/wrangler.toml" \
         --json >/dev/null
     gh auth status --active --hostname github.com >/dev/null
-    git ls-remote "$LERRO_PUBLIC_REMOTE" HEAD >/dev/null
+    git -C "$project_dir" ls-remote origin HEAD >/dev/null
     for route in / /zh /changelog /zh/changelog; do
         curl --fail --silent --show-error \
             "https://lerroapp.com$route" >/dev/null

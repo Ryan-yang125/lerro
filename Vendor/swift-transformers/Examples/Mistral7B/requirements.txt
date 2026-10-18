@@ -1,6 +1,0 @@
-coremltools
-numpy
-torch
-tqdm
-transformers
-sentencepiece
