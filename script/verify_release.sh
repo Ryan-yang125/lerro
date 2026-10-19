@@ -466,7 +466,7 @@ codesign --verify --deep --strict --verbose=2 "$dmg_app_path"
     print -u2 "Disk image Applications entry must be a symlink to /Applications."
     exit 1
 }
-[[ -n "$(find "$disk_image_mount_path/.background" -maxdepth 1 -type f -name '*.tiff' -print -quit 2>/dev/null)" ]] || {
+[[ -s "$disk_image_mount_path/.background.tiff" ]] || {
     print -u2 "Disk image is missing its background TIFF."
     exit 1
 }
