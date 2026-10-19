@@ -1,8 +1,9 @@
 cfcd5bbdfac9eeb7151846bed60449e10347475fe8a7a37316fcce42174879d4  ./README.md
 be0df9c30964dccb4f1703fa116b9302825c00c39e74c1ac64583bf879f044df  ./exports/app-icon/AppIcon.icns
-c4481de8469f3012dde5549ef3013b22028379fd039c117668a8118cb0ef994b  ./exports/app-icon/Assets.car
+7c3f4cc6371eb0bcda5dace469eaabd8417eed5635fa56425ac2fafbaf780248  ./exports/app-icon/Assets.car
 138f44f202df46ddd6c9307e688cae61cc8fdc1f07393b55f76fa3d38275497c  ./exports/app-icon/lerro-app-icon-1024.png
 b57d2afaec86318fed93d9c0c942f5f7fece6a50b25169e98228a4a42f861b05  ./exports/app-icon/lerro-app-icon-flat.svg
+5157721c728db8a798ade9978acf04392dc6ab1fcbce5ea874f985b52821bcd4  ./exports/dmg/lerro-dmg-background.tiff
 726d74a588aed4045cd78e6701549e1316ac432aeab60fb9e659dfa843e2c2fe  ./exports/logo/lerro-construction.pdf
 2a4152490b62df859dfda46543c61e890d58d05274f6a1bc753ba985b9a4728a  ./exports/logo/lerro-construction.png
 a7822ead2101e1a34e185404a15dfc0ed22f8bd5a274e3fa6e62e336db914768  ./exports/logo/lerro-construction.svg
@@ -64,9 +65,9 @@ c29a8f0a269bc953154c466b9502b04274ff0896ed881e376042579b626d8063  ./exports/menu
 2f162069820d382932fb0d7ff6d10b01837841acf397630f8767e2110a8c4242  ./guidelines/logo-usage.md
 54e9b97e20d60adde46c855c2d52142ca4dc52225505ba8288270895a16f7e99  ./guidelines/motion.md
 4622cc5934a3ea11ab404504bcd91b9cd1235061ee90077080d8b661492a7615  ./guidelines/voice-and-copy.md
-c71bd938aeae6ff298f445c76467f6630206b7e2c8ebf0342a862011e45cb13d  ./licenses/ASSET-LICENSES.json
+c9b6613018dba0041d776926f8f0adbc965fb7ab8a8a33d780a05435273f3a6f  ./licenses/ASSET-LICENSES.json
 262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a  ./licenses/Inter-OFL.txt
-fd45405731327448c3adf8686a3df9eb78b7d018e1517f92524ae1f1ca566b7f  ./scripts/generate-assets.sh
+142a2d9ded100ab561cf3dbedec3b0254a35e9072ebcf9be1e268a297a51b007  ./scripts/generate-assets.sh
 4e8524e8bf5909ef5c884fd55ce91fb702edebc2c2ee6ac8bc48656b8f0309ab  ./scripts/render-svg.swift
 4a720cd2939ac26e26b2f36296f6ca15962fb8b701bf877fa618cdc256a3e7c5  ./scripts/verify-assets.sh
 bad5c6446cf157350fb9627a974298ad8f39da779389c0c5469d22fce69e3d69  ./source/app-icon/Accent.xcassets/AccentColor.colorset/Contents.json
@@ -75,6 +76,7 @@ d01f204125a341db27336c88d5c996e64d00043407ee8506e07c46223e3c1103  ./source/app-i
 44cde92359218710b67d9f88e6c3354f26d273a8364336e5b392fda542a13525  ./source/app-icon/AppIcon.icon/Assets/cursor.svg
 dac43c119655dbf880eea909b45f9bfa6648ba6c6ccfc5e758c481132ed8ff98  ./source/app-icon/AppIcon.icon/icon.json
 b57d2afaec86318fed93d9c0c942f5f7fece6a50b25169e98228a4a42f861b05  ./source/app-icon/lerro-app-icon-flat.svg
+da9950e827faf12d7b63b544f3a300c76b3977e80ae8061bdefe3c50903d55e7  ./source/dmg/lerro-dmg-background.svg
 a3393322cd7b4c1e0aa93bebe09abaa91ad891290d1225b0b5d10b5c6f216025  ./source/icons/Glyphs.xcassets/Contents.json
 c1af9bd038d3f902fb9bc257cf86a2ab1dc3dd979333bab137663b91352465f3  ./source/icons/Glyphs.xcassets/glyph-about-cursor.imageset/Contents.json
 3578cb5a566bcba7cee32717d8c0f2a53b1da3e0d1cca8bc6aa39cc200705307  ./source/icons/Glyphs.xcassets/glyph-about-cursor.imageset/glyph-about-cursor.svg

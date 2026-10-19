@@ -80,12 +80,12 @@ test("hero headings", () => {
 for (const [file, lang] of [["changelog.html", "zh"], ["en/changelog.html", "en"]]) {
   test(`${file} lists the newest release first with its immutable URL`, () => {
     const html = read(file);
-    const first = html.indexOf("Lerro 1.7.1");
-    assert.ok(first >= 0, "1.7.1 present");
-    assert.ok(html.includes(release("1.7.1", "15")));
-    for (const [version, build] of [["1.7.0", "14"], ...olderVersions]) {
+    const first = html.indexOf("Lerro 1.7.2");
+    assert.ok(first >= 0, "1.7.2 present");
+    assert.ok(html.includes("https://updates.lerroapp.com/releases/1.7.2/16/Lerro-macOS-arm64.dmg"));
+    for (const [version, build] of [["1.7.1", "15"], ["1.7.0", "14"], ...olderVersions]) {
       const at = html.indexOf(`Lerro ${version}`);
-      assert.ok(at > first, `${version} listed after 1.7.1`);
+      assert.ok(at > first, `${version} listed after 1.7.2`);
       assert.ok(html.includes(release(version, build)), `${version} download URL`);
     }
     assert.ok(html.includes(lang === "zh" ? "2026 年 10 月 19 日" : "October 19, 2026"));

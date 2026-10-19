@@ -13,16 +13,21 @@ dsym_archive_name=Lerro-macOS-arm64.dSYM.zip
 manifest_name=Lerro-release-manifest.json
 checksum_name=SHA256SUMS.txt
 sbom_name=Lerro-macOS-arm64.cdx.json
+disk_image_name=Lerro-macOS-arm64.dmg
 archive_path="$outputs_path/$archive_name"
 dsym_archive_path="$outputs_path/$dsym_archive_name"
 manifest_path="$outputs_path/$manifest_name"
 checksum_path="$outputs_path/$checksum_name"
 sbom_path="$outputs_path/$sbom_name"
+disk_image_path="$outputs_path/$disk_image_name"
 pending_archive_path="$outputs_path/.$archive_name.pending"
 pending_dsym_archive_path="$outputs_path/.$dsym_archive_name.pending"
 pending_manifest_path="$outputs_path/.$manifest_name.pending"
 pending_checksum_path="$outputs_path/.$checksum_name.pending"
 pending_sbom_path="$outputs_path/.$sbom_name.pending"
+pending_disk_image_path="$outputs_path/.$disk_image_name.pending"
+dmg_venv_path="$project_dir/.build/dmgbuild-venv"
+dmg_requirements_path="$script_dir/requirements-dmg.txt"
 requested_signing_mode=${LERRO_SIGNING_MODE:-auto}
 notary_profile=${LERRO_NOTARY_PROFILE:-}
 sparkle_key_account=${LERRO_SPARKLE_KEY_ACCOUNT:-app.lerro.mac}
@@ -54,7 +59,8 @@ cleanup_pending_artifacts() {
         "$pending_dsym_archive_path" \
         "$pending_manifest_path" \
         "$pending_checksum_path" \
-        "$pending_sbom_path"
+        "$pending_sbom_path" \
+        "$pending_disk_image_path"
 }
 cleanup_all() {
     cleanup_pending_artifacts
@@ -62,6 +68,15 @@ cleanup_all() {
 }
 trap cleanup_all EXIT INT TERM
 cleanup_pending_artifacts
+
+retry_notarization() {
+    local attempt
+    for attempt in 1 2 3; do
+        xcrun notarytool submit "$1" --keychain-profile "$notary_profile" --wait && return 0
+        print -u2 "notarytool submit failed (attempt $attempt of 3)"
+    done
+    return 1
+}
 
 capture_source_snapshot() {
     local destination="$1"
@@ -144,12 +159,34 @@ plutil -lint "$app_path/Contents/Info.plist" "$app_path/Contents/Resources/Priva
 
 if [[ -n "$notary_profile" ]]; then
     ditto -c -k --norsrc --keepParent "$app_path" "$pending_archive_path"
-    xcrun notarytool submit "$pending_archive_path" --keychain-profile "$notary_profile" --wait
+    retry_notarization "$pending_archive_path"
     xcrun stapler staple "$app_path"
     rm -f -- "$pending_archive_path"
     codesign --verify --deep --strict --verbose=2 "$app_path"
     spctl -a -vv "$app_path"
 fi
+
+print "Building the disk image"
+dmg_venv_requirements="$dmg_venv_path/requirements-dmg.txt"
+if ! cmp -s "$dmg_requirements_path" "$dmg_venv_requirements"; then
+    rm -rf -- "$dmg_venv_path"
+    python3 -m venv "$dmg_venv_path"
+    "$dmg_venv_path/bin/python" -m pip install --quiet --require-virtualenv -r "$dmg_requirements_path"
+    cp "$dmg_requirements_path" "$dmg_venv_requirements"
+fi
+"$dmg_venv_path/bin/dmgbuild" \
+    -s "$script_dir/dmg_settings.py" \
+    -D "app=$app_path" \
+    -D "background=$project_dir/Brand/exports/dmg/lerro-dmg-background.tiff" \
+    -D "icon=$project_dir/Sources/Lerro/Resources/AppIcon.icns" \
+    Lerro "$pending_disk_image_path"
+if [[ -n "$notary_profile" ]]; then
+    codesign --force --sign "$signing_identity" --timestamp "$pending_disk_image_path"
+    retry_notarization "$pending_disk_image_path"
+    xcrun stapler staple "$pending_disk_image_path"
+    xcrun stapler validate "$pending_disk_image_path"
+fi
+disk_image_hash=$(shasum -a 256 "$pending_disk_image_path" | awk '{print $1}')
 
 ditto -c -k --norsrc --keepParent "$app_path" "$pending_archive_path"
 ditto -c -k --norsrc --keepParent "$dsym_path" "$pending_dsym_archive_path"
@@ -213,7 +250,10 @@ python3 - \
     "$dsym_archive_hash" \
     "$sbom_name" \
     "$sbom_hash" \
-    "$sbom_bytes" <<'PY'
+    "$sbom_bytes" \
+    "$pending_disk_image_path" \
+    "$disk_image_name" \
+    "$disk_image_hash" <<'PY'
 import datetime
 import hashlib
 import json
@@ -237,6 +277,9 @@ import sys
     sbom_name,
     sbom_hash,
     sbom_bytes,
+    disk_image_raw,
+    disk_image_name,
+    disk_image_hash,
 ) = sys.argv[1:]
 project = pathlib.Path(project_raw)
 source_snapshot = json.loads(pathlib.Path(source_raw).read_text())
@@ -244,6 +287,7 @@ destination = pathlib.Path(destination_raw)
 app = pathlib.Path(app_raw)
 archive = pathlib.Path(archive_raw)
 dsym_archive = pathlib.Path(dsym_archive_raw)
+disk_image = pathlib.Path(disk_image_raw)
 binary = app / "Contents/MacOS/Lerro"
 dsym = project / "dist/Lerro.app.dSYM"
 info_path = app / "Contents/Info.plist"
@@ -352,6 +396,12 @@ manifest = {
             "sha256": dsym_archive_hash,
             "bytes": dsym_archive.stat().st_size,
         },
+        "diskImage": {
+            "file": disk_image_name,
+            "sha256": disk_image_hash,
+            "bytes": disk_image.stat().st_size,
+            "contentType": "application/x-apple-diskimage",
+        },
         "softwareBillOfMaterials": {
             "file": sbom_name,
             "sha256": sbom_hash,
@@ -368,12 +418,14 @@ manifest_hash=$(shasum -a 256 "$pending_manifest_path" | awk '{print $1}')
 {
     print "$archive_hash  $archive_name"
     print "$dsym_archive_hash  $dsym_archive_name"
+    print "$disk_image_hash  $disk_image_name"
     print "$sbom_hash  $sbom_name"
     print "$manifest_hash  $manifest_name"
 } > "$pending_checksum_path"
 
 mv -f "$pending_archive_path" "$archive_path"
 mv -f "$pending_dsym_archive_path" "$dsym_archive_path"
+mv -f "$pending_disk_image_path" "$disk_image_path"
 mv -f "$pending_sbom_path" "$sbom_path"
 mv -f "$pending_manifest_path" "$manifest_path"
 mv -f "$pending_checksum_path" "$checksum_path"
@@ -383,6 +435,7 @@ rm -rf -- "$temporary_directory"
 
 (cd "$outputs_path" && shasum -a 256 -c "$checksum_name")
 print "Packaged $archive_path"
+print "Disk image: $disk_image_path"
 print "Debug symbols: $dsym_archive_path"
 print "CycloneDX SBOM: $sbom_path"
 print "Release manifest: $manifest_path"

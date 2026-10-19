@@ -9,13 +9,14 @@ distribution_config="$distribution_dir/wrangler.toml"
 publication_sql_renderer="$distribution_dir/bin/render-publication-sql.mjs"
 outputs_path="$project_dir/outputs"
 archive_path="$outputs_path/Lerro-macOS-arm64.zip"
+disk_image_path="$outputs_path/Lerro-macOS-arm64.dmg"
 manifest_path="$outputs_path/Lerro-release-manifest.json"
 worker_binary="$project_dir/site/node_modules/.bin/wrangler"
 release_notes_url="https://lerroapp.com/changelog"
 
 usage() {
     print "Usage: $script_path"
-    print "Publishes the current Developer ID + notarized Sparkle archive to updates.lerroapp.com."
+    print "Publishes the current Developer ID + notarized Sparkle archive and disk image to updates.lerroapp.com."
 }
 
 if (( $# > 0 )); then
@@ -49,7 +50,7 @@ command -v node >/dev/null || {
     print -u2 "Node.js is required to render the controlled D1 publication batch."
     exit 1
 }
-[[ -f "$archive_path" && -f "$manifest_path" ]] || {
+[[ -f "$archive_path" && -f "$disk_image_path" && -f "$manifest_path" ]] || {
     print -u2 "Package a release before publishing it."
     exit 1
 }
@@ -69,7 +70,7 @@ if re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
     raise SystemExit("The private distribution configuration has an invalid D1 database ID.")
 PY
 
-IFS=$'\t' read -r version build_number minimum_macos archive_name archive_sha256 archive_bytes sparkle_signature < <(
+IFS=$'\t' read -r version build_number minimum_macos archive_name archive_sha256 archive_bytes sparkle_signature disk_image_name disk_image_sha256 disk_image_bytes < <(
     python3 - "$manifest_path" <<'PY'
 import json
 import pathlib
@@ -81,6 +82,7 @@ signing = manifest.get("signing", {})
 application = manifest.get("application", {})
 archive = manifest.get("artifacts", {}).get("applicationArchive", {})
 sparkle = archive.get("sparkle", {})
+disk_image = manifest.get("artifacts", {}).get("diskImage", {})
 
 if signing.get("resolvedMode") != "developer-id" or signing.get("notarized") is not True:
     raise SystemExit("Cloudflare publication requires a notarized Developer ID package.")
@@ -111,7 +113,22 @@ if not isinstance(signature, str) or not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", s
 if length != bytes_value:
     raise SystemExit("Manifest Sparkle archive length differs from the archive size.")
 
-print("\t".join((version, build, minimum_macos, filename, sha256, str(bytes_value), signature)))
+disk_image_name = str(disk_image.get("file", ""))
+disk_image_sha256 = str(disk_image.get("sha256", ""))
+disk_image_bytes = disk_image.get("bytes")
+if disk_image_name != "Lerro-macOS-arm64.dmg":
+    raise SystemExit("Manifest disk image filename is invalid.")
+if disk_image.get("contentType") != "application/x-apple-diskimage":
+    raise SystemExit("Manifest disk image content type is invalid.")
+if not re.fullmatch(r"[0-9a-f]{64}", disk_image_sha256):
+    raise SystemExit("Manifest disk image SHA-256 is invalid.")
+if not isinstance(disk_image_bytes, int) or disk_image_bytes < 1:
+    raise SystemExit("Manifest disk image size is invalid.")
+
+print("\t".join((
+    version, build, minimum_macos, filename, sha256, str(bytes_value), signature,
+    disk_image_name, disk_image_sha256, str(disk_image_bytes),
+)))
 PY
 )
 
@@ -121,8 +138,15 @@ actual_bytes=$(stat -f '%z' "$archive_path")
     print -u2 "The current archive differs from its release manifest. Package it again from a stable tree."
     exit 1
 }
+actual_disk_image_sha256=$(shasum -a 256 "$disk_image_path" | awk '{print $1}')
+actual_disk_image_bytes=$(stat -f '%z' "$disk_image_path")
+[[ "$actual_disk_image_sha256" == "$disk_image_sha256" && "$actual_disk_image_bytes" == "$disk_image_bytes" ]] || {
+    print -u2 "The current disk image differs from its release manifest. Package it again from a stable tree."
+    exit 1
+}
 
 r2_key="releases/$version/$build_number/$archive_name"
+disk_image_r2_key="releases/$version/$build_number/$disk_image_name"
 release_lookup_sql=$(python3 - "$version" "$build_number" <<'PY'
 import sys
 
@@ -133,14 +157,20 @@ SELECT
   release.id AS release_id,
   release.status,
   release.minimum_macos,
-  artifact.r2_key,
-  artifact.filename,
-  artifact.bytes,
-  artifact.sha256,
-  artifact.sparkle_ed_signature
+  archive.r2_key,
+  archive.filename,
+  archive.bytes,
+  archive.sha256,
+  archive.sparkle_ed_signature,
+  disk_image.r2_key AS disk_image_r2_key,
+  disk_image.filename AS disk_image_filename,
+  disk_image.bytes AS disk_image_bytes,
+  disk_image.sha256 AS disk_image_sha256
 FROM releases AS release
-LEFT JOIN artifacts AS artifact
-  ON artifact.release_id = release.id AND artifact.kind = 'macos-zip'
+LEFT JOIN artifacts AS archive
+  ON archive.release_id = release.id AND archive.kind = 'macos-zip'
+LEFT JOIN artifacts AS disk_image
+  ON disk_image.release_id = release.id AND disk_image.kind = 'macos-dmg'
 WHERE release.channel = 'stable'
   AND release.version = {quoted_version}
   AND release.build_number = {build}
@@ -161,7 +191,11 @@ existing_release_state=$(python3 - \
     "$archive_name" \
     "$archive_bytes" \
     "$archive_sha256" \
-    "$sparkle_signature" <<'PY'
+    "$sparkle_signature" \
+    "$disk_image_r2_key" \
+    "$disk_image_name" \
+    "$disk_image_bytes" \
+    "$disk_image_sha256" <<'PY'
 import json
 import sys
 
@@ -173,6 +207,10 @@ import sys
     expected_bytes,
     expected_sha256,
     expected_signature,
+    expected_disk_image_r2_key,
+    expected_disk_image_filename,
+    expected_disk_image_bytes,
+    expected_disk_image_sha256,
 ) = sys.argv[1:]
 
 decoded = json.loads(payload)
@@ -197,6 +235,10 @@ expected = {
     "bytes": int(expected_bytes),
     "sha256": expected_sha256,
     "sparkle_ed_signature": expected_signature,
+    "disk_image_r2_key": expected_disk_image_r2_key,
+    "disk_image_filename": expected_disk_image_filename,
+    "disk_image_bytes": int(expected_disk_image_bytes),
+    "disk_image_sha256": expected_disk_image_sha256,
 }
 if any(row.get(key) != value for key, value in expected.items()):
     raise SystemExit("An existing stable release has different metadata or bytes.")
@@ -205,13 +247,77 @@ PY
 )
 
 temporary_directory=$(mktemp -d "${TMPDIR:-/tmp}/lerro-cloudflare-publish.XXXXXX")
-downloaded_archive="$temporary_directory/$archive_name"
+r2_readback_path="$temporary_directory/r2-readback"
 publication_json="$temporary_directory/publication.json"
 appcast_response="$temporary_directory/appcast.xml"
 cleanup() {
     rm -rf -- "$temporary_directory"
 }
 trap cleanup EXIT INT TERM
+
+# Stores one file at an immutable R2 key. An existing key must already hold the
+# same bytes. Release archives are application data, so the R2 Data Catalog
+# prompt is irrelevant. Wrangler 4.118.0 can report a large binary --file upload
+# as complete while leaving the key absent, so the upload uses --pipe and the
+# full readback SHA-256 is the gate before any D1 record becomes public.
+upload_immutable_object() {
+    local source_path="$1"
+    local key="$2"
+    local expected_sha256="$3"
+    local content_type="$4"
+    local r2_get_output
+    local readback_succeeded=0
+    local readback_attempt
+    local readback_sha256
+
+    if r2_get_output=$("$worker_binary" r2 object get "$r2_bucket/$key" \
+        --remote \
+        --config "$distribution_config" \
+        --file "$r2_readback_path" 2>&1); then
+        readback_sha256=$(shasum -a 256 "$r2_readback_path" | awk '{print $1}')
+        rm -f -- "$r2_readback_path"
+        [[ "$readback_sha256" == "$expected_sha256" ]] || {
+            print -u2 "The immutable R2 release key already contains different bytes: $key"
+            exit 1
+        }
+        return 0
+    fi
+    if [[ "$r2_get_output" != *"The specified key does not exist."* ]]; then
+        print -u2 "Unable to determine whether the immutable R2 release key exists: $key"
+        print -u2 -- "$r2_get_output"
+        exit 1
+    fi
+
+    "$worker_binary" r2 object put "$r2_bucket/$key" \
+        --remote \
+        --config "$distribution_config" \
+        --pipe \
+        --content-type "$content_type" \
+        --cache-control "public, max-age=31536000, immutable" \
+        < "$source_path"
+    for readback_attempt in {1..5}; do
+        if "$worker_binary" r2 object get "$r2_bucket/$key" \
+            --remote \
+            --config "$distribution_config" \
+            --file "$r2_readback_path" >/dev/null 2>&1; then
+            readback_succeeded=1
+            break
+        fi
+        if (( readback_attempt < 5 )); then
+            sleep 2
+        fi
+    done
+    (( readback_succeeded == 1 )) || {
+        print -u2 "R2 did not make the immutable release key readable after upload: $key"
+        exit 1
+    }
+    readback_sha256=$(shasum -a 256 "$r2_readback_path" | awk '{print $1}')
+    rm -f -- "$r2_readback_path"
+    [[ "$readback_sha256" == "$expected_sha256" ]] || {
+        print -u2 "R2 readback does not match the packaged file: $key"
+        exit 1
+    }
+}
 
 if [[ "$existing_release_state" == "absent" ]]; then
     head_generation_json=$("$worker_binary" d1 execute "$d1_database" \
@@ -240,59 +346,12 @@ PY
 )
     next_generation=$(( expected_generation + 1 ))
 
-    if r2_get_output=$("$worker_binary" r2 object get "$r2_bucket/$r2_key" \
-        --remote \
-        --config "$distribution_config" \
-        --file "$downloaded_archive" 2>&1); then
-        existing_sha256=$(shasum -a 256 "$downloaded_archive" | awk '{print $1}')
-        [[ "$existing_sha256" == "$archive_sha256" ]] || {
-            print -u2 "The immutable R2 release key already contains different bytes: $r2_key"
-            exit 1
-        }
-    elif [[ "$r2_get_output" == *"The specified key does not exist."* ]]; then
-        # The exact GET above proved this immutable key absent. ZIP archives are
-        # application data, so the R2 Data Catalog prompt is irrelevant here.
-        # SHA-256 readback remains the publication gate before any D1
-        # record becomes public. Wrangler 4.118.0 can report a large binary
-        # --file upload as complete while leaving the key absent; the --pipe
-        # path is verified against the same immutable key below.
-        "$worker_binary" r2 object put "$r2_bucket/$r2_key" \
-            --remote \
-            --config "$distribution_config" \
-            --pipe \
-            --content-type application/zip \
-            --cache-control "public, max-age=31536000, immutable" \
-            < "$archive_path"
-        r2_readback_succeeded=0
-        for readback_attempt in {1..5}; do
-            if "$worker_binary" r2 object get "$r2_bucket/$r2_key" \
-                --remote \
-                --config "$distribution_config" \
-                --file "$downloaded_archive" >/dev/null 2>&1; then
-                r2_readback_succeeded=1
-                break
-            fi
-            if (( readback_attempt < 5 )); then
-                sleep 2
-            fi
-        done
-        (( r2_readback_succeeded == 1 )) || {
-            print -u2 "R2 did not make the immutable release key readable after upload: $r2_key"
-            exit 1
-        }
-        uploaded_sha256=$(shasum -a 256 "$downloaded_archive" | awk '{print $1}')
-        [[ "$uploaded_sha256" == "$archive_sha256" ]] || {
-            print -u2 "R2 readback does not match the packaged ZIP."
-            exit 1
-        }
-    else
-        print -u2 "Unable to determine whether the immutable R2 release key exists."
-        print -u2 -- "$r2_get_output"
-        exit 1
-    fi
+    upload_immutable_object "$archive_path" "$r2_key" "$archive_sha256" application/zip
+    upload_immutable_object "$disk_image_path" "$disk_image_r2_key" "$disk_image_sha256" application/x-apple-diskimage
 
     release_id=$(uuidgen | tr '[:upper:]' '[:lower:]')
     artifact_id=$(uuidgen | tr '[:upper:]' '[:lower:]')
+    disk_image_id=$(uuidgen | tr '[:upper:]' '[:lower:]')
     published_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
     python3 - \
         "$publication_json" \
@@ -307,6 +366,11 @@ PY
         "$archive_bytes" \
         "$archive_sha256" \
         "$sparkle_signature" \
+        "$disk_image_id" \
+        "$disk_image_r2_key" \
+        "$disk_image_name" \
+        "$disk_image_bytes" \
+        "$disk_image_sha256" \
         "$next_generation" \
         "$expected_generation" \
         "$release_notes_url" <<'PY'
@@ -327,6 +391,11 @@ import sys
     archive_bytes,
     archive_sha256,
     sparkle_signature,
+    disk_image_id,
+    disk_image_r2_key,
+    disk_image_name,
+    disk_image_bytes,
+    disk_image_sha256,
     generation,
     expected_generation,
     release_notes_url,
@@ -353,6 +422,14 @@ publication = {
         "edSignature": sparkle_signature,
         "contentType": "application/zip",
     },
+    "diskImage": {
+        "id": disk_image_id,
+        "r2Key": disk_image_r2_key,
+        "filename": disk_image_name,
+        "bytes": int(disk_image_bytes),
+        "sha256": disk_image_sha256,
+        "contentType": "application/x-apple-diskimage",
+    },
     "generation": int(generation),
     "expectedGeneration": int(expected_generation),
 }
@@ -369,11 +446,11 @@ import json
 import sys
 
 results = json.loads(sys.argv[1])
-if not isinstance(results, list) or len(results) != 3:
-    raise SystemExit("D1 publication did not return the expected three-statement batch result.")
+if not isinstance(results, list) or len(results) != 4:
+    raise SystemExit("D1 publication did not return the expected four-statement batch result.")
 for result in results:
     if result.get("success") is not True or result.get("meta", {}).get("changes") != 1:
-        raise SystemExit("D1 publication did not atomically create the release, artifact, and channel head.")
+        raise SystemExit("D1 publication did not atomically create the release, both artifacts, and channel head.")
 PY
 elif [[ "$existing_release_state" != "identical" ]]; then
     print -u2 "D1 release lookup returned an unsupported state: $existing_release_state"
@@ -383,10 +460,12 @@ fi
 verification_token=$(uuidgen | tr '[:upper:]' '[:lower:]')
 appcast_url="https://updates.lerroapp.com/appcast/stable.xml"
 immutable_url="https://updates.lerroapp.com/releases/$version/$build_number/$archive_name"
+disk_image_immutable_url="https://updates.lerroapp.com/releases/$version/$build_number/$disk_image_name"
 latest_url="https://updates.lerroapp.com/download/macos/latest"
 appcast_verified=0
 for attempt in {1..10}; do
     if curl --fail --silent --show-error \
+        --retry 3 --retry-delay 2 --retry-all-errors \
         --header 'Cache-Control: no-cache' \
         --output "$appcast_response" \
         "$appcast_url?verify=$verification_token"; then
@@ -454,20 +533,26 @@ done
     exit 1
 }
 
-verify_public_archive() {
+verify_public_file() {
     local label="$1"
     local url="$2"
+    local expected_name="$3"
+    local expected_type="$4"
+    local expected_bytes="$5"
+    local expected_sha256="$6"
     local headers_path="$temporary_directory/$label.headers"
+    local body_path="$temporary_directory/$label.body"
     local downloaded_sha256
 
     curl --fail --silent --show-error \
+        --retry 4 --retry-delay 2 --retry-all-errors \
         --location \
         --head \
         --header 'Cache-Control: no-cache' \
         --dump-header "$headers_path" \
         --output /dev/null \
         "$url?verify=$verification_token"
-    python3 - "$headers_path" "$archive_bytes" <<'PY'
+    python3 - "$headers_path" "$expected_name" "$expected_type" "$expected_bytes" <<'PY'
 import pathlib
 import sys
 
@@ -477,24 +562,29 @@ for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
         continue
     name, value = line.split(":", 1)
     headers[name.lower()] = value.strip()
-if headers.get("content-type") != "application/zip":
-    raise SystemExit("Public download did not return application/zip.")
-if headers.get("content-length") != sys.argv[2]:
+if headers.get("content-type") != sys.argv[3]:
+    raise SystemExit(f"Public download did not return {sys.argv[3]}.")
+if headers.get("content-length") != sys.argv[4]:
     raise SystemExit("Public download length differs from the release manifest.")
+if f'filename="{sys.argv[2]}"' not in headers.get("content-disposition", ""):
+    raise SystemExit("Public download filename differs from the release manifest.")
 PY
-    downloaded_sha256=$(curl --fail --silent --show-error \
+    curl --fail --silent --show-error \
+        --retry 4 --retry-delay 2 --retry-all-errors \
         --location \
         --header 'Cache-Control: no-cache' \
-        "$url?verify=$verification_token" \
-        | shasum -a 256 \
-        | awk '{print $1}')
-    [[ "$downloaded_sha256" == "$archive_sha256" ]] || {
-        print -u2 "The public $label ZIP SHA-256 differs from the release manifest."
+        --output "$body_path" \
+        "$url?verify=$verification_token"
+    downloaded_sha256=$(shasum -a 256 "$body_path" | awk '{print $1}')
+    rm -f -- "$body_path"
+    [[ "$downloaded_sha256" == "$expected_sha256" ]] || {
+        print -u2 "The public $label SHA-256 differs from the release manifest."
         exit 1
     }
 }
 
-verify_public_archive immutable "$immutable_url"
-verify_public_archive latest "$latest_url"
+verify_public_file immutable-zip "$immutable_url" "$archive_name" application/zip "$archive_bytes" "$archive_sha256"
+verify_public_file immutable-dmg "$disk_image_immutable_url" "$disk_image_name" application/x-apple-diskimage "$disk_image_bytes" "$disk_image_sha256"
+verify_public_file latest-dmg "$latest_url" "$disk_image_name" application/x-apple-diskimage "$disk_image_bytes" "$disk_image_sha256"
 
 print "Published Lerro $version ($build_number) to $latest_url"

@@ -6,6 +6,14 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-10-19
+
+### Added
+
+- The website download is a signed and notarized disk image. Opening it shows
+  Lerro next to the Applications folder on a branded background; drag Lerro
+  across to install. In-app updates keep using the ZIP archive.
+
 ## [1.7.1] - 2026-10-19
 
 ### Removed
@@ -493,7 +501,8 @@ All notable changes to Lerro will be documented here. The project follows
   plaintext BYOK credentials; logs, history, errors, fixtures, and public exports
   exclude API keys and Authorization headers.
 
-[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.7.2...HEAD
+[1.7.2]: https://github.com/Ryan-yang125/lerro/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/Ryan-yang125/lerro/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/Ryan-yang125/lerro/compare/v1.6.0...v1.7.0
 [1.2.0]: https://github.com/Ryan-yang125/lerro/compare/v1.1.1...v1.2.0

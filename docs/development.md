@@ -136,13 +136,16 @@ Maintainer labels live in `config/maintainer.local.env` (git-ignored; template i
 
    This runs script lint, plist lint, the full test suite, the release build,
    Developer ID signing, notarization, stapling, Sparkle Ed25519 signing, ZIP and
-   dSYM packaging, the CycloneDX SBOM, the manifest, and checksums. It then unzips
+   dSYM packaging, the drag-to-install DMG (built with `dmgbuild` from
+   [`script/requirements-dmg.txt`](../script/requirements-dmg.txt) in
+   `.build/dmgbuild-venv`, then signed, notarized and stapled), the CycloneDX SBOM, the manifest, and checksums. It then unzips
    into a temporary directory and checks layout, resources, licenses,
-   architecture, dSYM UUID, code signature, Gatekeeper, and an inert fixture
-   launch. Outputs in `outputs/`:
+   architecture, dSYM UUID, code signature, Gatekeeper, an inert fixture
+   launch, and the DMG contents, checksum and notarization. Outputs in `outputs/`:
 
    ```text
    Lerro-macOS-arm64.zip
+   Lerro-macOS-arm64.dmg
    Lerro-macOS-arm64.dSYM.zip
    Lerro-macOS-arm64.cdx.json
    Lerro-release-manifest.json
@@ -155,7 +158,8 @@ Maintainer labels live in `config/maintainer.local.env` (git-ignored; template i
    (cd site && npm run deploy)
    ```
 
-5. Publish the archive and update feed:
+5. Publish the archive and update feed. The website "latest" download serves the
+   DMG; Sparkle updates keep using the ZIP:
 
    ```zsh
    ./script/publish_cloudflare_release.sh
@@ -172,7 +176,8 @@ Maintainer labels live in `config/maintainer.local.env` (git-ignored; template i
    git tag -a vX.Y.Z -m "Lerro X.Y.Z"
    git push origin vX.Y.Z
    gh release create vX.Y.Z --title "Lerro X.Y.Z" --notes-file <notes> \
-     outputs/Lerro-macOS-arm64.zip outputs/Lerro-macOS-arm64.dSYM.zip \
+     outputs/Lerro-macOS-arm64.zip outputs/Lerro-macOS-arm64.dmg \
+     outputs/Lerro-macOS-arm64.dSYM.zip \
      outputs/Lerro-macOS-arm64.cdx.json outputs/Lerro-release-manifest.json \
      outputs/SHA256SUMS.txt
    ```

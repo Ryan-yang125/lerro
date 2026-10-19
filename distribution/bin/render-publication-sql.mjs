@@ -7,7 +7,7 @@ import { renderPublicationSQL } from "../src/publication-batch.mjs";
 
 const usage = `Usage: node distribution/bin/render-publication-sql.mjs [publication.json|-]
 
-Reads one publication JSON document and writes the three semicolon-separated D1
+Reads one publication JSON document and writes the four semicolon-separated D1
 statements to stdout. Omit the argument, or pass -, to read JSON from stdin.`;
 
 async function readStandardInput() {

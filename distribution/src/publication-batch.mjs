@@ -1,7 +1,10 @@
 const RELEASE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const VERSION_PATTERN = /^[0-9][0-9A-Za-z.-]{0,63}$/;
-const FILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.zip$/;
+const ARCHIVE_FILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.zip$/;
+const DISK_IMAGE_FILE_NAME = "Lerro-macOS-arm64.dmg";
+const ARCHIVE_CONTENT_TYPE = "application/zip";
+const DISK_IMAGE_CONTENT_TYPE = "application/x-apple-diskimage";
 const SHA256_PATTERN = /^[0-9a-f]{64}$/i;
 const ED_SIGNATURE_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
 const SUPPORTED_ARCHITECTURES = new Set(["arm64", "x86_64", "universal"]);
@@ -23,7 +26,7 @@ const INSERT_ARTIFACT = `
   INSERT INTO artifacts (
     id, release_id, kind, r2_key, filename, bytes, sha256,
     sparkle_ed_signature, content_type, created_at
-  ) VALUES (?, ?, 'macos-zip', ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 const ADVANCE_CHANNEL_HEAD = `
@@ -73,11 +76,24 @@ function normalizedMinimumMacOS(release) {
   return camelCaseValue ?? databaseCaseValue;
 }
 
+function assertArtifact(release, artifact, { filenameValid, contentType, name }) {
+  assert(RELEASE_ID_PATTERN.test(artifact.id), `${name}.id must be a UUID`);
+  assert(filenameValid, `${name}.filename is invalid`);
+  assert(isPositiveSafeInteger(artifact.bytes), `${name}.bytes must be a positive integer`);
+  assert(typeof artifact.sha256 === "string" && SHA256_PATTERN.test(artifact.sha256), `${name}.sha256 must be a SHA-256 digest`);
+  assert(artifact.contentType === contentType, `${name}.contentType must be ${contentType}`);
+  assert(
+    artifact.r2Key === `releases/${release.version}/${release.buildNumber}/${artifact.filename}`,
+    `${name}.r2Key must use the immutable release key`,
+  );
+}
+
 export function validatePublication(input) {
   assert(input && typeof input === "object", "publication is required");
-  const { release, artifact, generation, expectedGeneration } = input;
+  const { release, artifact, diskImage, generation, expectedGeneration } = input;
   assert(release && typeof release === "object", "release is required");
   assert(artifact && typeof artifact === "object", "artifact is required");
+  assert(diskImage && typeof diskImage === "object", "diskImage is required");
 
   const minimumMacOS = normalizedMinimumMacOS(release);
   const normalizedRelease = { ...release, minimumMacOS };
@@ -92,25 +108,26 @@ export function validatePublication(input) {
   assertTimestamp(normalizedRelease.publishedAt, "release.publishedAt");
   assertHttpsURL(normalizedRelease.releaseNotesURL, "release.releaseNotesURL");
 
-  assert(RELEASE_ID_PATTERN.test(artifact.id), "artifact.id must be a UUID");
-  assert(FILE_NAME_PATTERN.test(artifact.filename), "artifact.filename is invalid");
-  assert(isPositiveSafeInteger(artifact.bytes), "artifact.bytes must be a positive integer");
-  assert(typeof artifact.sha256 === "string" && SHA256_PATTERN.test(artifact.sha256), "artifact.sha256 must be a SHA-256 digest");
+  assertArtifact(release, artifact, {
+    filenameValid: ARCHIVE_FILE_NAME_PATTERN.test(artifact.filename),
+    contentType: ARCHIVE_CONTENT_TYPE,
+    name: "artifact",
+  });
   assert(typeof artifact.edSignature === "string" && ED_SIGNATURE_PATTERN.test(artifact.edSignature), "artifact.edSignature is invalid");
-  assert(typeof artifact.contentType === "string" && artifact.contentType === "application/zip", "artifact.contentType must be application/zip");
-  assert(
-    artifact.r2Key === `releases/${release.version}/${release.buildNumber}/${artifact.filename}`,
-    "artifact.r2Key must use the immutable release key",
-  );
+  assertArtifact(release, diskImage, {
+    filenameValid: diskImage.filename === DISK_IMAGE_FILE_NAME,
+    contentType: DISK_IMAGE_CONTENT_TYPE,
+    name: "diskImage",
+  });
   assert(isPositiveSafeInteger(generation), "generation must be a positive integer");
   assert(Number.isSafeInteger(expectedGeneration) && expectedGeneration >= 0, "expectedGeneration must be a non-negative integer");
   assert(generation === expectedGeneration + 1, "generation must immediately follow expectedGeneration");
 
-  return { release: normalizedRelease, artifact, generation, expectedGeneration };
+  return { release: normalizedRelease, artifact, diskImage, generation, expectedGeneration };
 }
 
 function publicationStatements(input) {
-  const { release, artifact, generation, expectedGeneration } = validatePublication(input);
+  const { release, artifact, diskImage, generation, expectedGeneration } = validatePublication(input);
   const timestamp = release.publishedAt;
 
   return [
@@ -138,12 +155,28 @@ function publicationStatements(input) {
       values: [
         artifact.id,
         release.id,
+        "macos-zip",
         artifact.r2Key,
         artifact.filename,
         artifact.bytes,
         artifact.sha256.toLowerCase(),
         artifact.edSignature,
         artifact.contentType,
+        timestamp,
+      ],
+    },
+    {
+      sql: INSERT_ARTIFACT,
+      values: [
+        diskImage.id,
+        release.id,
+        "macos-dmg",
+        diskImage.r2Key,
+        diskImage.filename,
+        diskImage.bytes,
+        diskImage.sha256.toLowerCase(),
+        "",
+        diskImage.contentType,
         timestamp,
       ],
     },
@@ -191,7 +224,7 @@ function renderBoundStatement({ sql, values }) {
 }
 
 /**
- * Produces the three statements that must be submitted through D1Database.batch.
+ * Produces the four statements that must be submitted through D1Database.batch.
  * The release insert and channel-head update both compare the expected generation,
  * so a competing publisher makes the batch fail atomically instead of replacing
  * the current stable head.

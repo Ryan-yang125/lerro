@@ -21,6 +21,28 @@ export type LocalizedRelease = ReleaseCopy & Pick<Release, "version" | "build" |
 // distribution URL; older entries stay unchanged.
 export const releases: readonly Release[] = [
   {
+    version: "1.7.2",
+    build: "16",
+    publishedAt: "2026-10-19",
+    downloadUrl: "https://updates.lerroapp.com/releases/1.7.2/16/Lerro-macOS-arm64.dmg",
+    zh: {
+      publishedLabel: "2026 年 10 月 19 日",
+      summary: "官网下载改成安装镜像：打开后把 Lerro 拖进“应用程序”就装好了。",
+      highlights: [
+        "官网下载的是已签名、已公证的 DMG 安装镜像。打开后，Lerro 和“应用程序”文件夹并排放在品牌背景上，拖过去即可安装。",
+        "App 内自动更新照旧，不受影响。",
+      ],
+    },
+    en: {
+      publishedLabel: "October 19, 2026",
+      summary: "The website download is now a disk image: open it and drag Lerro into Applications.",
+      highlights: [
+        "The website download is a signed and notarized DMG. It opens with Lerro next to the Applications folder on a branded background; drag it across to install.",
+        "In-app updates work as before.",
+      ],
+    },
+  },
+  {
     version: "1.7.1",
     build: "15",
     publishedAt: "2026-10-19",

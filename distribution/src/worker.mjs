@@ -1,7 +1,12 @@
 const APPCAST_PATH = "/appcast/stable.xml";
 const LATEST_DOWNLOAD_PATH = "/download/macos/latest";
-const RELEASE_PATH_PATTERN = /^\/releases\/([0-9][0-9A-Za-z.-]{0,63})\/([1-9][0-9]*)\/([A-Za-z0-9][A-Za-z0-9._-]{0,127}\.zip)$/;
-const FILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.zip$/;
+const RELEASE_PATH_PATTERN = /^\/releases\/([0-9][0-9A-Za-z.-]{0,63})\/([1-9][0-9]*)\/([A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:zip|dmg))$/;
+const ARCHIVE_FILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.zip$/;
+const ARTIFACT_FILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(zip|dmg)$/;
+const CONTENT_TYPE_BY_EXTENSION = {
+  zip: "application/zip",
+  dmg: "application/x-apple-diskimage",
+};
 const VERSION_PATTERN = /^[0-9][0-9A-Za-z.-]{0,63}$/;
 const MINIMUM_MACOS_PATTERN = /^\d+(?:\.\d+){0,2}$/;
 const ED_SIGNATURE_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -29,7 +34,7 @@ const SQL = {
       AND artifact.sparkle_ed_signature <> ''
     LIMIT 1
   `,
-  latestArtifact: `
+  latestDiskImage: `
     SELECT
       release.id AS release_id,
       release.version,
@@ -46,7 +51,7 @@ const SQL = {
       AND head.platform = 'macos'
       AND head.architecture = 'arm64'
       AND release.status = 'published'
-      AND artifact.kind = 'macos-zip'
+      AND artifact.kind = 'macos-dmg'
     LIMIT 1
   `,
   immutableArtifact: `
@@ -66,7 +71,7 @@ const SQL = {
       AND release.platform = 'macos'
       AND release.architecture = 'arm64'
       AND release.status = 'published'
-      AND artifact.kind = 'macos-zip'
+      AND artifact.kind IN ('macos-zip', 'macos-dmg')
       AND artifact.filename = ?
     LIMIT 1
   `,
@@ -112,12 +117,11 @@ function safeArtifact(record) {
     Number.isSafeInteger(Number(record.build_number)) &&
     Number(record.build_number) > 0 &&
     typeof record.filename === "string" &&
-    FILE_NAME_PATTERN.test(record.filename) &&
+    ARTIFACT_FILE_NAME_PATTERN.test(record.filename) &&
     record.r2_key === `releases/${record.version}/${record.build_number}/${record.filename}` &&
     Number.isSafeInteger(Number(record.bytes)) &&
     Number(record.bytes) > 0 &&
-    typeof record.content_type === "string" &&
-    record.content_type === "application/zip"
+    record.content_type === CONTENT_TYPE_BY_EXTENSION[ARTIFACT_FILE_NAME_PATTERN.exec(record.filename)[1]]
   );
 }
 
@@ -131,7 +135,7 @@ function safeAppcastItem(item) {
     typeof item.minimum_macos !== "string" ||
     !MINIMUM_MACOS_PATTERN.test(item.minimum_macos) ||
     typeof item.filename !== "string" ||
-    !FILE_NAME_PATTERN.test(item.filename) ||
+    !ARCHIVE_FILE_NAME_PATTERN.test(item.filename) ||
     !Number.isSafeInteger(Number(item.bytes)) ||
     Number(item.bytes) <= 0 ||
     typeof item.sparkle_ed_signature !== "string" ||
@@ -407,7 +411,7 @@ async function appcastResponse(request, env) {
 }
 
 async function latestDownloadResponse(request, env) {
-  const artifact = await env.DB.prepare(SQL.latestArtifact).bind("stable").first();
+  const artifact = await env.DB.prepare(SQL.latestDiskImage).bind("stable").first();
   if (!artifact) {
     return missing();
   }

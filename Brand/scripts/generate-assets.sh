@@ -22,7 +22,8 @@ find "$exports_dir" -mindepth 1 -delete
 mkdir -p \
   "$exports_dir/logo" \
   "$exports_dir/app-icon" \
-  "$exports_dir/menu-bar"
+  "$exports_dir/menu-bar" \
+  "$exports_dir/dmg"
 
 render_png() {
   "$renderer" png "$1" "$2" "$3" "$4"
@@ -52,6 +53,14 @@ copy_and_render_logo lerro-wordmark-reversed 172 69 1376 552
 copy_and_render_logo lerro-lockup-horizontal 207 80 828 320
 copy_and_render_logo lerro-lockup-horizontal-dark 207 80 828 320
 copy_and_render_logo lerro-construction 640 400 1280 800
+
+dmg_background_source="$source_dir/dmg/lerro-dmg-background.svg"
+render_png "$dmg_background_source" "$temporary_dir/lerro-dmg-background.png" 660 400
+render_png "$dmg_background_source" "$temporary_dir/lerro-dmg-background@2x.png" 1320 800
+/usr/bin/tiffutil -cathidpicheck \
+  "$temporary_dir/lerro-dmg-background.png" \
+  "$temporary_dir/lerro-dmg-background@2x.png" \
+  -out "$exports_dir/dmg/lerro-dmg-background.tiff" >/dev/null
 
 flat_icon_source="$source_dir/app-icon/lerro-app-icon-flat.svg"
 /bin/cp "$flat_icon_source" "$exports_dir/app-icon/lerro-app-icon-flat.svg"

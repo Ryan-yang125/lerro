@@ -9,15 +9,21 @@ dsym_archive_path="$outputs_path/Lerro-macOS-arm64.dSYM.zip"
 manifest_path="$outputs_path/Lerro-release-manifest.json"
 checksum_path="$outputs_path/SHA256SUMS.txt"
 sbom_path="$outputs_path/Lerro-macOS-arm64.cdx.json"
+disk_image_path="$outputs_path/Lerro-macOS-arm64.dmg"
 temporary_directory=$(mktemp -d "${TMPDIR:-/tmp}/Lerro Release Verify.XXXXXX")
 application_extract_path="$temporary_directory/Application Archive"
 symbols_extract_path="$temporary_directory/Debug Symbols Archive"
 fixture_home_path="$temporary_directory/Fixture Home"
 fixture_log_path="$temporary_directory/fixture.log"
 recovery_fixture_log_path="$temporary_directory/recovery-fixture.log"
+disk_image_mount_path="$temporary_directory/Disk Image Mount"
 fixture_pid=""
+disk_image_attached=""
 
 cleanup() {
+    if [[ -n "$disk_image_attached" ]]; then
+        hdiutil detach "$disk_image_mount_path" -force >/dev/null 2>&1 || true
+    fi
     if [[ -n "$fixture_pid" ]] && kill -0 "$fixture_pid" >/dev/null 2>&1; then
         kill -TERM "$fixture_pid" >/dev/null 2>&1 || true
         for _ in {1..20}; do
@@ -35,7 +41,7 @@ trap cleanup EXIT INT TERM
 
 cd "$project_dir"
 
-print "[1/8] Linting release entrypoints, property lists, and Python scripts"
+print "[1/9] Linting release entrypoints, property lists, and Python scripts"
 zsh -n \
     "$project_dir/Brand/scripts"/*.sh \
     "$script_dir"/*.sh \
@@ -54,10 +60,10 @@ python3 "$script_dir/benchmark_contextual_dictation.py" --validate
 python3 "$script_dir/test_contextual_benchmark.py"
 python3 "$script_dir/test_capture_latency_report.py"
 
-print "[2/8] Verifying deterministic Brand Kit assets"
+print "[2/9] Verifying deterministic Brand Kit assets"
 "$project_dir/Brand/scripts/verify-assets.sh"
 
-print "[3/8] Verifying SwiftPM test discovery"
+print "[3/9] Verifying SwiftPM test discovery"
 swift package describe --type json > "$temporary_directory/package-description.json"
 python3 - "$project_dir" "$temporary_directory/package-description.json" <<'PY'
 import json
@@ -91,14 +97,14 @@ if missing:
 print(f"Verified {len(expected)} test source files in SwiftPM targets.")
 PY
 
-print "[4/8] Running the full test suite"
+print "[4/9] Running the full test suite"
 swift test
 
-print "[5/8] Building and packaging the Release app"
+print "[5/9] Building and packaging the Release app"
 "$script_dir/package_release.sh"
 
-print "[6/8] Verifying checksums and extracting through paths containing spaces"
-for required_path in "$archive_path" "$dsym_archive_path" "$manifest_path" "$checksum_path" "$sbom_path"; do
+print "[6/9] Verifying checksums and extracting through paths containing spaces"
+for required_path in "$archive_path" "$dsym_archive_path" "$manifest_path" "$checksum_path" "$sbom_path" "$disk_image_path"; do
     [[ -f "$required_path" ]] || { print -u2 "Missing release artifact: $required_path"; exit 1; }
 done
 (cd "$outputs_path" && shasum -a 256 -c "$(basename "$checksum_path")")
@@ -128,7 +134,7 @@ if [[ -n "$(find "$app_path" -mindepth 1 -maxdepth 1 ! -name Contents -print -qu
     exit 1
 fi
 
-print "[7/8] Verifying architecture, signing, resources, manifest, and dSYM"
+print "[7/9] Verifying architecture, signing, resources, manifest, and dSYM"
 [[ "$(lipo -archs "$binary_path")" == "arm64" ]] || { print -u2 "Release binary must be arm64-only."; exit 1; }
 codesign --verify --deep --strict --verbose=2 "$app_path"
 plutil -lint "$app_path/Contents/Info.plist" "$app_path/Contents/Resources/PrivacyInfo.xcprivacy"
@@ -408,7 +414,7 @@ if [[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["signin
     spctl -a -vv "$app_path"
 fi
 
-print "[8/8] Running the inert home and recovery fixtures and cleaning up their exact PIDs"
+print "[8/9] Running the inert home and recovery fixtures and cleaning up their exact PIDs"
 fixture_binary="$app_path/Contents/MacOS/Lerro"
 
 run_fixture_smoke() {
@@ -448,10 +454,65 @@ run_fixture_smoke hud-recovery "$recovery_fixture_log_path"
 fixture_log_bytes=$(stat -f %z "$fixture_log_path")
 recovery_fixture_log_bytes=$(stat -f %z "$recovery_fixture_log_path")
 
+print "[9/9] Verifying the disk image layout, app, checksums, and notarization"
+hdiutil verify "$disk_image_path"
+mkdir -p "$disk_image_mount_path"
+hdiutil attach "$disk_image_path" -readonly -nobrowse -noautoopen -mountpoint "$disk_image_mount_path" >/dev/null
+disk_image_attached=1
+dmg_app_path="$disk_image_mount_path/Lerro.app"
+[[ -d "$dmg_app_path" ]] || { print -u2 "Disk image does not contain Lerro.app."; exit 1; }
+codesign --verify --deep --strict --verbose=2 "$dmg_app_path"
+[[ -L "$disk_image_mount_path/Applications" && "$(readlink "$disk_image_mount_path/Applications")" == "/Applications" ]] || {
+    print -u2 "Disk image Applications entry must be a symlink to /Applications."
+    exit 1
+}
+[[ -n "$(find "$disk_image_mount_path/.background" -maxdepth 1 -type f -name '*.tiff' -print -quit 2>/dev/null)" ]] || {
+    print -u2 "Disk image is missing its background TIFF."
+    exit 1
+}
+[[ -f "$disk_image_mount_path/.DS_Store" ]] || { print -u2 "Disk image is missing .DS_Store."; exit 1; }
+python3 - "$manifest_path" "$checksum_path" "$disk_image_path" "$dmg_app_path/Contents/Info.plist" <<'PY'
+import hashlib
+import json
+import pathlib
+import plistlib
+import sys
+
+manifest_raw, checksum_raw, image_raw, info_raw = map(pathlib.Path, sys.argv[1:])
+manifest = json.loads(manifest_raw.read_text())
+disk_image = manifest["artifacts"]["diskImage"]
+digest = hashlib.sha256()
+with image_raw.open("rb") as handle:
+    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+        digest.update(chunk)
+if disk_image["file"] != image_raw.name:
+    raise SystemExit("Disk image file name differs from manifest")
+if disk_image["contentType"] != "application/x-apple-diskimage":
+    raise SystemExit("Disk image content type differs from manifest")
+if disk_image["sha256"] != digest.hexdigest():
+    raise SystemExit("Disk image hash differs from manifest")
+if disk_image["bytes"] != image_raw.stat().st_size:
+    raise SystemExit("Disk image size differs from manifest")
+if f"{digest.hexdigest()}  {image_raw.name}" not in checksum_raw.read_text().splitlines():
+    raise SystemExit("Disk image hash differs from SHA256SUMS.txt")
+with info_raw.open("rb") as handle:
+    info = plistlib.load(handle)
+application = manifest["application"]
+if info["CFBundleShortVersionString"] != application["version"] or info["CFBundleVersion"] != application["build"]:
+    raise SystemExit("Disk image app version differs from manifest")
+PY
+hdiutil detach "$disk_image_mount_path" >/dev/null
+disk_image_attached=""
+if [[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["signing"]["resolvedMode"])' "$manifest_path")" == "developer-id" ]]; then
+    xcrun stapler validate "$disk_image_path"
+    spctl -a -t open --context context:primary-signature -v "$disk_image_path"
+fi
+
 print "Release verification passed"
 print "Archive: $archive_path"
 print "dSYM UUID: $dsym_uuid"
 print "Manifest: $manifest_path"
+print "Disk image: $disk_image_path"
 print "CycloneDX SBOM: $sbom_path"
 print "Home fixture log bytes: $fixture_log_bytes (no integration errors)"
 print "Recovery fixture log bytes: $recovery_fixture_log_bytes (panel opened without crash)"
