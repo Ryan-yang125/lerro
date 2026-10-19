@@ -6,6 +6,8 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-10-19
+
 ### Removed
 
 - The local AI mode (Qwen through MLX), its 3.03 GB model download, device-aware
@@ -491,7 +493,8 @@ All notable changes to Lerro will be documented here. The project follows
   plaintext BYOK credentials; logs, history, errors, fixtures, and public exports
   exclude API keys and Authorization headers.
 
-[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/Ryan-yang125/lerro/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/Ryan-yang125/lerro/compare/v1.6.0...v1.7.0
 [1.2.0]: https://github.com/Ryan-yang125/lerro/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/Ryan-yang125/lerro/compare/v1.1.0...v1.1.1

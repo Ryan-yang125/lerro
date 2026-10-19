@@ -285,7 +285,7 @@ const zh: HomeCopy = {
   end: {
     h2: "试试看。",
     download: "下载 macOS 版",
-    req: `${currentVersion} · macOS 26 · Apple 芯片 · 约 12 MB`,
+    req: `${currentVersion} · macOS 26 · Apple 芯片 · 约 4 MB`,
   },
 };
 
@@ -425,7 +425,7 @@ const en: HomeCopy = {
   end: {
     h2: "Give it a try.",
     download: "Download for macOS",
-    req: `${currentVersion} · macOS 26 · Apple silicon · about 12 MB`,
+    req: `${currentVersion} · macOS 26 · Apple silicon · about 4 MB`,
   },
 };
 

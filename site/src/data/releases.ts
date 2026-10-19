@@ -21,6 +21,30 @@ export type LocalizedRelease = ReleaseCopy & Pick<Release, "version" | "build" |
 // distribution URL; older entries stay unchanged.
 export const releases: readonly Release[] = [
   {
+    version: "1.7.1",
+    build: "15",
+    publishedAt: "2026-10-19",
+    downloadUrl: "https://updates.lerroapp.com/releases/1.7.1/15/Lerro-macOS-arm64.zip",
+    zh: {
+      publishedLabel: "2026 年 10 月 19 日",
+      summary: "更轻的 Lerro：移除本地 AI 模式，安装包从 11.7 MB 减到约 4 MB。",
+      highlights: [
+        "移除本地 AI 模式（在 Mac 上运行的 Qwen 模型）和约 3 GB 的模型下载。AI 润色和翻译使用你自己配置的 API，比如 DeepSeek。",
+        "之前选了本地 AI 的设置会自动切换为只用苹果识别，其他设置保持不变。",
+        "安装包从 11.7 MB 减到约 4 MB。",
+      ],
+    },
+    en: {
+      publishedLabel: "October 19, 2026",
+      summary: "A lighter Lerro: the local AI mode is removed and the download drops from 11.7 MB to about 4 MB.",
+      highlights: [
+        "The local AI mode (the Qwen model running on your Mac) and its 3 GB download are removed. AI polish and translation use the API you configure, such as DeepSeek.",
+        "If you had chosen local AI, Lerro switches to Apple-only recognition. Your other settings stay the same.",
+        "The download drops from 11.7 MB to about 4 MB.",
+      ],
+    },
+  },
+  {
     version: "1.7.0",
     build: "14",
     publishedAt: "2026-10-19",
