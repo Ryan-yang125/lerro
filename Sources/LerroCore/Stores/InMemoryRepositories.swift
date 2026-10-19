@@ -72,6 +72,21 @@ public actor InMemoryAIUsageRepository: AIUsageRepository {
     public func deleteAll() { values.removeAll() }
 }
 
+public actor InMemoryDailyUsageRepository: DailyUsageRepository {
+    private var values: [DailyUsage]
+    private let calendar: Calendar
+    public init(days: [DailyUsage] = [], calendar: Calendar = .current) {
+        self.values = days.sorted { $0.day < $1.day }
+        self.calendar = calendar
+    }
+    public func days() -> [DailyUsage] { values }
+    public func record(_ entry: HistoryEntry) {
+        DailyUsage.record(entry, into: &values, calendar: calendar, now: Date())
+    }
+    public func replaceAll(_ days: [DailyUsage]) { values = days.sorted { $0.day < $1.day } }
+    public func deleteAll() { values.removeAll() }
+}
+
 public actor InMemoryDictionarySuggestionRepository: DictionarySuggestionRepository {
     private var value: DictionarySuggestionState
     public init(value: DictionarySuggestionState = DictionarySuggestionState()) { self.value = value }

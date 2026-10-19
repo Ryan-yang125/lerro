@@ -198,7 +198,8 @@ struct MenuBarPanelView: View {
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(LerroTheme.accent)
                     case .start, .disabled:
-                        LerroGlyphView(glyph: isDictation ? .dictate : .translate, size: 16)
+                        Image(systemName: isDictation ? "waveform" : "translate")
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(LerroTheme.accent)
                     }
                     Text(verbatim: title)
@@ -297,9 +298,9 @@ struct MenuBarPanelView: View {
     // MARK: Today
 
     private var todayLine: some View {
-        let statistics = session.usageStatistics
+        let statistics = session.homeStatistics
         return HStack {
-            markdownText("今天 **%@** 次", statistics.todayCount.formatted(.number.locale(locale)))
+            markdownText("今天 **%@** 次", statistics.todayDictations.formatted(.number.locale(locale)))
             Spacer(minLength: 8)
             markdownText("**%@** 字", statistics.today.totalWords.formatted(.number.locale(locale)))
             if let aiCostText {
@@ -327,7 +328,7 @@ struct MenuBarPanelView: View {
 
     private var pickerRows: some View {
         VStack(spacing: 0) {
-            pickerRow(glyph: .mic, title: "麦克风") {
+            pickerRow(systemImage: "mic", title: "麦克风") {
                 Picker(selection: microphoneSelection) {
                     Text(verbatim: localized("跟随系统默认")).tag(String?.none)
                     ForEach(session.audioInputDevices) { device in
@@ -337,7 +338,7 @@ struct MenuBarPanelView: View {
                     Text(verbatim: localized("麦克风"))
                 }
             }
-            pickerRow(glyph: .polish, title: "智能处理") {
+            pickerRow(systemImage: "sparkles", title: "智能处理") {
                 Picker(selection: intelligenceSelection) {
                     Text(verbatim: localized("纯苹果听写")).tag(IntelligenceMode.raw)
                     Text(verbatim: session.preferences.remoteProvider.provider.lerroDisplayName)
@@ -355,12 +356,14 @@ struct MenuBarPanelView: View {
     }
 
     private func pickerRow<Control: View>(
-        glyph: LerroGlyph,
+        systemImage: String,
         title: String,
         @ViewBuilder control: () -> Control
     ) -> some View {
         HStack(spacing: 9) {
-            LerroGlyphView(glyph: glyph, size: 16)
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 16, height: 16)
                 .foregroundStyle(LerroTheme.secondaryText)
             Text(verbatim: localized(title))
                 .font(LerroFont.body)
@@ -403,7 +406,9 @@ struct MenuBarPanelView: View {
             AppUpdateController.shared.checkForUpdates()
         } label: {
             HStack(spacing: 8) {
-                LerroGlyphView(glyph: .update, size: 16)
+                Image(systemName: "arrow.down.circle")
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 16, height: 16)
                 Text(verbatim: localized("下载新版本"))
                     .font(LerroFont.bodyEmphasis)
                 Spacer(minLength: 0)
@@ -436,7 +441,7 @@ struct MenuBarPanelView: View {
                 }
                 .buttonStyle(.plain)
                 Spacer(minLength: 0)
-                LerroIconButton(glyph: .general, help: "设置") {
+                LerroIconButton(systemImage: "gearshape", help: "设置") {
                     showSettings()
                 }
                 .keyboardShortcut(",")

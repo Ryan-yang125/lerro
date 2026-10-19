@@ -59,7 +59,7 @@ Lerro -> LerroIntelligence -> LerroCore
 
 - 主窗口使用 `NavigationSplitView`，设置在独立的 `Settings` 窗口；列表、表格和表单使用原生控件。
 - 颜色来自 `LerroTheme`（自适应灰阶 + 墨水蓝强调色），字号来自 `LerroFont`；改动先更新 [`DesignTokens.swift`](Sources/Lerro/DesignSystem/DesignTokens.swift) 或共享组件，再更新页面。
-- 图标：产品概念使用 `LerroGlyph`，通用操作使用 SF Symbols 描边版本，状态和播放控制使用实心。
+- 图标：一律使用 SF Symbols 描边版本，状态和播放控制用实心；不自绘产品图标。
 - HUD 是固定墨黑的单胶囊，所有状态在同一胶囊内形变；外观规则见 [ADR 0013](docs/decisions/0013-brand-capsule-hud.md)。
 - 不在标题、卡片或设置项下方添加说明性小字，除非用户要求或为了避免误解。
 - UI 改动用 inert fixture（见 `docs/development.md`）检查 1080×750 与 988×658、浅色、深色、Increase Contrast、Reduce Transparency、Reduce Motion。

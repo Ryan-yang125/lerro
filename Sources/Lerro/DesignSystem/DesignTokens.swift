@@ -132,6 +132,16 @@ enum LerroTheme {
         highContrastLight: rgb(0x1F46E0, alpha: 0.16),
         highContrastDark: rgb(0x7D95FF, alpha: 0.26)
     )
+    /// Home activity heatmap, level 0 (no use) to 4 (most words).
+    static let heatmap: [Color] = [
+        adaptive(light: rgb(0xEBEBEB), dark: rgb(0x262626)),
+        adaptive(light: rgb(0xC9D4FF), dark: rgb(0x1F2A57)),
+        adaptive(light: rgb(0x93A9FF), dark: rgb(0x2A3F99)),
+        adaptive(light: rgb(0x5C7DFF), dark: rgb(0x3A5AE0)),
+        adaptive(light: rgb(0x2F5BFF), dark: rgb(0x6F8BFF))
+    ]
+    /// Dot grid behind the top of the Home page.
+    static let homeDot = adaptive(light: rgb(0x000000, alpha: 0.085), dark: rgb(0xFFFFFF, alpha: 0.075))
     static let primaryAction = accentButton
     static let primaryActionHover = accentButton.opacity(0.88)
     static let primaryActionPressed = accentButton.opacity(0.72)
@@ -235,7 +245,16 @@ enum LerroFont {
     /// History detail body text.
     static let detail = Font.system(size: 16)
     static let stat = Font.system(size: 30, weight: .semibold).monospacedDigit()
-    static let statUnit = Font.system(size: 15, weight: .medium)
+    /// Home page figures. Large sizes resolve to SF Pro Display.
+    static let heroNumber = Font.system(size: 46, weight: .bold).monospacedDigit()
+    static let heroUnit = Font.system(size: 20, weight: .semibold)
+    static let cardValue = Font.system(size: 26, weight: .bold).monospacedDigit()
+    static let cardUnit = Font.system(size: 13, weight: .semibold)
+    static let streakValue = Font.system(size: 22, weight: .bold).monospacedDigit()
+    static let streakUnit = Font.system(size: 12, weight: .semibold)
+    static let cardDelta = Font.system(size: 11.5, weight: .semibold).monospacedDigit()
+    static let cardTitle = Font.system(size: 13, weight: .semibold)
+    static let axisLabel = Font.system(size: 10.5)
     static let caption = Font.system(size: 12)
     static let footnote = Font.system(size: 11)
     static let sectionLabel = Font.system(size: 11, weight: .semibold)

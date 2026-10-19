@@ -209,6 +209,8 @@ required_resources=(
     MenuBar/LerroMenuProcessing4Template@2x.png
     MenuBar/LerroMenuErrorTemplate.png
     MenuBar/LerroMenuErrorTemplate@2x.png
+    Sounds/capture-start.caf
+    Sounds/capture-stop.caf
 )
 for relative_path in "${required_resources[@]}"; do
     [[ -r "$app_path/Contents/Resources/$relative_path" ]] || {
@@ -267,6 +269,22 @@ for resource_name in "${menu_bar_resource_names[@]}"; do
     }
     sips -g pixelWidth -g pixelHeight "$packaged_resource" >/dev/null 2>&1 || {
         print -u2 "Packaged menu-bar resource cannot be decoded: $resource_name"
+        exit 1
+    }
+done
+sound_resource_names=(
+    capture-start.caf
+    capture-stop.caf
+)
+sound_resource_path="$app_path/Contents/Resources/Sounds"
+actual_sound_count=$(find "$sound_resource_path" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
+[[ "$actual_sound_count" == "${#sound_resource_names[@]}" ]] || {
+    print -u2 "Unexpected packaged sound resource count: $actual_sound_count"
+    exit 1
+}
+for resource_name in "${sound_resource_names[@]}"; do
+    cmp -s "$sound_resource_path/$resource_name" "$project_dir/Sources/Lerro/Resources/Sounds/$resource_name" || {
+        print -u2 "Packaged sound resource differs from app source: $resource_name"
         exit 1
     }
 done

@@ -117,6 +117,55 @@ struct AppSessionCoreFlowTests {
         #expect(harness.session.dictionaryLearningToast == nil)
     }
 
+    @Test("Capture sounds play on start and finish, with audio output restored before the stop sound")
+    @MainActor
+    func captureSoundsFollowStartAndFinish() async {
+        let harness = makeHarness(text: "hello")
+        await harness.session.start()
+
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        #expect(harness.events.all().contains("sound.start"))
+        let beforeFinish = harness.events.all()
+        #expect(!beforeFinish.contains("sound.stop"))
+
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .idle })
+        let tail = Array(harness.events.all().drop { $0 != "speech.endAudioCapture" })
+        #expect(tail == ["speech.endAudioCapture", "sound.stop", "speech.stop"])
+    }
+
+    @Test("Cancelling a capture plays no stop sound")
+    @MainActor
+    func cancelledCapturePlaysNoStopSound() async {
+        let harness = makeHarness(text: "hello")
+        await harness.session.start()
+
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.cancelCapture()
+        #expect(await waitUntil { !harness.session.isCleaningCapture })
+        let events = harness.events.all()
+        #expect(events.contains("sound.start"))
+        #expect(!events.contains("sound.stop"))
+        #expect(!events.contains("speech.endAudioCapture"))
+    }
+
+    @Test("Capture sounds stay silent when the preference is off")
+    @MainActor
+    func captureSoundsFollowPreference() async {
+        var preferences = basePreferences()
+        preferences.playsCaptureSounds = false
+        let harness = makeHarness(text: "hello", preferences: preferences)
+        await harness.session.start()
+
+        await dictate(harness.session)
+        let events = harness.events.all()
+        #expect(events.contains("speech.endAudioCapture"))
+        #expect(!events.contains("sound.start"))
+        #expect(!events.contains("sound.stop"))
+    }
+
     @Test("Paste delivers the given text and pasteLastResult delivers the last result")
     @MainActor
     func pasteDeliversText() async {
@@ -599,8 +648,8 @@ struct AppSessionCoreFlowTests {
         #expect(harness.session.historyAllCount == 8)
         #expect(harness.session.recentHistoryEntries.map(\.finalText)
             == (0..<6).map { "entry \($0)" })
-        #expect(harness.session.usageStatistics.today.totalWords > 0)
-        #expect(harness.session.usageStatistics.dailyWords.count == 7)
+        #expect(harness.session.homeStatistics.today.totalWords > 0)
+        #expect(harness.session.homeStatistics.weeks.count == 53)
         #expect(harness.session.recordingURL(for: entries[0]) == nil)
     }
 
@@ -946,7 +995,9 @@ struct AppSessionCoreFlowTests {
         aiUsageRecords: [AIUsageRecord] = []
     ) -> Harness {
         _ = NSApplication.shared
-        let speech = StubSpeech(text: text, resourcesReady: resourcesReady)
+        let events = EventLog()
+        let speech = StubSpeech(text: text, resourcesReady: resourcesReady, events: events)
+        let sounds = StubSoundPlayer(events: events)
         let delivery = StubDelivery(fails: deliveryFails)
         let recovery = StubRecovery()
         let observer = StubObserver()
@@ -966,6 +1017,7 @@ struct AppSessionCoreFlowTests {
             applicationPaths: nil,
             startupStorageError: nil,
             speech: speech,
+            soundPlayer: sounds,
             microphoneTest: StubMicrophoneTester(),
             context: StubContextCapture(),
             textDelivery: delivery,
@@ -980,12 +1032,14 @@ struct AppSessionCoreFlowTests {
             dictionarySuggestions: suggestions,
             preferences: InMemoryPreferencesRepository(value: preferences),
             aiUsage: aiUsage,
+            dailyUsage: InMemoryDailyUsageRepository(),
             intelligence: intelligence,
             captureTrace: trace
         )
         return Harness(
             session: AppSession(dependencies: dependencies, presentsFloatingPanels: false),
             speech: speech,
+            events: events,
             delivery: delivery,
             recovery: recovery,
             observer: observer,
@@ -1025,6 +1079,7 @@ struct AppSessionCoreFlowTests {
 private struct Harness {
     let session: AppSession
     let speech: StubSpeech
+    let events: EventLog
     let delivery: StubDelivery
     let recovery: StubRecovery
     let observer: StubObserver
@@ -1063,6 +1118,24 @@ private final class RecordingTraceObserver: CaptureTraceObserving, @unchecked Se
     }
 }
 
+private final class EventLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+
+    func append(_ value: String) { lock.withLock { values.append(value) } }
+    func all() -> [String] { lock.withLock { values } }
+}
+
+private struct StubSoundPlayer: CaptureSoundPlaying {
+    let events: EventLog
+
+    func prepare() async { events.append("sound.prepare") }
+
+    func play(_ sound: CaptureSound) async {
+        events.append(sound == .start ? "sound.start" : "sound.stop")
+    }
+}
+
 private struct SpeechStart: Sendable {
     let detectSpeechEndpoint: Bool
 }
@@ -1077,9 +1150,12 @@ private actor StubSpeech: SpeechTranscribing {
     private var preparedLocales: [String] = []
     private var preparationWaiters: [String: CheckedContinuation<Void, Never>] = [:]
 
-    init(text: String, resourcesReady: Bool) {
+    private let events: EventLog
+
+    init(text: String, resourcesReady: Bool, events: EventLog) {
         self.text = text
         self.resourcesReady = resourcesReady
+        self.events = events
     }
 
     func resourceStatus(localeIdentifier: String) async -> LanguageResourceStatus {
@@ -1121,6 +1197,7 @@ private actor StubSpeech: SpeechTranscribing {
         detectSpeechEndpoint: Bool,
         milestones: @escaping CaptureMilestoneReporter
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error> {
+        events.append("speech.start")
         records.append(SpeechStart(detectSpeechEndpoint: detectSpeechEndpoint))
         reporters.append(milestones)
         milestones(.speechLocaleResolved, ContinuousClock.now)
@@ -1131,13 +1208,19 @@ private actor StubSpeech: SpeechTranscribing {
         return pair.stream
     }
 
+    func endAudioCapture() async {
+        events.append("speech.endAudioCapture")
+    }
+
     func stop() async throws -> SpeechTranscription {
+        events.append("speech.stop")
         continuation?.finish()
         continuation = nil
         return SpeechTranscription(rawText: text, localeIdentifier: "en_US", duration: 1)
     }
 
     func cancel() async {
+        events.append("speech.cancel")
         continuation?.finish()
         continuation = nil
     }

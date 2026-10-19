@@ -6,6 +6,24 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-19
+
+### Changed
+
+- Sidebar, Settings and menu bar icons use SF Symbols.
+- Home is a usage dashboard: total characters, time saved, speaking speed,
+  dictation time and count with today's increase, a year of activity as a
+  heatmap with streaks, most-used apps, and the hours you dictate most. Recent
+  dictations and learned terms stay on the History and Dictionary pages. Daily
+  totals are kept in `usage-days.json`, so the heatmap does not depend on how
+  long history is kept; existing history seeds it once.
+
+### Added
+
+- Short start and stop sounds mark the beginning and end of a capture. Turn them
+  off in Settings › General › Sounds. With lowering other audio enabled, output
+  audio now returns when the microphone closes, before the final transcript.
+
 ## [1.7.2] - 2026-10-19
 
 ### Added
@@ -501,7 +519,8 @@ All notable changes to Lerro will be documented here. The project follows
   plaintext BYOK credentials; logs, history, errors, fixtures, and public exports
   exclude API keys and Authorization headers.
 
-[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.7.2...HEAD
+[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/Ryan-yang125/lerro/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/Ryan-yang125/lerro/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/Ryan-yang125/lerro/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/Ryan-yang125/lerro/compare/v1.6.0...v1.7.0

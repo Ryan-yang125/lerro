@@ -64,6 +64,12 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 6. **取消**：取消信号贯穿启动、Speech、模型任务和 Command-V 提交前检查。统一清理：停止音频、释放 Core Audio
    静音快照并恢复输出音频、取消各类任务、删除未持久化录音、重置热键临时状态。
 
+**提示音**：`playsCaptureSounds`（默认开启）控制开始与结束提示音。[`CaptureSoundPlayer`](../Sources/LerroMac/Audio/CaptureSoundPlayer.swift)
+启动时加载 `Contents/Resources/Sounds` 下的两个 `.caf` 并 `prepareToPlay()`，播放时不再读盘。开始音在 capture 被接受时播放，
+早于 `SpeechTranscribing.start` 打开麦克风并降低其他声音；结束音在用户完成 capture 时播放（含 Quick Dictate 自动结束），
+取消和失败不播放。`finishCapture` 先 `await speech.endAudioCapture()`（关闭麦克风并立即恢复输出音频），再播放结束音，
+最后 `speech.stop()` 等待最终转写，因此“录音时降低其他声音”不会静音结束音。fixture 使用 inert 播放器。
+
 每次 capture 有一个 [`CaptureTrace`](../Sources/LerroCore/Models/CaptureTrace.swift)（起点为物理按键时刻，
 `ContinuousClock` 里程碑）。结果写入 os.Logger `app.lerro.mac` / `capture-trace`、Points of Interest signpost 和历史的
 `phaseTimings`；[`script/capture_latency_report.py`](../script/capture_latency_report.py) 读取本机 `history.json`
@@ -139,6 +145,7 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 | `history.json` | 听写记录：raw/final 文本、路由、模型 ID、上下文类别、阶段耗时、交付状态 |
 | `dictionary.json`、`dictionary-suggestions.json` | 词典与建议 |
 | `ai-usage.json` | 远程调用的时间、功能、Provider、模型 ID、token 数、延迟、成败 |
+| `usage-days.json` | 首页统计的每日汇总：字数、次数、时长、各应用字数、各小时次数；不含文字，保留 400 天 |
 | `Audio/` | 可选录音（CAF），`saveAudio` 默认关闭 |
 
 仓库通过 [`JSONDocumentStore`](../Sources/LerroCore/Stores/JSONDocumentStore.swift) 原子写入并串行化。偏好新增字段为旧文档提供默认值。

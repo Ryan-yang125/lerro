@@ -7,6 +7,7 @@ struct AppDependencies: Sendable {
     let applicationPaths: ApplicationPaths?
     let startupStorageError: String?
     let speech: any SpeechTranscribing
+    let soundPlayer: any CaptureSoundPlaying
     let microphoneTest: any MicrophoneLevelTesting
     let context: any ContextCapturing
     let textDelivery: any TextDelivering
@@ -21,6 +22,7 @@ struct AppDependencies: Sendable {
     let dictionarySuggestions: any DictionarySuggestionRepository
     let preferences: any PreferencesRepository
     let aiUsage: any AIUsageRepository
+    let dailyUsage: any DailyUsageRepository
     let intelligence: any IntelligenceProcessing
     let captureTrace: any CaptureTraceObserving
 
@@ -42,6 +44,7 @@ struct AppDependencies: Sendable {
             applicationPaths: paths,
             startupStorageError: nil,
             speech: AppleSpeechService(applicationPaths: paths),
+            soundPlayer: CaptureSoundPlayer(),
             microphoneTest: MicrophoneLevelTester(),
             context: AccessibilityContextService(),
             textDelivery: AccessibilityTextDeliverer(),
@@ -56,6 +59,7 @@ struct AppDependencies: Sendable {
             dictionarySuggestions: FileDictionarySuggestionRepository(fileURL: paths.dictionarySuggestionsFile),
             preferences: preferences,
             aiUsage: aiUsage,
+            dailyUsage: FileDailyUsageRepository(fileURL: paths.dailyUsageFile),
             intelligence: PipelineIntelligenceService(
                 remoteRuntime: OpenAICompatibleRemoteLanguageModelRuntime(),
                 usageRecorder: aiUsage
@@ -94,6 +98,7 @@ struct AppDependencies: Sendable {
             applicationPaths: nil,
             startupStorageError: startupStorageError,
             speech: FixtureSpeechTranscriber(),
+            soundPlayer: FixtureSoundPlayer(),
             microphoneTest: FixtureMicrophoneLevelTester(),
             context: FixtureContextCapture(),
             textDelivery: FixtureTextDeliverer(),
@@ -108,6 +113,7 @@ struct AppDependencies: Sendable {
             dictionarySuggestions: InMemoryDictionarySuggestionRepository(value: fixtureDictionarySuggestions()),
             preferences: InMemoryPreferencesRepository(value: preferences),
             aiUsage: InMemoryAIUsageRepository(records: fixtureAIUsageRecords()),
+            dailyUsage: InMemoryDailyUsageRepository(days: fixtureDailyUsage()),
             intelligence: FixtureIntelligence(),
             captureTrace: DiscardingCaptureTraceObserver()
         )
@@ -205,6 +211,77 @@ struct AppDependencies: Sendable {
                   final: "这个构建在我这边是通过的，你再拉一下最新的分支试试。",
                   duration: 7.7, app: "Slack", bundle: "com.tinyspeck.slackmacgap")
         ]
+    }
+
+    /// About six months of dictation ending today, weekdays heavier. Built
+    /// through `DailyUsage.seed` from synthetic entries (one per app per day),
+    /// then the per-day counts and hour distribution are set directly.
+    private static func fixtureDailyUsage() -> [DailyUsage] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        var state: UInt64 = 7
+        func random() -> Double {
+            state = (state &* 16_807) % 2_147_483_647
+            return Double(state) / 2_147_483_647
+        }
+        let apps: [(name: String, bundle: String, weight: Double)] = [
+            ("Claude", "com.anthropic.claudefordesktop", 48_210),
+            ("ChatGPT", "com.openai.chat", 17_120),
+            ("微信", "com.tencent.xinWeChat", 9_630),
+            ("备忘录", "com.apple.Notes", 4_210),
+            ("Slack", "com.tinyspeck.slackmacgap", 2_180)
+        ]
+        let appTotal = apps.reduce(0) { $0 + $1.weight }
+        let hourWeights: [Double] = [
+            8, 0, 0, 0, 0, 0, 0, 0, 0, 30, 64, 71,
+            22, 18, 58, 80, 77, 61, 34, 25, 40, 52, 46, 20
+        ]
+        let hourTotal = hourWeights.reduce(0, +)
+
+        func dayKey(_ date: Date) -> String {
+            let parts = calendar.dateComponents([.year, .month, .day], from: date)
+            return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+        }
+
+        var entries: [HistoryEntry] = []
+        var extras: [String: (dictations: Int, duration: TimeInterval)] = [:]
+        for offset in 0..<190 {
+            guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
+            let weekday = calendar.component(.weekday, from: day)
+            let base = (weekday == 1 || weekday == 7) ? 0.45 : 0.86
+            if offset != 0, random() > base { continue }
+            let words = Int(((300 + pow(random(), 1.6) * 5_200) * (offset < 40 ? 1.25 : 1)).rounded())
+            let dictations = max(1, Int((Double(words) / 55).rounded()))
+            var remaining = words
+            for (index, app) in apps.enumerated() {
+                let share = index == apps.count - 1
+                    ? remaining
+                    : min(remaining, Int(Double(words) * app.weight / appTotal * (0.7 + random() * 0.6)))
+                guard share > 0 else { continue }
+                remaining -= share
+                entries.append(HistoryEntry(
+                    createdAt: day.addingTimeInterval(12 * 3_600),
+                    mode: .dictation,
+                    rawText: "",
+                    finalText: String(repeating: "字", count: share),
+                    duration: 1,
+                    applicationName: app.name,
+                    bundleIdentifier: app.bundle,
+                    status: .completed
+                ))
+            }
+            extras[dayKey(day)] = (dictations, Double(words) / 175 * 60)
+        }
+
+        return DailyUsage.seed(from: entries, calendar: calendar).map { usage in
+            var usage = usage
+            if let extra = extras[usage.day] {
+                usage.dictations = extra.dictations
+                usage.duration = extra.duration
+                usage.hours = hourWeights.map { Int((Double(extra.dictations) * $0 / hourTotal).rounded()) }
+            }
+            return usage
+        }
     }
 
     private static func fixtureAIUsageRecords() -> [AIUsageRecord] {
@@ -429,6 +506,8 @@ private actor FixtureSpeechTranscriber: SpeechTranscribing {
         }
     }
 
+    func endAudioCapture() async {}
+
     func stop() async throws -> SpeechTranscription {
         SpeechTranscription(
             rawText: "这是一段用于视觉回归的合成口述。",
@@ -438,6 +517,11 @@ private actor FixtureSpeechTranscriber: SpeechTranscribing {
     }
 
     func cancel() async {}
+}
+
+private struct FixtureSoundPlayer: CaptureSoundPlaying {
+    func prepare() async {}
+    func play(_ sound: CaptureSound) async {}
 }
 
 private struct FixtureMicrophoneLevelTester: MicrophoneLevelTesting {

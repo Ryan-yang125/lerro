@@ -4,7 +4,7 @@
   "generatedAt": "2026-10-16",
   "assets": [
     {
-      "glob": "source/logo/**, source/app-icon/**, source/menu-bar/**, source/icons/**, source/dmg/**, exports/logo/**, exports/app-icon/**, exports/menu-bar/**, exports/dmg/**",
+      "glob": "source/logo/**, source/app-icon/**, source/menu-bar/**, source/dmg/**, exports/logo/**, exports/app-icon/**, exports/menu-bar/**, exports/dmg/**",
       "origin": "Original artwork created for Lerro: cursor mark, wordmark composition, Icon Composer app icon bundle, menu bar template frames, product glyphs",
       "creator": "Lerro project contributors",
       "license": "LicenseRef-Lerro-Trademark",

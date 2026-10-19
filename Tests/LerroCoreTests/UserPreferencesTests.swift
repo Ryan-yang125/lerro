@@ -13,6 +13,7 @@ struct UserPreferencesTests {
         #expect(preferences.appLanguage == .system)
         #expect(preferences.microphoneDeviceUID == nil)
         #expect(preferences.muteOtherAudio)
+        #expect(preferences.playsCaptureSounds)
         #expect(preferences.appearance == .system)
         #expect(!preferences.launchAtLogin)
         #expect(preferences.showInDock)
@@ -179,6 +180,18 @@ struct UserPreferencesTests {
         #expect(decoded.automaticDictionaryLearningEnabled)
         #expect(decoded.isAutomaticDictionaryLearningActive)
         #expect(!decoded.quickDictateEnabled)
+    }
+
+    @Test("Capture sounds default to on when missing and keep a saved off value")
+    func captureSoundsPersistence() throws {
+        let missing = try JSONDecoder().decode(UserPreferences.self, from: Data("{}".utf8))
+        #expect(missing.playsCaptureSounds)
+
+        let off = try JSONDecoder().decode(
+            UserPreferences.self,
+            from: Data(#"{"playsCaptureSounds":false}"#.utf8)
+        )
+        #expect(!off.playsCaptureSounds)
     }
 
     @Test("Hands-free stop hint count defaults to zero and survives a round trip")

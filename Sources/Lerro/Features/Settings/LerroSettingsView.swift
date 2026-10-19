@@ -9,29 +9,29 @@ struct LerroSettingsView: View {
     var body: some View {
         TabView(selection: $session.settingsTab) {
             GeneralSettingsTab(session: session)
-                .tabItem { Label { Text("通用") } icon: { LerroGlyph.general.tabImage() } }
+                .tabItem { Label("通用", systemImage: "gearshape") }
                 .tag(SettingsTab.general)
 
             ShortcutsSettingsTab(session: session)
-                .tabItem { Label { Text("快捷键") } icon: { LerroGlyph.shortcuts.tabImage() } }
+                .tabItem { Label("快捷键", systemImage: "keyboard") }
                 .tag(SettingsTab.shortcuts)
 
             IntelligenceSettingsPage(session: session)
                 .frame(width: SettingsLayout.width, height: SettingsLayout.tallHeight)
-                .tabItem { Label { Text("智能") } icon: { LerroGlyph.polish.tabImage() } }
+                .tabItem { Label("智能", systemImage: "sparkles") }
                 .tag(SettingsTab.intelligence)
 
             UsageSettingsTab(session: session)
                 .frame(width: SettingsLayout.width, height: SettingsLayout.tallHeight)
-                .tabItem { Label { Text("用量") } icon: { LerroGlyph.usage.tabImage() } }
+                .tabItem { Label("用量", systemImage: "chart.bar.xaxis") }
                 .tag(SettingsTab.usage)
 
             PrivacySettingsTab(session: session)
-                .tabItem { Label { Text("隐私") } icon: { LerroGlyph.privacy.tabImage() } }
+                .tabItem { Label("隐私", systemImage: "hand.raised") }
                 .tag(SettingsTab.privacy)
 
             AboutSettingsTab(session: session)
-                .tabItem { Label { Text("关于") } icon: { LerroGlyph.about.tabImage() } }
+                .tabItem { Label("关于", systemImage: "info.circle") }
                 .tag(SettingsTab.about)
         }
         .tint(LerroTheme.accent)

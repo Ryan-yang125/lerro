@@ -30,6 +30,7 @@ struct GeneralSettingsTab: View {
                 }
 
                 Toggle("录音时降低其他声音", isOn: $session.preferences.muteOtherAudio)
+                Toggle("提示音", isOn: $session.preferences.playsCaptureSounds)
             }
 
             Section {

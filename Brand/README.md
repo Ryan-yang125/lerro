@@ -48,7 +48,6 @@ Brand/
 │   ├── logo/
 │   ├── app-icon/AppIcon.icon
 │   ├── menu-bar/
-│   ├── icons/Glyphs.xcassets
 │   ├── templates/
 │   └── validation/
 ├── exports/
@@ -102,16 +101,7 @@ PDF、PNG、`AppIcon.icns` 与 `Assets.car`。`templates/` 保存 GitHub、READM
 
 ## 产品图标
 
-产品概念（听写、智能润色、翻译、麦克风、首页、历史、词典、应用语气、其他所有应用、用量、通用、
-快捷键、隐私、关于、新版本）使用 `source/icons/Glyphs.xcassets` 里的 Lerro 图标，通用操作继续用
-SF Symbols。规则：
-
-- 16 pt 网格，1.4 pt 圆头描边，圆角 2–3 pt，开放几何形，不用实心面。
-- 光标竖条是品牌签名，只出现在听写、智能润色、首页、词典和关于；这五个图标另有
-  `glyph-*-cursor` 图层，App 内着墨水蓝，只接受单色图片的位置（设置 tab）整体单色。
-- 状态图标（成功、警告、错误）与播放控制保留 SF Symbols 实心版本，其余图标一律描边。
-- 每个图标是一份 16×16 SVG，模板渲染、保留矢量，随 `generate-assets.sh` 编进 `Assets.car`；
-  App 内通过 `LerroGlyph` 调用。设计稿见 `work/design-v1.7/icons.html`。
+产品 UI 图标使用 SF Symbols（描边版本；状态与播放控制用实心）。
 
 ## 工程接入
 

@@ -10,6 +10,10 @@ public protocol SpeechTranscribing: Sendable {
         detectSpeechEndpoint: Bool,
         milestones: @escaping CaptureMilestoneReporter
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error>
+    /// Stops the microphone and restores the output audio that `start` lowered.
+    /// Idempotent; `stop` calls it first, and a session can call it earlier to
+    /// play a sound before the final transcript is ready.
+    func endAudioCapture() async
     func stop() async throws -> SpeechTranscription
     func cancel() async
     func resourceStatus(localeIdentifier: String) async -> LanguageResourceStatus

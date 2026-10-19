@@ -50,6 +50,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     public var appLanguage: AppLanguage
     public var microphoneDeviceUID: String?
     public var muteOtherAudio: Bool
+    public var playsCaptureSounds: Bool
     public var appearance: AppAppearance
     public var launchAtLogin: Bool
     public var showInDock: Bool
@@ -82,6 +83,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         appLanguage: AppLanguage = .system,
         microphoneDeviceUID: String? = nil,
         muteOtherAudio: Bool = true,
+        playsCaptureSounds: Bool = true,
         appearance: AppAppearance = .system,
         launchAtLogin: Bool = false,
         showInDock: Bool = true,
@@ -104,6 +106,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         self.appLanguage = appLanguage
         self.microphoneDeviceUID = microphoneDeviceUID
         self.muteOtherAudio = muteOtherAudio
+        self.playsCaptureSounds = playsCaptureSounds
         self.appearance = appearance
         self.launchAtLogin = launchAtLogin
         self.showInDock = showInDock
@@ -128,6 +131,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         case appLanguage
         case microphoneDeviceUID
         case muteOtherAudio
+        case playsCaptureSounds
         case appearance
         case launchAtLogin
         case showInDock
@@ -175,6 +179,10 @@ public struct UserPreferences: Codable, Equatable, Sendable {
                 Bool.self,
                 forKey: .muteOtherAudio
             ) ?? defaults.muteOtherAudio,
+            playsCaptureSounds: try container.decodeIfPresent(
+                Bool.self,
+                forKey: .playsCaptureSounds
+            ) ?? defaults.playsCaptureSounds,
             appearance: try container.decodeIfPresent(
                 AppAppearance.self,
                 forKey: .appearance

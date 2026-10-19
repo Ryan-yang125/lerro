@@ -73,47 +73,26 @@ struct LerroButtonStyle: ButtonStyle {
 
 /// 26×26 icon button with a hover fill.
 struct LerroIconButton: View {
-    private enum Icon {
-        case system(String)
-        case glyph(LerroGlyph)
-    }
-
-    private let icon: Icon
+    let systemImage: String
     let help: String
     let action: () -> Void
     @Environment(\.locale) private var locale
 
     init(systemImage: String, help: String, action: @escaping () -> Void) {
-        self.icon = .system(systemImage)
-        self.help = help
-        self.action = action
-    }
-
-    init(glyph: LerroGlyph, help: String, action: @escaping () -> Void) {
-        self.icon = .glyph(glyph)
+        self.systemImage = systemImage
         self.help = help
         self.action = action
     }
 
     var body: some View {
         Button(action: action) {
-            iconImage
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .medium))
                 .frame(width: 26, height: 26)
         }
         .buttonStyle(IconStyle())
         .help(Text(verbatim: localizedHelp))
         .accessibilityLabel(Text(verbatim: localizedHelp))
-    }
-
-    @ViewBuilder
-    private var iconImage: some View {
-        switch icon {
-        case .system(let name):
-            Image(systemName: name)
-                .font(.system(size: 13, weight: .medium))
-        case .glyph(let glyph):
-            LerroGlyphView(glyph: glyph, size: 16)
-        }
     }
 
     private var localizedHelp: String {

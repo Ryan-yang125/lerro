@@ -40,38 +40,28 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
         }
     }
 
-    var icon: OnboardingIcon {
+    var icon: String {
         switch self {
-        case .privacy: .glyph(.privacy)
-        case .speech: .glyph(.mic)
-        case .ai: .glyph(.polish)
-        case .shortcut: .glyph(.shortcuts)
-        case .dictation: .glyph(.dictate)
-        case .recovery: .system("doc.on.clipboard")
-        case .dictionary: .glyph(.dictionary)
-        case .tone: .glyph(.tones)
+        case .privacy: "hand.raised"
+        case .speech: "mic"
+        case .ai: "sparkles"
+        case .shortcut: "keyboard"
+        case .dictation: "waveform"
+        case .recovery: "doc.on.clipboard"
+        case .dictionary: "character.book.closed"
+        case .tone: "text.bubble"
         }
     }
 }
 
-/// Step and row icon: a brand glyph or a generic SF Symbol.
-enum OnboardingIcon {
-    case glyph(LerroGlyph)
-    case system(String)
-}
-
 struct OnboardingIconView: View {
-    let icon: OnboardingIcon
+    let systemName: String
     var size: CGFloat = 16
 
     var body: some View {
-        switch icon {
-        case .glyph(let glyph):
-            LerroGlyphView(glyph: glyph, size: size)
-        case .system(let name):
-            Image(systemName: name)
-                .font(.system(size: size, weight: .medium))
-        }
+        Image(systemName: systemName)
+            .font(.system(size: size, weight: .medium))
+            .accessibilityHidden(true)
     }
 }
 
@@ -81,7 +71,7 @@ private enum OnboardingPermission: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
     var title: String { self == .microphone ? "麦克风" : "辅助功能" }
-    var icon: OnboardingIcon { self == .microphone ? .glyph(.mic) : .system("accessibility") }
+    var icon: String { self == .microphone ? "mic" : "accessibility" }
     var settingsURL: String {
         self == .microphone
             ? "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
@@ -324,7 +314,7 @@ struct OnboardingView: View {
 
             statusRow(
                 title: "Apple 听写资源",
-                icon: .glyph(.dictate),
+                icon: "waveform",
                 ready: session.speechResourceStatus.state == .ready,
                 status: session.speechResourceStatus.message.isEmpty
                     ? "等待检查"
@@ -361,7 +351,7 @@ struct OnboardingView: View {
                     if session.onboardingMicrophoneTestPassed {
                         Image(systemName: "checkmark.circle.fill")
                     } else {
-                        LerroGlyph.mic.image
+                        Image(systemName: "mic")
                     }
                 }
                 .font(LerroFont.caption)
@@ -400,7 +390,7 @@ struct OnboardingView: View {
             Label {
                 Text("录制后，按一下开始，再按一下结束。")
             } icon: {
-                LerroGlyph.shortcuts.image
+                Image(systemName: "keyboard")
             }
             .font(LerroFont.caption)
             .foregroundStyle(LerroTheme.secondaryText)
@@ -589,7 +579,7 @@ struct OnboardingView: View {
 
     private var visualPanel: some View {
         VStack(spacing: 14) {
-            OnboardingIconView(icon: step.icon, size: 40)
+            OnboardingIconView(systemName: step.icon, size: 40)
                 .foregroundStyle(LerroTheme.accent)
             Text(LocalizedStringKey(step.shortTitle))
                 .font(LerroFont.bodyEmphasis)
@@ -629,13 +619,13 @@ struct OnboardingView: View {
 
     private func statusRow<Accessory: View>(
         title: String,
-        icon: OnboardingIcon,
+        icon: String,
         ready: Bool,
         status: String,
         @ViewBuilder accessory: () -> Accessory
     ) -> some View {
         HStack(spacing: 12) {
-            OnboardingIconView(icon: icon, size: 16)
+            OnboardingIconView(systemName: icon, size: 16)
                 .foregroundStyle(LerroTheme.secondaryText)
                 .frame(width: 24)
                 .accessibilityHidden(true)

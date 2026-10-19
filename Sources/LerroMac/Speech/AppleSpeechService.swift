@@ -198,6 +198,23 @@ public actor AppleSpeechService: SpeechTranscribing {
         return eventPair.stream
     }
 
+    /// Stops the microphone and restores the output audio lowered by `start`,
+    /// so a sound played afterwards is audible. Transcription keeps running
+    /// until `stop` finalizes it.
+    public func endAudioCapture() async {
+        guard let generation = sessionGeneration, let engine = audioEngine else { return }
+        endEndpointEvents(generation: generation)
+        stopRequested = true
+        if tapInstalled {
+            engine.inputNode.removeTap(onBus: 0)
+            tapInstalled = false
+        }
+        engine.stop()
+        rawContinuation?.finish()
+        rawContinuation = nil
+        restoreOutputAudioIfNeeded()
+    }
+
     public func stop() async throws -> SpeechTranscription {
         guard let generation = sessionGeneration else {
             throw LerroError.emptyTranscription
@@ -207,17 +224,9 @@ public actor AppleSpeechService: SpeechTranscribing {
               let startedAt else {
             throw LerroError.emptyTranscription
         }
-        endEndpointEvents(generation: generation)
-        stopRequested = true
         defer { restoreOutputAudioIfNeeded() }
 
-        if tapInstalled {
-            engine.inputNode.removeTap(onBus: 0)
-            tapInstalled = false
-        }
-        engine.stop()
-        rawContinuation?.finish()
-        rawContinuation = nil
+        await endAudioCapture()
         let deviceUID = audioEngineDeviceUID
         var completedAudioRelativePath = audioRelativePath
         do {

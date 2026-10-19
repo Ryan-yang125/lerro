@@ -166,7 +166,7 @@ struct HistoryEntryMenuItems: View {
                 Button {
                     session.retryHistoryEntry(entry)
                 } label: {
-                    Label { Text("用 AI 重新处理") } icon: { LerroGlyph.polish.image }
+                    Label("用 AI 重新处理", systemImage: "sparkles")
                 }
             }
         }

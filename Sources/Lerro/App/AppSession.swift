@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import OSLog
 import SwiftUI
 import LerroCore
 import LerroMac
@@ -82,7 +83,7 @@ final class AppSession {
     private(set) var dictionarySuggestionScan: DictionarySuggestionScanProgress?
     var audioInputDevices: [AudioInputDevice] = []
     var preferences = UserPreferences()
-    private(set) var usageStatistics = UsageStatistics(entries: [])
+    private(set) var homeStatistics: HomeStatistics = .empty
     private(set) var recentHistoryEntries: [HistoryEntry] = []
     var visualFixturePresentation: String?
     var isPanelOnlyVisualFixture = false
@@ -230,7 +231,10 @@ final class AppSession {
     private var lastAppliedSystemPreferences: UserPreferences?
     private var pendingRetentionApplication: HistoryRetention?
     private var historyUsageEntries: [HistoryEntry] = []
-    private var usageStatisticsDay = Calendar.current.startOfDay(for: .now)
+    private var dailyUsageDays: [DailyUsage] = []
+    private var homeStatisticsDay = Calendar.current.startOfDay(for: .now)
+    private var homeStatisticsGeneration = UUID()
+    private static let usageLogger = Logger(subsystem: "app.lerro.mac", category: "daily-usage")
     private var historyPageGeneration = UUID()
     private var historyUsageGeneration = UUID()
     private var loadedHistorySearch: String?
@@ -334,13 +338,6 @@ final class AppSession {
         historyUsageEntries.count
     }
 
-    var recentlyLearnedEntries: [DictionaryEntry] {
-        let cutoff = Date.now.addingTimeInterval(-7 * 86_400)
-        return dictionaryEntries
-            .filter { $0.source == .learned && $0.createdAt >= cutoff }
-            .sorted { $0.createdAt > $1.createdAt }
-    }
-
     var currentMicrophoneName: String {
         if let uid = preferences.microphoneDeviceUID,
            let device = audioInputDevices.first(where: { $0.uid == uid }) {
@@ -395,6 +392,9 @@ final class AppSession {
             currentError = "设置文件读取失败，已使用安全默认值。原文件保持不变：\(error.localizedDescription)"
         }
         preferenceSaveQueue.reset(confirmed: preferences)
+        Task { [dependencies] in
+            await dependencies.soundPlayer.prepare()
+        }
         let audioInputDevicesTask = Task { [dependencies] in
             await dependencies.microphoneTest.availableInputDevices()
         }
@@ -428,6 +428,8 @@ final class AppSession {
         }
 
         await refreshHistoryAndUsage()
+        await seedDailyUsageIfNeeded()
+        await refreshHomeStatistics()
         do {
             dictionaryEntries = try await dictionaryTask.value
         } catch {
@@ -751,8 +753,8 @@ final class AppSession {
 
     func applicationDidBecomeActive() async {
         guard isStarted, dependencies.startupStorageError == nil else { return }
-        if usageStatisticsDay != Calendar.current.startOfDay(for: .now) {
-            updateUsageSummary()
+        if homeStatisticsDay != Calendar.current.startOfDay(for: .now) {
+            rebuildHomeStatistics()
         }
         await refreshPermissions(prompt: false)
     }
@@ -1522,10 +1524,12 @@ final class AppSession {
                 let allEntries = try await dependencies.history.entries()
                 try await deleteAudioFiles(relativePaths: allEntries.map(\.audioRelativePath))
                 try await dependencies.history.deleteAll()
+                try await dependencies.dailyUsage.deleteAll()
             } catch {
                 currentError = userFacingError(error, context: "本地数据处理失败")
             }
             await refreshHistoryAndUsage()
+            await refreshHomeStatistics()
         }
     }
 
@@ -1613,6 +1617,9 @@ final class AppSession {
                 updated.wasEnhanced = result.source != .raw
                 try await dependencies.history.save(updated)
                 await refreshHistoryAndUsage()
+                if entry.status != .completed {
+                    await recordDailyUsage(updated)
+                }
             } catch {
                 currentError = userFacingError(error, context: "智能处理失败")
             }
@@ -1947,6 +1954,13 @@ final class AppSession {
         isStartingCapture = true
         updateHUD()
         markTrace(.hudArmed, generation: generation)
+        // The microphone opens a few hundred milliseconds later, and lowering
+        // the other audio happens only then, so the sound plays in full.
+        if preferences.playsCaptureSounds {
+            Task { [dependencies] in
+                await dependencies.soundPlayer.play(.start)
+            }
+        }
         completionTask?.cancel()
         completionTask = Task { [weak self] in
             await self?.beginCapture(
@@ -2095,6 +2109,13 @@ final class AppSession {
         var recordedAudioRelativePath: String?
 
         do {
+            // Output audio returns as soon as the microphone closes, so the
+            // stop sound is audible before the final transcript is ready.
+            await dependencies.speech.endAudioCapture()
+            guard activeSession?.id == session.id else { return }
+            if preferences.playsCaptureSounds {
+                await dependencies.soundPlayer.play(.stop)
+            }
             let transcription = try await dependencies.speech.stop()
             recordedAudioRelativePath = transcription.audioRelativePath
             guard activeSession?.id == session.id else {
@@ -2290,6 +2311,7 @@ final class AppSession {
         } else {
             try await dependencies.history.save(history)
         }
+        await recordDailyUsage(history)
         markTrace(.historySaved, generation: generation)
         try await applyRetentionAndClean(preferences.historyRetention, now: .now)
         await refreshHistoryAndUsage()
@@ -2707,9 +2729,49 @@ final class AppSession {
         }
     }
 
+    /// One-time seed: when no daily usage is stored yet, build it from the
+    /// completed history entries.
+    private func seedDailyUsageIfNeeded() async {
+        do {
+            guard try await dependencies.dailyUsage.days().isEmpty else { return }
+            let seeded = DailyUsage.seed(from: historyUsageEntries, calendar: .current)
+            guard !seeded.isEmpty else { return }
+            try await dependencies.dailyUsage.replaceAll(seeded)
+        } catch {
+            Self.usageLogger.error("Daily usage seed failed: \(String(describing: type(of: error)), privacy: .public)")
+        }
+    }
+
+    private func refreshHomeStatistics() async {
+        let generation = UUID()
+        homeStatisticsGeneration = generation
+        do {
+            let days = try await dependencies.dailyUsage.days()
+            guard homeStatisticsGeneration == generation else { return }
+            dailyUsageDays = days
+        } catch {
+            Self.usageLogger.error("Daily usage load failed: \(String(describing: type(of: error)), privacy: .public)")
+            guard homeStatisticsGeneration == generation else { return }
+        }
+        rebuildHomeStatistics()
+    }
+
+    private func rebuildHomeStatistics() {
+        homeStatistics = HomeStatistics(days: dailyUsageDays, now: .now, calendar: .current)
+        homeStatisticsDay = Calendar.current.startOfDay(for: .now)
+    }
+
+    private func recordDailyUsage(_ entry: HistoryEntry) async {
+        guard entry.status == .completed, preferences.historyRetention != .never else { return }
+        do {
+            try await dependencies.dailyUsage.record(entry)
+        } catch {
+            Self.usageLogger.error("Daily usage record failed: \(String(describing: type(of: error)), privacy: .public)")
+        }
+        await refreshHomeStatistics()
+    }
+
     private func updateUsageSummary() {
-        usageStatistics = UsageStatistics(entries: historyUsageEntries)
-        usageStatisticsDay = Calendar.current.startOfDay(for: .now)
         recentHistoryEntries = Array(
             historyUsageEntries.sorted { $0.createdAt > $1.createdAt }.prefix(6)
         )

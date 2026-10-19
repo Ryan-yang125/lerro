@@ -8,18 +8,18 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: $session.destination) {
-            row(.home, title: "首页", glyph: .home)
-            row(.history, title: "历史", glyph: .history, count: session.historyAllCount)
+            row(.home, title: "首页", systemImage: "house")
+            row(.history, title: "历史", systemImage: "clock.arrow.circlepath", count: session.historyAllCount)
             row(
                 .dictionary,
                 title: "词典",
-                glyph: .dictionary,
+                systemImage: "character.book.closed",
                 count: session.dictionaryEntries.count
             )
             row(
                 .appTones,
                 title: "应用语气",
-                glyph: .tones,
+                systemImage: "text.bubble",
                 count: session.preferences.appToneProfiles.count
             )
         }
@@ -41,14 +41,10 @@ struct SidebarView: View {
     private func row(
         _ destination: SidebarDestination,
         title: String,
-        glyph: LerroGlyph,
+        systemImage: String,
         count: Int? = nil
     ) -> some View {
-        let label = Label {
-            Text(verbatim: localized(title))
-        } icon: {
-            LerroGlyphView(glyph: glyph, size: 16)
-        }
+        let label = Label(localized(title), systemImage: systemImage)
         Group {
             if let count {
                 label.badge(count)
@@ -88,12 +84,12 @@ struct SidebarView: View {
             .accessibilityLabel(Text(verbatim: "\(status.title) · \(status.detail)"))
 
             HStack(spacing: 4) {
-                LerroIconButton(glyph: .general, help: "设置") {
+                LerroIconButton(systemImage: "gearshape", help: "设置") {
                     showSettings(.general)
                 }
                 if AppUpdateController.shared.updateAvailable {
                     LerroIconButton(
-                        glyph: .update,
+                        systemImage: "arrow.down.circle",
                         help: "发现新版本，立即下载"
                     ) {
                         AppUpdateController.shared.checkForUpdates()

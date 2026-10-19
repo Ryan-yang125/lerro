@@ -68,7 +68,7 @@ render_png "$flat_icon_source" "$exports_dir/app-icon/lerro-app-icon-1024.png" 1
 
 actool_output="$temporary_dir/actool"
 mkdir -p "$actool_output"
-/usr/bin/xcrun actool "$source_dir/app-icon/AppIcon.icon" "$source_dir/app-icon/Accent.xcassets" "$source_dir/icons/Glyphs.xcassets" \
+/usr/bin/xcrun actool "$source_dir/app-icon/AppIcon.icon" "$source_dir/app-icon/Accent.xcassets" \
   --compile "$actool_output" \
   --platform macosx \
   --minimum-deployment-target 26.0 \

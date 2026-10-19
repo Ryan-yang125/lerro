@@ -326,7 +326,8 @@ private struct DefaultToneIcon: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ))
-            LerroGlyphView(glyph: .allApps, size: size * 0.55)
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: size * 0.45, weight: .medium))
                 .foregroundStyle(.white)
         }
         .frame(width: size, height: size)

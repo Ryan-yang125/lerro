@@ -21,6 +21,32 @@ export type LocalizedRelease = ReleaseCopy & Pick<Release, "version" | "build" |
 // distribution URL; older entries stay unchanged.
 export const releases: readonly Release[] = [
   {
+    version: "1.8.0",
+    build: "17",
+    publishedAt: "2026-10-19",
+    downloadUrl: "https://updates.lerroapp.com/releases/1.8.0/17/Lerro-macOS-arm64.dmg",
+    zh: {
+      publishedLabel: "2026 年 10 月 19 日",
+      summary: "新首页统计面板，录音开始和结束有提示音。",
+      highlights: [
+        "首页改成统计面板：累计字数、节省时间、说话速度、听写时长和次数，一年的听写热力图和连续天数，常用 App 和常用时段。",
+        "开始和结束录音时各有一声短提示音，可在 设置 › 通用 › 提示音 关闭。",
+        "开启“录音时降低其他声音”后，麦克风一关，其他声音就恢复。",
+        "侧边栏、设置和菜单栏图标换成 SF Symbols。",
+      ],
+    },
+    en: {
+      publishedLabel: "October 19, 2026",
+      summary: "A new Home dashboard, and short sounds when a capture starts and stops.",
+      highlights: [
+        "Home is a usage dashboard: total characters, time saved, speaking speed, dictation time and count, a year of activity as a heatmap with streaks, most-used apps and hours.",
+        "A short sound plays when a capture starts and stops. Turn it off in Settings › General › Sounds.",
+        "With lowering other audio enabled, other audio returns as soon as the microphone closes.",
+        "Sidebar, Settings and menu bar icons use SF Symbols.",
+      ],
+    },
+  },
+  {
     version: "1.7.2",
     build: "16",
     publishedAt: "2026-10-19",

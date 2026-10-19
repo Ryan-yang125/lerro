@@ -294,6 +294,24 @@ actual_menu_bar_count=$(find "$menu_bar_source" -mindepth 1 -maxdepth 1 -type f 
 }
 ditto "$menu_bar_source" "$resources_path/MenuBar"
 
+sounds_source="$project_dir/Sources/Lerro/Resources/Sounds"
+sound_resource_names=(
+    capture-start.caf
+    capture-stop.caf
+)
+for resource_name in "${sound_resource_names[@]}"; do
+    [[ -s "$sounds_source/$resource_name" ]] || {
+        print -u2 "Missing Lerro sound resource: $resource_name"
+        exit 1
+    }
+done
+actual_sound_count=$(find "$sounds_source" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
+[[ "$actual_sound_count" == "${#sound_resource_names[@]}" ]] || {
+    print -u2 "Unexpected Lerro sound resource count: $actual_sound_count"
+    exit 1
+}
+ditto "$sounds_source" "$resources_path/Sounds"
+
 accessor_count=0
 while IFS= read -r -d $'\0' accessor_path; do
     if ! grep -q 'Bundle.main.resourceURL' "$accessor_path"; then

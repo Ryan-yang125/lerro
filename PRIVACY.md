@@ -30,6 +30,12 @@ output, context text, or API key. Records older than 90 days are removed, and
 Settings → 用量 can clear them. Cost estimates are calculated on the Mac from the
 built-in or user-edited price table; nothing about usage is sent anywhere.
 
+Daily usage totals in `usage-days.json` power the Home page: for each day, the
+number of characters, dictations and seconds, characters per app (name and
+bundle identifier), and dictations per hour. They contain no text. Days older
+than 400 days are removed. Nothing is recorded while history is set to never
+save, and deleting all history also deletes these totals.
+
 ## System permissions
 
 Lerro requests two macOS permissions (Apple Speech needs no separate authorization):
