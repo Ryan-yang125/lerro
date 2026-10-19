@@ -22,6 +22,7 @@ struct AppSessionCoreFlowTests {
         await harness.speech.finishPreparation("zh_CN")
         #expect(await waitUntil { harness.session.speechResourceStatus.state == .ready })
         #expect(await harness.speech.starts().isEmpty)
+        #expect(await waitUntil { !harness.session.isCleaningCapture })
 
         harness.session.toggleCapture(.dictation)
         #expect(await waitUntil { harness.session.phase == .listening })

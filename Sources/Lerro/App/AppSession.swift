@@ -216,7 +216,7 @@ final class AppSession {
     private var committedTextDeliverySessionID: UUID?
     private(set) var isStartingCapture = false
     private(set) var isWaitingForSpeechResources = false
-    private var isCleaningCapture = false
+    private(set) var isCleaningCapture = false
     private var captureTimerTask: Task<Void, Never>?
     private var microphoneTestTask: Task<Void, Never>?
     private var speechPreparationTask: Task<Void, Never>?
