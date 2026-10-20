@@ -35,7 +35,10 @@ struct LerroApp: App {
         }
         .defaultSize(width: 1080, height: 750)
         .windowResizability(.contentMinSize)
-        .commands { LerroCommands(session: session) }
+        .commands {
+            SidebarCommands()
+            LerroCommands(session: session)
+        }
 
         Settings {
             LerroSettingsView(session: session)

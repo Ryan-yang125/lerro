@@ -6,6 +6,11 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A collapsed sidebar can be shown again: the main window has the standard
+  sidebar button next to the window controls, and View › Show Sidebar (⌃⌘S).
+
 ## [1.8.0] - 2026-10-19
 
 ### Changed

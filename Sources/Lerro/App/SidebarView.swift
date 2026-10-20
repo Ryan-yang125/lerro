@@ -24,7 +24,6 @@ struct SidebarView: View {
             )
         }
         .listStyle(.sidebar)
-        .toolbar(removing: .sidebarToggle)
         .safeAreaInset(edge: .top, spacing: 0) {
             LerroWordmark(height: 18)
                 .frame(maxWidth: .infinity, alignment: .leading)
