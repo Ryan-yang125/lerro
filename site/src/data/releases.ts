@@ -21,6 +21,28 @@ export type LocalizedRelease = ReleaseCopy & Pick<Release, "version" | "build" |
 // distribution URL; older entries stay unchanged.
 export const releases: readonly Release[] = [
   {
+    version: "1.9.1",
+    build: "19",
+    publishedAt: "2026-10-20",
+    downloadUrl: "https://updates.lerroapp.com/releases/1.9.1/19/Lerro-macOS-arm64.dmg",
+    zh: {
+      publishedLabel: "2026 年 10 月 20 日",
+      summary: "新版本更容易发现。",
+      highlights: [
+        "每 4 小时检查一次新版本。正在用 Lerro 时直接弹出更新窗口；Lerro 在后台时，菜单栏图标出现小圆点，菜单栏面板第一行和主窗口侧边栏显示更新入口。",
+        "下载和安装仍然由你点了才开始。",
+      ],
+    },
+    en: {
+      publishedLabel: "October 20, 2026",
+      summary: "New versions are easier to notice.",
+      highlights: [
+        "Lerro checks for a new version every 4 hours. When you are using Lerro, the update window opens; when it is in the background, the menu bar icon gets a dot and the menu bar panel and main window sidebar show an update button.",
+        "Downloading and installing still start only when you click.",
+      ],
+    },
+  },
+  {
     version: "1.9.0",
     build: "18",
     publishedAt: "2026-10-20",

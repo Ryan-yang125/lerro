@@ -6,6 +6,8 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-10-20
+
 ### Changed
 
 - New versions are easier to notice. Lerro checks every 4 hours. When you are
@@ -546,7 +548,8 @@ All notable changes to Lerro will be documented here. The project follows
   plaintext BYOK credentials; logs, history, errors, fixtures, and public exports
   exclude API keys and Authorization headers.
 
-[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.9.1...HEAD
+[1.9.1]: https://github.com/Ryan-yang125/lerro/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/Ryan-yang125/lerro/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/Ryan-yang125/lerro/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/Ryan-yang125/lerro/compare/v1.7.1...v1.7.2

@@ -80,16 +80,18 @@ test("hero headings", () => {
 for (const [file, lang] of [["changelog.html", "zh"], ["en/changelog.html", "en"]]) {
   test(`${file} lists the newest release first with its immutable URL`, () => {
     const html = read(file);
-    const first = html.indexOf("Lerro 1.9.0");
-    assert.ok(first >= 0, "1.9.0 present");
+    const first = html.indexOf("Lerro 1.9.1");
+    assert.ok(first >= 0, "1.9.1 present");
+    assert.ok(html.includes("https://updates.lerroapp.com/releases/1.9.1/19/Lerro-macOS-arm64.dmg"));
+    assert.ok(html.indexOf("Lerro 1.9.0") > first, "1.9.0 listed after 1.9.1");
     assert.ok(html.includes("https://updates.lerroapp.com/releases/1.9.0/18/Lerro-macOS-arm64.dmg"));
-    assert.ok(html.indexOf("Lerro 1.8.0") > first, "1.8.0 listed after 1.9.0");
+    assert.ok(html.indexOf("Lerro 1.8.0") > first, "1.8.0 listed after 1.9.1");
     assert.ok(html.includes("https://updates.lerroapp.com/releases/1.8.0/17/Lerro-macOS-arm64.dmg"));
-    assert.ok(html.indexOf("Lerro 1.7.2") > first, "1.7.2 listed after 1.9.0");
+    assert.ok(html.indexOf("Lerro 1.7.2") > first, "1.7.2 listed after 1.9.1");
     assert.ok(html.includes("https://updates.lerroapp.com/releases/1.7.2/16/Lerro-macOS-arm64.dmg"));
     for (const [version, build] of [["1.7.1", "15"], ["1.7.0", "14"], ...olderVersions]) {
       const at = html.indexOf(`Lerro ${version}`);
-      assert.ok(at > first, `${version} listed after 1.9.0`);
+      assert.ok(at > first, `${version} listed after 1.9.1`);
       assert.ok(html.includes(release(version, build)), `${version} download URL`);
     }
     assert.ok(html.includes(lang === "zh" ? "2026 年 10 月 20 日" : "October 20, 2026"));
