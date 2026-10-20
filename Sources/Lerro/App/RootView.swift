@@ -48,6 +48,10 @@ struct RootView: View {
             if presentation?.hasPrefix("settings-") == true {
                 openSettings()
             }
+            if let presentation, presentation.hasPrefix("prompt-"),
+               let kind = AIPromptKind(rawValue: String(presentation.dropFirst("prompt-".count))) {
+                openWindow(id: "prompt", value: kind)
+            }
         }
         .onChange(of: session.isOnboardingPresented) { _, isPresented in
             if isPresented {

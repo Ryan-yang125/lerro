@@ -85,7 +85,7 @@ open -F -n --env LERRO_FIXTURE_MODE=1 --env LERRO_FIXTURE_PRESENTATION=hud-recov
 | --- | --- |
 | `LERRO_FIXTURE_MODE` | `1` enables fixture mode (required for the rest) |
 | `LERRO_FIXTURE_DESTINATION` | `home`, `history`, `dictionary`, `appTones` |
-| `LERRO_FIXTURE_PRESENTATION` | `settings-general`, `settings-shortcuts`, `settings-intelligence`, `settings-usage`, `settings-privacy`, `settings-about`, `menubar-panel`, `menubar-panel-listening`, `menubar-panel-permission`, and `hud-` states (`waiting`, `preparing-speech`, `recording`, `timer`, `hands-free`, `silent`, `dictating`, `translating`, `processing`, `processing-translation`, `delivered-fallback`, `error`, `recovery`, `dictionary-learned`) |
+| `LERRO_FIXTURE_PRESENTATION` | `settings-general`, `settings-shortcuts`, `settings-intelligence`, `settings-usage`, `settings-privacy`, `settings-about`, `prompt-dictate`, `prompt-translate`, `prompt-dictionaryLearning`, `menubar-panel`, `menubar-panel-listening`, `menubar-panel-permission`, and `hud-` states (`waiting`, `preparing-speech`, `recording`, `timer`, `hands-free`, `silent`, `dictating`, `translating`, `processing`, `processing-translation`, `delivered-fallback`, `error`, `recovery`, `dictionary-learned`) |
 | `LERRO_FIXTURE_PANEL_ONLY` | `1` shows only the panel (HUD and menu bar presentations) |
 | `LERRO_FIXTURE_ONBOARDING`, `LERRO_FIXTURE_ONBOARDING_STEP` | `1`; step `privacy`, `speech`, `ai`, `shortcut`, `dictation`, `recovery`, `dictionary`, `tone` |
 | `LERRO_FIXTURE_APPEARANCE` | `light`, `dark` |

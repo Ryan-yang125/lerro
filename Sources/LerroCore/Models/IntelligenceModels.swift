@@ -16,6 +16,8 @@ public struct IntelligenceRequest: Sendable, Equatable {
     public var dictionary: [DictionaryEntry]
     public var toneInstruction: String?
     public var usageFeature: AIUsageFeature
+    /// The history entry this request will produce; recorded on the usage record.
+    public var historyEntryID: UUID?
 
     /// `usageFeature` defaults to `.dictate` for polish and `.translate` for translate.
     public init(
@@ -28,7 +30,8 @@ public struct IntelligenceRequest: Sendable, Equatable {
         context: CapturedContext,
         dictionary: [DictionaryEntry] = [],
         toneInstruction: String? = nil,
-        usageFeature: AIUsageFeature? = nil
+        usageFeature: AIUsageFeature? = nil,
+        historyEntryID: UUID? = nil
     ) {
         self.task = task
         self.mode = mode
@@ -40,6 +43,7 @@ public struct IntelligenceRequest: Sendable, Equatable {
         self.dictionary = dictionary
         self.toneInstruction = toneInstruction
         self.usageFeature = usageFeature ?? (task == .translate ? .translate : .dictate)
+        self.historyEntryID = historyEntryID
     }
 }
 
@@ -55,6 +59,7 @@ public struct DictionaryLearningRequest: Sendable, Equatable {
     public var contextAfter: String?
     public var applicationName: String
     public var bundleIdentifier: String?
+    public var historyEntryID: UUID?
 
     public init(
         mode: IntelligenceMode,
@@ -64,7 +69,8 @@ public struct DictionaryLearningRequest: Sendable, Equatable {
         contextBefore: String? = nil,
         contextAfter: String? = nil,
         applicationName: String,
-        bundleIdentifier: String? = nil
+        bundleIdentifier: String? = nil,
+        historyEntryID: UUID? = nil
     ) {
         self.mode = mode
         self.remoteProvider = remoteProvider
@@ -78,6 +84,7 @@ public struct DictionaryLearningRequest: Sendable, Equatable {
         }
         self.applicationName = String(applicationName.prefix(128))
         self.bundleIdentifier = bundleIdentifier.map { String($0.prefix(255)) }
+        self.historyEntryID = historyEntryID
     }
 }
 
@@ -188,19 +195,23 @@ public struct IntelligenceResult: Sendable, Equatable {
     public var url: URL?
     public var modelIdentifier: String
     public var source: IntelligenceResultSource
+    /// The remote call behind this result; nil for raw and snippet results.
+    public var call: AICallTrace?
 
     public init(
         text: String,
         disposition: IntelligenceDisposition,
         url: URL? = nil,
         modelIdentifier: String,
-        source: IntelligenceResultSource = .remote
+        source: IntelligenceResultSource = .remote,
+        call: AICallTrace? = nil
     ) {
         self.text = text
         self.disposition = disposition
         self.url = url
         self.modelIdentifier = modelIdentifier
         self.source = source
+        self.call = call
     }
 }
 

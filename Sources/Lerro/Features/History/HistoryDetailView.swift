@@ -24,9 +24,27 @@ struct HistoryDetailView: View {
 
     @State private var mode: HistoryDetailMode = .result
     @State private var player = RecordingPlayer()
+    @State private var highlightsAICall = false
     @Environment(\.locale) private var locale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let aiCallScrollID = "aiCall"
+
+    private struct HighlightKey: Hashable {
+        let entryID: UUID
+        let highlightID: UUID?
+    }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            scrollContent
+                .task(id: HighlightKey(entryID: entry.id, highlightID: session.aiCallHighlightID)) {
+                    await highlightAICall(scrollingWith: proxy)
+                }
+        }
+    }
+
+    private var scrollContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header
@@ -39,6 +57,7 @@ struct HistoryDetailView: View {
                 Divider()
                     .padding(.bottom, 16)
                 metadata
+                aiCall
                 audio
             }
             .padding(.horizontal, 24)
@@ -189,12 +208,50 @@ struct HistoryDetailView: View {
         }.joined(separator: " ")
     }
 
+    // MARK: AI call
+
+    @ViewBuilder
+    private var aiCall: some View {
+        if let call = entry.aiCall {
+            HistoryAICallView(
+                entry: entry,
+                call: call,
+                session: session,
+                isHighlighted: highlightsAICall
+            )
+            .id(Self.aiCallScrollID)
+            .padding(.top, 20)
+        }
+    }
+
+    /// Scrolls to the AI card and outlines it briefly when the session asks for it.
+    private func highlightAICall(scrollingWith proxy: ScrollViewProxy) async {
+        guard entry.aiCall != nil, session.aiCallHighlightID == entry.id else { return }
+        try? await Task.sleep(for: .milliseconds(80))
+        guard !Task.isCancelled else { return }
+        if reduceMotion {
+            proxy.scrollTo(Self.aiCallScrollID, anchor: .center)
+        } else {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                proxy.scrollTo(Self.aiCallScrollID, anchor: .center)
+            }
+        }
+        highlightsAICall = true
+        try? await Task.sleep(for: .milliseconds(1200))
+        highlightsAICall = false
+        if session.aiCallHighlightID == entry.id {
+            session.aiCallHighlightID = nil
+        }
+    }
+
     // MARK: Metadata
 
     private var metadata: some View {
         Grid(alignment: .topLeading, horizontalSpacing: 16, verticalSpacing: 8) {
-            metadataRow("处理") {
-                Text(verbatim: processingText)
+            if entry.aiCall == nil {
+                metadataRow("处理") {
+                    Text(verbatim: processingText)
+                }
             }
             if let timings = entry.phaseTimings, timingsTotal(timings) > 0 {
                 metadataRow("耗时") {
@@ -212,7 +269,7 @@ struct HistoryDetailView: View {
                         .lineLimit(2)
                 }
             }
-            if let receipt = entry.contextReceipt {
+            if entry.aiCall == nil, let receipt = entry.contextReceipt {
                 metadataRow("发送给 AI") {
                     Text(verbatim: sharedContextText(receipt))
                 }

@@ -119,8 +119,12 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 - 请求按开关包含：应用名与类型、窗口标题、光标前 80 与后 40 个 UTF-16 单元、选中文字（上限 4,096 字符）、最多 12 个命中的词典
   条目、最多 40 个 `known_terms`、应用语气。transcript 始终包含。
 - [`PipelineIntelligenceService`](../Sources/LerroCore/Services/PipelineIntelligenceService.swift) 提供 `polish`、`translate`、
-  词典学习分类，并为每次远程调用写入一条 `AIUsageRecord`（`ai-usage.json`，保留 90 天）。费用在本机按
-  `AIModelPriceTable` 估算，显示在设置的「用量」标签。
+  词典学习分类，并为每次远程调用写入一条 `AIUsageRecord`（`ai-usage.json`，保留 90 天，带所属历史记录的 ID）。费用在本机按
+  `AIModelPriceTable` 估算，显示在设置的「用量」标签，调用记录可跳回对应历史。
+- 听写和翻译的远程调用以 `AICallTrace` 原样存进 `HistoryEntry.aiCall`：发送的 user 内容、模型回答、提示词版本、模型 ID、
+  token 和延迟。历史详情的「AI 处理」从中解析出改词、发送的上下文和费用明细。
+- 三份系统提示词（听写润色、翻译、自动学词）以 [`AIPromptDocument`](../Sources/LerroCore/Services/AIPromptDocument.swift)
+  分段定义，`fullText` 就是发给模型的原文；设置 › 智能 › 提示词只读展示这些分段和示例。
 - 应用语气（`AppToneProfile`）按应用 Bundle ID 匹配；没有匹配时使用 `UserPreferences.defaultToneInstruction`。
 
 ## 词典与自动学习
@@ -142,9 +146,9 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 | 文件 | 内容 |
 | --- | --- |
 | `preferences.json`（`0600`） | 偏好、Provider 配置、API Key、价格覆盖 |
-| `history.json` | 听写记录：raw/final 文本、路由、模型 ID、上下文类别、阶段耗时、交付状态 |
+| `history.json` | 听写记录：raw/final 文本、路由、模型 ID、上下文类别、阶段耗时、交付状态、AI 调用原样记录（`aiCall`） |
 | `dictionary.json`、`dictionary-suggestions.json` | 词典与建议 |
-| `ai-usage.json` | 远程调用的时间、功能、Provider、模型 ID、token 数、延迟、成败 |
+| `ai-usage.json` | 远程调用的时间、功能、Provider、模型 ID、token 数、延迟、成败、所属历史 ID |
 | `usage-days.json` | 首页统计的每日汇总：字数、次数、时长、各应用字数、各小时次数；不含文字，保留 400 天 |
 | `Audio/` | 可选录音（CAF），`saveAudio` 默认关闭 |
 

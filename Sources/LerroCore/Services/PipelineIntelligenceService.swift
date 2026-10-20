@@ -41,22 +41,45 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         guard let remoteRuntime else {
             throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
         }
-        let generated = try await recordingUsage(
+        let timed = try await recordingUsage(
             feature: request.usageFeature,
             configuration: invocation.configuration,
-            tokens: \.tokens
+            historyEntryID: request.historyEntryID,
+            tokens: { $0.generation.tokens }
         ) {
-            try await remoteRuntime.generate(
+            let clock = ContinuousClock()
+            let startedAt = Date()
+            let start = clock.now
+            let generation = try await remoteRuntime.generate(
                 configuration: invocation.configuration,
                 systemPrompt: invocation.systemPrompt,
                 userPrompt: invocation.userPrompt,
                 maxTokens: invocation.maxTokens
             )
-        }.text
+            return TimedGeneration(
+                generation: generation,
+                startedAt: startedAt,
+                latencyMilliseconds: Self.milliseconds(since: start, clock: clock)
+            )
+        }
+        let generated = timed.generation.text
 
         let generatedText = request.task == .polish
             ? CloudPromptComposer.dictateText(from: generated)
             : generated
+        let call = AICallTrace(
+            prompt: request.task == .translate ? .translate : .dictate,
+            promptVersion: request.task == .translate
+                ? CloudPromptComposer.translatePromptVersion
+                : CloudPromptComposer.dictatePromptVersion,
+            provider: invocation.configuration.provider,
+            modelIdentifier: invocation.configuration.modelIdentifier,
+            userPrompt: invocation.userPrompt,
+            response: generated,
+            tokens: timed.generation.tokens,
+            latencyMilliseconds: timed.latencyMilliseconds,
+            startedAt: timed.startedAt
+        )
 
         return IntelligenceResult(
             text: try Self.finalText(
@@ -66,7 +89,8 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
             ),
             disposition: disposition,
             modelIdentifier: invocation.configuration.modelIdentifier,
-            source: .remote
+            source: .remote,
+            call: call
         )
     }
 
@@ -92,6 +116,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         let generated = try await recordingUsage(
             feature: .dictionaryLearning,
             configuration: configuration,
+            historyEntryID: request.historyEntryID,
             tokens: \.tokens
         ) {
             try await remoteRuntime.generate(
@@ -120,6 +145,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         return try await recordingUsage(
             feature: .connectionTest,
             configuration: configuration,
+            historyEntryID: nil,
             tokens: \.tokens,
             succeeded: \.succeeded
         ) {
@@ -132,6 +158,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
     private func recordingUsage<Result: Sendable>(
         feature: AIUsageFeature,
         configuration: RemoteProviderConfiguration,
+        historyEntryID: UUID?,
         tokens: (Result) -> AITokenUsage?,
         succeeded: (Result) -> Bool = { _ in true },
         _ call: () async throws -> Result
@@ -147,7 +174,8 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
                 modelIdentifier: configuration.modelIdentifier,
                 tokens: tokens,
                 latencyMilliseconds: Self.milliseconds(since: start, clock: clock),
-                succeeded: succeeded
+                succeeded: succeeded,
+                historyEntryID: historyEntryID
             ))
         }
         do {
@@ -215,6 +243,12 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
             value.removeLast()
         }
         return value.isEmpty ? fallback : value
+    }
+
+    private struct TimedGeneration: Sendable {
+        let generation: RemoteGeneration
+        let startedAt: Date
+        let latencyMilliseconds: Int
     }
 
     private struct Invocation: Sendable {

@@ -6,6 +6,18 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+### Added
+
+- History shows what the AI did for each dictation: the words it corrected and the
+  fragments it removed, what it was sent (your words, app, dictionary terms, tone,
+  and which context was not sent), and what the call cost with the calculation.
+  The exact request and reply are one click away.
+- Settings › Usage lists every AI call with its cost; selecting one opens the
+  matching history entry.
+- Settings › Intelligence › Prompts shows the dictation, translation and
+  dictionary-learning prompts section by section, with the examples as cards. The
+  prompts are read-only.
+
 ### Fixed
 
 - A collapsed sidebar can be shown again: the main window has the standard

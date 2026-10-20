@@ -139,6 +139,7 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
     public var modelIdentifier: String?
     public var contextReceipt: HistoryContextReceipt?
     public var phaseTimings: HistoryPhaseTimings?
+    public var aiCall: AICallTrace?
 
     public init(
         id: UUID = UUID(),
@@ -160,7 +161,8 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
         processingRoute: HistoryProcessingRoute? = nil,
         modelIdentifier: String? = nil,
         contextReceipt: HistoryContextReceipt? = nil,
-        phaseTimings: HistoryPhaseTimings? = nil
+        phaseTimings: HistoryPhaseTimings? = nil,
+        aiCall: AICallTrace? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -182,6 +184,7 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
         self.modelIdentifier = modelIdentifier
         self.contextReceipt = contextReceipt
         self.phaseTimings = phaseTimings
+        self.aiCall = aiCall
     }
 
     public var wordCount: Int {

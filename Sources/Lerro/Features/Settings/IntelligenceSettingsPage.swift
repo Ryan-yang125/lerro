@@ -88,6 +88,7 @@ struct IntelligenceProviderDraft: Equatable {
 struct IntelligenceSettingsPage: View {
     @Bindable var session: AppSession
     @Environment(\.locale) private var locale
+    @Environment(\.openWindow) private var openWindow
 
     @State private var shownMode: IntelligenceMode
     @State private var providerDraft = IntelligenceProviderDraft()
@@ -269,6 +270,12 @@ struct IntelligenceSettingsPage: View {
                 .font(LerroFont.footnote)
         }
 
+        Section("提示词") {
+            ForEach(AIPromptKind.allCases) { kind in
+                promptRow(kind)
+            }
+        }
+
         Section("发送给 AI 的上下文") {
             Toggle("应用名", isOn: $providerDraft.contextSharing.application)
             Toggle("窗口标题", isOn: $providerDraft.contextSharing.windowTitle)
@@ -277,6 +284,30 @@ struct IntelligenceSettingsPage: View {
             Toggle("词典", isOn: $providerDraft.contextSharing.dictionary)
             Toggle("应用语气", isOn: $providerDraft.contextSharing.tone)
         }
+    }
+
+    private func promptRow(_ kind: AIPromptKind) -> some View {
+        let version = AIPromptDocument.document(for: kind).version
+        return Button {
+            openWindow(id: "prompt", value: kind)
+        } label: {
+            HStack(spacing: 8) {
+                Text(LocalizedStringKey(kind.lerroTitle))
+                    .foregroundStyle(LerroTheme.text)
+                Spacer(minLength: 8)
+                Text(verbatim: version)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(LerroTheme.secondaryText)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(LerroTheme.tertiaryText)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: "\(localized(kind.lerroTitle)) \(version)"))
+        .accessibilityAddTraits(.isButton)
     }
 
     private var remoteActionRow: some View {

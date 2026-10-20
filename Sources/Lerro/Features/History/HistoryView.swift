@@ -39,6 +39,9 @@ struct HistoryView: View {
             .task(id: searchText) {
                 await applyQuery(debounced: true)
             }
+            .task(id: session.historyFocusID) {
+                await focusRequestedEntry()
+            }
             .onChange(of: tab) { _, _ in
                 Task { await applyQuery(debounced: false) }
             }
@@ -131,6 +134,28 @@ struct HistoryView: View {
             }
         }
         await session.updateHistoryQuery(searchText: searchText, mode: tab.mode)
+    }
+
+    /// Shows the entry requested through `AppSession.showHistoryEntry`, loading further pages until it is present.
+    private func focusRequestedEntry() async {
+        guard let id = session.historyFocusID else { return }
+        tab = .all
+        searchText = ""
+        await session.updateHistoryQuery(searchText: "", mode: nil)
+        while !Task.isCancelled,
+              !session.historyEntries.contains(where: { $0.id == id }),
+              session.historyHasMore {
+            if session.isLoadingHistoryPage {
+                try? await Task.sleep(for: .milliseconds(50))
+                continue
+            }
+            let loadedCount = session.historyEntries.count
+            await session.loadNextHistoryPage()
+            if session.historyEntries.count == loadedCount { break }
+        }
+        guard !Task.isCancelled else { return }
+        selectedID = id
+        session.historyFocusID = nil
     }
 
     private func delete(_ entry: HistoryEntry) {

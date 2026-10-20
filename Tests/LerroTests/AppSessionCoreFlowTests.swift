@@ -379,6 +379,50 @@ struct AppSessionCoreFlowTests {
         #expect(await harness.intelligence.requests().last?.task == .translate)
     }
 
+    @Test("A remote dictation saves the AI call on its history entry and links the request to it")
+    @MainActor
+    func remoteDictationStoresAICall() async {
+        var preferences = basePreferences()
+        preferences.intelligenceMode = .remote
+        preferences.remoteProvider = RemoteProviderConfiguration(
+            baseURL: "https://api.example.com/v1",
+            modelIdentifier: "test-model",
+            apiKey: "test-key"
+        )
+        let harness = makeHarness(
+            text: "嗯你好",
+            preferences: preferences,
+            intelligenceText: "你好"
+        )
+        await harness.session.start()
+        await dictate(harness.session)
+
+        let entry = await harness.history.entries().first
+        #expect(entry?.finalText == "你好")
+        #expect(entry?.aiCall?.prompt == .dictate)
+        #expect(entry?.aiCall?.response == "你好")
+        #expect(entry?.aiCall?.modelIdentifier == "test-model")
+        #expect(await harness.intelligence.requests().last?.historyEntryID == entry?.id)
+    }
+
+    @Test("Showing a history entry selects the page and sets the focus and highlight IDs")
+    @MainActor
+    func showHistoryEntryFocusesEntry() async {
+        let harness = makeHarness(text: "unused")
+        await harness.session.start()
+        harness.session.historySearch = "查询"
+        harness.session.historyModeFilter = .translation
+        let id = UUID()
+
+        harness.session.showHistoryEntry(id)
+
+        #expect(harness.session.destination == .history)
+        #expect(harness.session.historySearch.isEmpty)
+        #expect(harness.session.historyModeFilter == nil)
+        #expect(harness.session.historyFocusID == id)
+        #expect(harness.session.aiCallHighlightID == id)
+    }
+
     @Test("Raw dictation hides the HUD at the commit point")
     @MainActor
     func rawDictationShowsDeliveredFeedback() async {
@@ -1307,7 +1351,20 @@ private actor StubIntelligence: IntelligenceProcessing {
             text: resultText,
             disposition: .insert,
             modelIdentifier: "test-model",
-            source: request.mode == .remote ? .remote : .raw
+            source: request.mode == .remote ? .remote : .raw,
+            call: request.mode == .remote
+                ? AICallTrace(
+                    prompt: request.task == .translate ? .translate : .dictate,
+                    promptVersion: "test_v1",
+                    provider: .custom,
+                    modelIdentifier: "test-model",
+                    userPrompt: "{\"raw_data\":{\"transcript\":\"\(request.transcript)\"}}",
+                    response: resultText,
+                    tokens: AITokenUsage(inputTokens: 100, outputTokens: 10),
+                    latencyMilliseconds: 500,
+                    startedAt: .now
+                )
+                : nil
         )
     }
     func classifyCorrection(

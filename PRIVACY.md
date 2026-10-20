@@ -16,8 +16,13 @@ Raw-audio retention starts disabled. Selecting “never save” for history prev
 new history and recording files from being persisted. History can contain the
 raw transcript, final text, processing route, context-category presence, remote
 sharing category names, timings, delivery outcome, and an audio reference when
-audio saving is enabled. It does not store focused-value fingerprints or nearby
-focused text.
+audio saving is enabled. When a dictation or translation used the API model, the
+entry also keeps that call exactly as sent and received: the request content
+(transcript and whichever context the sharing switches allowed, such as window
+title, nearby text, selected text, dictionary terms and tone), the model's reply,
+the prompt version, model ID, token counts and latency. The History page shows
+this record, and it is deleted with the entry. It does not store focused-value
+fingerprints, the system prompt text (only its version), or the API key.
 
 Dictionary records contain a phrase, replacement, source, optional application
 scope, and usage metadata. Learned entries can be reviewed, edited, promoted to
@@ -25,8 +30,8 @@ global scope, undone from the learning notification, or deleted.
 
 AI usage records in `ai-usage.json` describe each remote model call: time,
 feature, provider, model ID, input, output and cached token counts reported by
-the provider, latency, and success. They contain no transcript, prompt, model
-output, context text, or API key. Records older than 90 days are removed, and
+the provider, latency, success, and the ID of the history entry the call belongs
+to. They contain no transcript, prompt, model output, context text, or API key. Records older than 90 days are removed, and
 Settings → 用量 can clear them. Cost estimates are calculated on the Mac from the
 built-in or user-edited price table; nothing about usage is sent anywhere.
 

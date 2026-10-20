@@ -94,6 +94,8 @@ final class AppSession {
     var isOnboardingPresented = false
     var historySearch = ""
     var historyModeFilter: CaptureMode?
+    var historyFocusID: UUID?
+    var aiCallHighlightID: UUID?
     var dictionarySearch = ""
     var dictionarySourceFilter: DictionaryEntrySource?
     var isStarted = false
@@ -515,6 +517,27 @@ final class AppSession {
             return
         }
         await reloadHistory()
+    }
+
+    func showHistoryEntry(_ id: UUID) {
+        destination = .history
+        historySearch = ""
+        historyModeFilter = nil
+        historyFocusID = id
+        aiCallHighlightID = id
+    }
+
+    func historyEntries(ids: Set<UUID>) async -> [UUID: HistoryEntry] {
+        guard !ids.isEmpty else { return [:] }
+        do {
+            let all = try await dependencies.history.entries()
+            return Dictionary(
+                all.filter { ids.contains($0.id) }.map { ($0.id, $0) },
+                uniquingKeysWith: { first, _ in first }
+            )
+        } catch {
+            return [:]
+        }
     }
 
     func reloadHistory() async {
@@ -1403,7 +1426,8 @@ final class AppSession {
                         contextBefore: hunk.contextBefore,
                         contextAfter: hunk.contextAfter,
                         applicationName: entry.applicationName,
-                        bundleIdentifier: entry.bundleIdentifier
+                        bundleIdentifier: entry.bundleIdentifier,
+                        historyEntryID: entry.id
                     )
                 ))
             }
@@ -1607,12 +1631,14 @@ final class AppSession {
                 targetLanguage: entry.targetLanguage,
                 context: context,
                 dictionary: dictionaryEntries.filter { !$0.isSnippet },
-                toneInstruction: resolvedTone(bundleIdentifier: entry.bundleIdentifier).instruction
+                toneInstruction: resolvedTone(bundleIdentifier: entry.bundleIdentifier).instruction,
+                historyEntryID: entry.id
             )
             do {
                 let result = try await dependencies.intelligence.process(request)
                 var updated = entry
                 updated.finalText = result.text
+                updated.aiCall = result.call
                 updated.status = .completed
                 updated.wasEnhanced = result.source != .raw
                 try await dependencies.history.save(updated)
@@ -2182,7 +2208,8 @@ final class AppSession {
             targetLanguage: session.targetLanguage,
             context: session.context,
             dictionary: dictionaryEntries.filter { !$0.isSnippet },
-            toneInstruction: session.toneInstruction
+            toneInstruction: session.toneInstruction,
+            historyEntryID: session.id
         )
 
         let result: IntelligenceResult
@@ -2239,6 +2266,7 @@ final class AppSession {
             modelIdentifier: result.modelIdentifier,
             contextReceipt: historyContextReceipt(session: session, result: result)
         )
+        history.aiCall = result.call
         var systemReceipt: TextDeliveryReceipt?
 
         do {
@@ -2319,7 +2347,11 @@ final class AppSession {
            session.mode == .dictation,
            session.intelligenceMode != .raw,
            preferences.automaticDictionaryLearningEnabled {
-            startDeliveredTextObservation(text: result.text, receipt: systemReceipt)
+            startDeliveredTextObservation(
+                text: result.text,
+                receipt: systemReceipt,
+                historyEntryID: preferences.historyRetention == .never ? nil : history.id
+            )
         }
         finishTrace(outcome, generation: generation)
         finishCaptureState(phase: .idle)
@@ -2346,7 +2378,11 @@ final class AppSession {
         updateHUD()
     }
 
-    private func startDeliveredTextObservation(text: String, receipt: TextDeliveryReceipt) {
+    private func startDeliveredTextObservation(
+        text: String,
+        receipt: TextDeliveryReceipt,
+        historyEntryID: UUID?
+    ) {
         deliveredTextObservationTask?.cancel()
         let mode = preferences.intelligenceMode
         let remoteProvider = mode == .remote
@@ -2372,7 +2408,8 @@ final class AppSession {
                             contextBefore: edit.contextBefore,
                             contextAfter: edit.contextAfter,
                             applicationName: edit.applicationName,
-                            bundleIdentifier: edit.bundleIdentifier
+                            bundleIdentifier: edit.bundleIdentifier,
+                            historyEntryID: historyEntryID
                         )
                     )
                     let classificationDuration = classificationStartedAt.duration(to: ContinuousClock.now).timeInterval

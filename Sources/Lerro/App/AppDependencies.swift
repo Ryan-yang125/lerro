@@ -112,7 +112,7 @@ struct AppDependencies: Sendable {
             dictionary: InMemoryDictionaryRepository(entries: dictionary),
             dictionarySuggestions: InMemoryDictionarySuggestionRepository(value: fixtureDictionarySuggestions()),
             preferences: InMemoryPreferencesRepository(value: preferences),
-            aiUsage: InMemoryAIUsageRepository(records: fixtureAIUsageRecords()),
+            aiUsage: InMemoryAIUsageRepository(records: fixtureAIUsageRecords(history: history)),
             dailyUsage: InMemoryDailyUsageRepository(days: fixtureDailyUsage()),
             intelligence: FixtureIntelligence(),
             captureTrace: DiscardingCaptureTraceObserver()
@@ -128,7 +128,7 @@ struct AppDependencies: Sendable {
         }
         let fullReceipt = HistoryContextReceipt(
             capturedCategories: [.application, .windowTitle, .nearbyText, .dictionary, .tone],
-            remoteSharedCategories: [.application, .dictionary, .tone]
+            remoteSharedCategories: [.application, .nearbyText, .dictionary, .tone]
         )
         let timings = HistoryPhaseTimings(
             recording: 8.6,
@@ -143,6 +143,63 @@ struct AppDependencies: Sendable {
                 .firstPartial: 0.9
             ]
         )
+        let dictionary = fixtureDictionary().filter { !$0.isSnippet }
+        var callIndex = 0
+        func aiCall(
+            mode: CaptureMode,
+            createdAt: Date,
+            raw: String,
+            final: String,
+            app: String,
+            bundle: String,
+            window: String?,
+            cursorBefore: String?,
+            target: String?,
+            fixes: [[String]]
+        ) -> AICallTrace? {
+            let task: IntelligenceTask = mode == .translation ? .translate : .polish
+            let request = IntelligenceRequest(
+                task: task,
+                transcript: raw,
+                targetLanguage: target,
+                context: CapturedContext(
+                    applicationName: app,
+                    bundleIdentifier: bundle,
+                    windowTitle: window,
+                    cursorBefore: cursorBefore
+                ),
+                dictionary: dictionary,
+                toneInstruction: "自然、简洁，保留我的原意"
+            )
+            guard let userPrompt = (try? CloudPromptComposer().prompts(for: request))?.user else { return nil }
+            let response: String
+            if mode == .translation {
+                response = final
+            } else {
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.withoutEscapingSlashes]
+                let payload = FixtureDictateResponse(fixes: fixes, text: final)
+                response = (try? encoder.encode(payload)).map { String(decoding: $0, as: UTF8.self) } ?? final
+            }
+            defer { callIndex += 1 }
+            return AICallTrace(
+                prompt: mode == .translation ? .translate : .dictate,
+                promptVersion: mode == .translation
+                    ? CloudPromptComposer.translatePromptVersion
+                    : CloudPromptComposer.dictatePromptVersion,
+                provider: .deepSeek,
+                modelIdentifier: "deepseek-flash",
+                userPrompt: userPrompt,
+                response: response,
+                tokens: AITokenUsage(
+                    inputTokens: 2_400,
+                    outputTokens: 60 + (callIndex * 7) % 31,
+                    cachedInputTokens: 2_048
+                ),
+                latencyMilliseconds: 900 + (callIndex * 137) % 501,
+                startedAt: createdAt
+            )
+        }
         func entry(
             _ day: Date,
             _ hour: Int,
@@ -154,11 +211,13 @@ struct AppDependencies: Sendable {
             app: String,
             bundle: String,
             window: String? = nil,
+            cursorBefore: String? = nil,
             status: HistoryStatus = .completed,
             enhanced: Bool = true,
-            target: String? = nil
+            target: String? = nil,
+            fixes: [[String]] = []
         ) -> HistoryEntry {
-            HistoryEntry(
+            var item = HistoryEntry(
                 createdAt: at(day, hour, minute),
                 mode: mode,
                 rawText: raw,
@@ -176,6 +235,21 @@ struct AppDependencies: Sendable {
                 contextReceipt: enhanced ? fullReceipt : nil,
                 phaseTimings: timings
             )
+            if enhanced {
+                item.aiCall = aiCall(
+                    mode: mode,
+                    createdAt: item.createdAt,
+                    raw: raw,
+                    final: final,
+                    app: app,
+                    bundle: bundle,
+                    window: window,
+                    cursorBefore: cursorBefore,
+                    target: target,
+                    fixes: fixes
+                )
+            }
+            return item
         }
         return [
             entry(today, 9, 5, raw: "嗯我想把这个 App 的主界面整体重构一下，就是现在的那个太不高级了。",
@@ -194,10 +268,12 @@ struct AppDependencies: Sendable {
                   raw: "晚上一起吃饭吗，我大概八点到，你们先点。",
                   final: "Want to grab dinner tonight? I'll get there around eight, so go ahead and order.",
                   duration: 5.8, app: "微信", bundle: "com.tencent.xinWeChat", target: "en_US"),
-            entry(today, 16, 35, raw: "把 HUD 结尾的那个标志直接去掉，嗯开头保持现在的速度。",
+            entry(today, 16, 35, raw: "嗯把哈德结尾的那个标识直接去掉吧开头的话保持现在这个速度",
                   final: "把 HUD 结尾的标志直接去掉，开头保持现在的速度。",
                   duration: 7.0, app: "Claude", bundle: "com.anthropic.claudefordesktop",
-                  status: .failed),
+                  cursorBefore: "关于启动动画，我的想法是：",
+                  status: .failed,
+                  fixes: [["哈德", "HUD"], ["标识", "标志"]]),
             entry(yesterday, 10, 2, raw: "今天上午先把设置窗口的几个标签页过一遍。",
                   final: "今天上午先把设置窗口的几个标签页过一遍。",
                   duration: 5.0, app: "备忘录", bundle: "com.apple.Notes", enhanced: false),
@@ -284,7 +360,12 @@ struct AppDependencies: Sendable {
         }
     }
 
-    private static func fixtureAIUsageRecords() -> [AIUsageRecord] {
+    private struct FixtureDictateResponse: Encodable {
+        var fixes: [[String]]
+        var text: String
+    }
+
+    private static func fixtureAIUsageRecords(history: [HistoryEntry]) -> [AIUsageRecord] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: .now)
         var records: [AIUsageRecord] = []
@@ -344,6 +425,34 @@ struct AppDependencies: Sendable {
                 }
             }
         }
+        // Records tied to fixture history entries, so the usage list can jump to them.
+        for entry in history {
+            guard let call = entry.aiCall else { continue }
+            records.append(AIUsageRecord(
+                date: min(call.startedAt.addingTimeInterval(2), .now),
+                feature: entry.mode == .translation ? .translate : .dictate,
+                provider: call.provider,
+                modelIdentifier: call.modelIdentifier,
+                tokens: call.tokens,
+                latencyMilliseconds: call.latencyMilliseconds,
+                succeeded: true,
+                historyEntryID: entry.id
+            ))
+        }
+        let learnedFrom = history.filter { $0.aiCall != nil && $0.mode == .dictation }
+        if learnedFrom.count > 3 {
+            records.append(AIUsageRecord(
+                date: min(learnedFrom[3].createdAt.addingTimeInterval(45), .now),
+                feature: .dictionaryLearning,
+                provider: .deepSeek,
+                modelIdentifier: "deepseek-flash",
+                tokens: AITokenUsage(inputTokens: 1_850, outputTokens: 60, cachedInputTokens: 1_700),
+                latencyMilliseconds: 820,
+                succeeded: true,
+                historyEntryID: learnedFrom[3].id
+            ))
+        }
+        let fallbackEntry = history.first { $0.mode == .dictation && !$0.wasEnhanced }
         records.append(AIUsageRecord(
             date: calendar.date(byAdding: .hour, value: -2, to: .now) ?? .now,
             feature: .tonePreview,
@@ -354,13 +463,14 @@ struct AppDependencies: Sendable {
             succeeded: true
         ))
         records.append(AIUsageRecord(
-            date: calendar.date(byAdding: .hour, value: -1, to: .now) ?? .now,
+            date: fallbackEntry?.createdAt ?? calendar.date(byAdding: .hour, value: -1, to: .now) ?? .now,
             feature: .dictate,
             provider: .deepSeek,
             modelIdentifier: "deepseek-flash",
             tokens: nil,
             latencyMilliseconds: 10_000,
-            succeeded: false
+            succeeded: false,
+            historyEntryID: fallbackEntry?.id
         ))
         return records
     }

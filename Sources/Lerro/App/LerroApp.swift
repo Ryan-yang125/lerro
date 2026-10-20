@@ -46,6 +46,13 @@ struct LerroApp: App {
                 .tint(LerroTheme.accent)
         }
 
+        WindowGroup("提示词", id: "prompt", for: AIPromptKind.self) { $kind in
+            PromptViewerView(kind: kind ?? .dictate)
+                .environment(\.locale, LerroInterfaceLocalization.locale(for: session.preferences.appLanguage))
+                .tint(LerroTheme.accent)
+        }
+        .defaultSize(width: 900, height: 640)
+
         MenuBarExtra {
             MenuBarPanelView(session: session)
                 .environment(\.locale, LerroInterfaceLocalization.locale(for: session.preferences.appLanguage))

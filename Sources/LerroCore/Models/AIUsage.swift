@@ -40,6 +40,8 @@ public struct AIUsageRecord: Codable, Hashable, Sendable, Identifiable {
     public var tokens: AITokenUsage?
     public var latencyMilliseconds: Int
     public var succeeded: Bool
+    /// The history entry this call produced, for jumping back to it.
+    public var historyEntryID: UUID?
 
     public init(
         id: UUID = UUID(),
@@ -49,7 +51,8 @@ public struct AIUsageRecord: Codable, Hashable, Sendable, Identifiable {
         modelIdentifier: String,
         tokens: AITokenUsage?,
         latencyMilliseconds: Int,
-        succeeded: Bool
+        succeeded: Bool,
+        historyEntryID: UUID? = nil
     ) {
         self.id = id
         self.date = date
@@ -59,6 +62,7 @@ public struct AIUsageRecord: Codable, Hashable, Sendable, Identifiable {
         self.tokens = tokens
         self.latencyMilliseconds = max(0, latencyMilliseconds)
         self.succeeded = succeeded
+        self.historyEntryID = historyEntryID
     }
 }
 
@@ -149,6 +153,23 @@ public struct AIModelPrice: Codable, Hashable, Sendable, Identifiable {
         return base * offPeakFactor
     }
 
+    public func breakdown(of tokens: AITokenUsage, at date: Date) -> AICallCost {
+        let uncached = tokens.inputTokens - tokens.cachedInputTokens
+        func line(_ kind: AICallCostLine.Kind, _ count: Int, _ price: Double) -> AICallCostLine {
+            AICallCostLine(kind: kind, tokens: count, pricePerMillion: price, amount: Double(count) * price / 1_000_000)
+        }
+        return AICallCost(
+            currency: currency,
+            lines: [
+                line(.cachedInput, tokens.cachedInputTokens, cachedInputPerMillion),
+                line(.input, uncached, inputPerMillion),
+                line(.output, tokens.outputTokens, outputPerMillion)
+            ],
+            appliedOffPeakFactor: offPeakFactor.flatMap { Self.isDeepSeekPeak(date) ? nil : $0 },
+            total: cost(of: tokens, at: date)
+        )
+    }
+
     /// Monday to Friday, 9:00–12:00 and 14:00–18:00 Beijing time. Public
     /// holidays are treated as peak, so estimates err high.
     public static func isDeepSeekPeak(_ date: Date) -> Bool {
@@ -159,6 +180,31 @@ public struct AIModelPrice: Codable, Hashable, Sendable, Identifiable {
         guard (2...6).contains(weekday) else { return false }
         return (9..<12).contains(hour) || (14..<18).contains(hour)
     }
+}
+
+public struct AICallCostLine: Hashable, Sendable {
+    public enum Kind: Hashable, Sendable {
+        case cachedInput
+        case input
+        case output
+    }
+
+    public var kind: Kind
+    public var tokens: Int
+    /// List price.
+    public var pricePerMillion: Double
+    /// `tokens * pricePerMillion / 1e6`, before any off-peak factor.
+    public var amount: Double
+}
+
+public struct AICallCost: Hashable, Sendable {
+    public var currency: AIUsageCurrency
+    /// Cached input, uncached input, output, in that order.
+    public var lines: [AICallCostLine]
+    /// Non-nil when the call was off-peak and a factor applied.
+    public var appliedOffPeakFactor: Double?
+    /// Equals `AIModelPrice.cost(of:at:)`.
+    public var total: Double
 }
 
 /// User overrides take precedence over built-in prices. Matching ignores case.
