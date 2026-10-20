@@ -606,15 +606,15 @@ private actor FixtureSpeechTranscriber: SpeechTranscribing {
     func start(
         localeIdentifier: String,
         microphoneDeviceUID: String?,
-        muteOtherAudio: Bool,
         saveAudio: Bool,
-        detectSpeechEndpoint: Bool,
         milestones: @escaping CaptureMilestoneReporter
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error> {
         AsyncThrowingStream { continuation in
             continuation.yield(.availability("Fixture speech adapter"))
         }
     }
+
+    func lowerOtherAudio() async {}
 
     func endAudioCapture() async {}
 

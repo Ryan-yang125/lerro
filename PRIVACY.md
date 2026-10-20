@@ -85,9 +85,7 @@ authorization headers, invitation codes, and personal identifiers.
 ## Apple Speech
 
 Apple Speech performs transcription from the microphone audio only; Lerro does
-not pass dictionary entries to it. Quick Dictate optionally uses
-Apple `SpeechDetector` to end after about 1.2 seconds of continuous silence; it
-starts disabled and adds no permission.
+not pass dictionary entries to it.
 
 Lerro automatically prepares the selected Speech language resources at launch,
 when the recognition language changes, and before capture as needed. macOS

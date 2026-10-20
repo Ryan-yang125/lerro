@@ -21,12 +21,12 @@ struct AppSessionCoreFlowTests {
         harness.session.cancelCapture()
         await harness.speech.finishPreparation("zh_CN")
         #expect(await waitUntil { harness.session.speechResourceStatus.state == .ready })
-        #expect(await harness.speech.starts().isEmpty)
+        #expect(await harness.speech.startCount() == 0)
         #expect(await waitUntil { !harness.session.isCleaningCapture })
 
         harness.session.toggleCapture(.dictation)
         #expect(await waitUntil { harness.session.phase == .listening })
-        #expect(await harness.speech.starts().count == 1)
+        #expect(await harness.speech.startCount() == 1)
         harness.session.cancelCapture()
     }
 
@@ -131,8 +131,80 @@ struct AppSessionCoreFlowTests {
 
         harness.session.toggleCapture(.dictation)
         #expect(await waitUntil { harness.session.phase == .idle })
-        let tail = Array(harness.events.all().drop { $0 != "speech.endAudioCapture" })
-        #expect(tail == ["speech.endAudioCapture", "sound.stop", "speech.stop"])
+        #expect(await waitUntil { harness.events.all().contains("sound.stop") })
+        let events = harness.events.all()
+        let restored = events.firstIndex(of: "speech.endAudioCapture")
+        let stopSound = events.firstIndex(of: "sound.stop")
+        #expect(restored != nil && stopSound != nil && restored! < stopSound!)
+        #expect(events.contains("speech.stop"))
+    }
+
+    @Test("Other audio is lowered only after the start sound has finished")
+    @MainActor
+    func lowersOtherAudioAfterStartSound() async {
+        var preferences = basePreferences()
+        preferences.muteOtherAudio = true
+        let harness = makeHarness(text: "hello", preferences: preferences, holdStartSound: true)
+        await harness.session.start()
+
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        #expect(await waitUntil { harness.events.all().contains("sound.start") })
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(!harness.events.all().contains("speech.lowerOtherAudio"))
+
+        await harness.sounds.releaseStart()
+        #expect(await waitUntil { harness.events.all().contains("speech.lowerOtherAudio") })
+        let events = harness.events.all()
+        let started = events.firstIndex(of: "speech.start")
+        let finished = events.firstIndex(of: "sound.start.finished")
+        let lowered = events.firstIndex(of: "speech.lowerOtherAudio")
+        #expect(started != nil && finished != nil && lowered != nil)
+        #expect(started! < lowered! && finished! < lowered!)
+        harness.session.cancelCapture()
+    }
+
+    @Test("A capture cancelled before the start sound finishes never lowers other audio")
+    @MainActor
+    func cancelledCaptureDoesNotLowerOtherAudio() async {
+        var preferences = basePreferences()
+        preferences.muteOtherAudio = true
+        let harness = makeHarness(text: "hello", preferences: preferences, holdStartSound: true)
+        await harness.session.start()
+
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.cancelCapture()
+        #expect(await waitUntil { !harness.session.isCleaningCapture })
+
+        await harness.sounds.releaseStart()
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(!harness.events.all().contains("speech.lowerOtherAudio"))
+    }
+
+    @Test("With capture sounds off, other audio is lowered as soon as the microphone is open")
+    @MainActor
+    func lowersOtherAudioImmediatelyWithoutSounds() async {
+        var preferences = basePreferences()
+        preferences.muteOtherAudio = true
+        preferences.playsCaptureSounds = false
+        let harness = makeHarness(text: "hello", preferences: preferences)
+        await harness.session.start()
+
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.events.all().contains("speech.lowerOtherAudio") })
+        #expect(!harness.events.all().contains("sound.start"))
+        harness.session.cancelCapture()
+    }
+
+    @Test("Other audio stays untouched when the preference is off")
+    @MainActor
+    func doesNotLowerOtherAudioWhenDisabled() async {
+        let harness = makeHarness(text: "hello")
+        await harness.session.start()
+
+        await dictate(harness.session)
+        #expect(!harness.events.all().contains("speech.lowerOtherAudio"))
     }
 
     @Test("Cancelling a capture plays no stop sound")
@@ -208,31 +280,6 @@ struct AppSessionCoreFlowTests {
         harness.session.dismissRecovery()
         #expect(harness.session.recoveryPresentation == nil)
         #expect(harness.session.phase == .idle)
-    }
-
-    @Test("Quick Dictate endpoint detection follows its setting")
-    @MainActor
-    func quickDictateSettingControlsEndpointDetection() async {
-        var disabled = basePreferences()
-        disabled.quickDictateEnabled = false
-        let first = makeHarness(text: "disabled", preferences: disabled)
-        await first.session.start()
-        first.session.toggleQuickDictate()
-        try? await Task.sleep(for: .milliseconds(50))
-        #expect(await first.speech.starts().isEmpty)
-        #expect(first.session.phase == .idle)
-
-        var enabled = basePreferences()
-        enabled.quickDictateEnabled = true
-        let second = makeHarness(text: "enabled", preferences: enabled)
-        await second.session.start()
-        second.session.toggleQuickDictate()
-        #expect(await waitUntil { await second.speech.starts().count == 1 })
-        #expect(await second.speech.starts()[0].detectSpeechEndpoint == true)
-        await second.speech.emit(.speechStarted)
-        await second.speech.emit(.silenceElapsed)
-        #expect(await waitUntil { second.session.phase == .idle })
-        #expect(await second.delivery.values() == ["enabled"])
     }
 
     @Test("Apple-only dictation never starts correction observation")
@@ -1036,12 +1083,13 @@ struct AppSessionCoreFlowTests {
         historyEntries: [HistoryEntry] = [],
         classificationDelay: Duration? = nil,
         resourcesReady: Bool = true,
-        aiUsageRecords: [AIUsageRecord] = []
+        aiUsageRecords: [AIUsageRecord] = [],
+        holdStartSound: Bool = false
     ) -> Harness {
         _ = NSApplication.shared
         let events = EventLog()
         let speech = StubSpeech(text: text, resourcesReady: resourcesReady, events: events)
-        let sounds = StubSoundPlayer(events: events)
+        let sounds = StubSoundPlayer(events: events, holdsStart: holdStartSound)
         let delivery = StubDelivery(fails: deliveryFails)
         let recovery = StubRecovery()
         let observer = StubObserver()
@@ -1083,6 +1131,7 @@ struct AppSessionCoreFlowTests {
         return Harness(
             session: AppSession(dependencies: dependencies, presentsFloatingPanels: false),
             speech: speech,
+            sounds: sounds,
             events: events,
             delivery: delivery,
             recovery: recovery,
@@ -1123,6 +1172,7 @@ struct AppSessionCoreFlowTests {
 private struct Harness {
     let session: AppSession
     let speech: StubSpeech
+    let sounds: StubSoundPlayer
     let events: EventLog
     let delivery: StubDelivery
     let recovery: StubRecovery
@@ -1170,23 +1220,43 @@ private final class EventLog: @unchecked Sendable {
     func all() -> [String] { lock.withLock { values } }
 }
 
-private struct StubSoundPlayer: CaptureSoundPlaying {
-    let events: EventLog
+/// With `holdsStart`, `play(.start)` suspends until `releaseStart()`.
+private actor StubSoundPlayer: CaptureSoundPlaying {
+    private let events: EventLog
+    private let holdsStart: Bool
+    private var startReleased = false
+    private var startWaiter: CheckedContinuation<Void, Never>?
+
+    init(events: EventLog, holdsStart: Bool) {
+        self.events = events
+        self.holdsStart = holdsStart
+    }
 
     func prepare() async { events.append("sound.prepare") }
 
     func play(_ sound: CaptureSound) async {
-        events.append(sound == .start ? "sound.start" : "sound.stop")
+        switch sound {
+        case .start:
+            events.append("sound.start")
+            if holdsStart, !startReleased {
+                await withCheckedContinuation { startWaiter = $0 }
+            }
+            events.append("sound.start.finished")
+        case .stop:
+            events.append("sound.stop")
+        }
     }
-}
 
-private struct SpeechStart: Sendable {
-    let detectSpeechEndpoint: Bool
+    func releaseStart() {
+        startReleased = true
+        startWaiter?.resume()
+        startWaiter = nil
+    }
 }
 
 private actor StubSpeech: SpeechTranscribing {
     private let text: String
-    private var records: [SpeechStart] = []
+    private var startTotal = 0
     private var reporters: [CaptureMilestoneReporter] = []
     private var continuation: AsyncThrowingStream<SpeechEvent, any Error>.Continuation?
     private let resourcesReady: Bool
@@ -1236,13 +1306,11 @@ private actor StubSpeech: SpeechTranscribing {
     func start(
         localeIdentifier: String,
         microphoneDeviceUID: String?,
-        muteOtherAudio: Bool,
         saveAudio: Bool,
-        detectSpeechEndpoint: Bool,
         milestones: @escaping CaptureMilestoneReporter
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error> {
         events.append("speech.start")
-        records.append(SpeechStart(detectSpeechEndpoint: detectSpeechEndpoint))
+        startTotal += 1
         reporters.append(milestones)
         milestones(.speechLocaleResolved, ContinuousClock.now)
         milestones(.audioEngineStarted, ContinuousClock.now)
@@ -1250,6 +1318,10 @@ private actor StubSpeech: SpeechTranscribing {
         continuation = pair.continuation
         continuation?.yield(.partial(text))
         return pair.stream
+    }
+
+    func lowerOtherAudio() async {
+        events.append("speech.lowerOtherAudio")
     }
 
     func endAudioCapture() async {
@@ -1269,7 +1341,7 @@ private actor StubSpeech: SpeechTranscribing {
         continuation = nil
     }
 
-    func starts() -> [SpeechStart] { records }
+    func startCount() -> Int { startTotal }
     func reporter(at index: Int) -> CaptureMilestoneReporter { reporters[index] }
     func emit(_ event: SpeechEvent) { continuation?.yield(event) }
 }

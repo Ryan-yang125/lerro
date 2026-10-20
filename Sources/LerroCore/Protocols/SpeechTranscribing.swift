@@ -5,12 +5,14 @@ public protocol SpeechTranscribing: Sendable {
     func start(
         localeIdentifier: String,
         microphoneDeviceUID: String?,
-        muteOtherAudio: Bool,
         saveAudio: Bool,
-        detectSpeechEndpoint: Bool,
         milestones: @escaping CaptureMilestoneReporter
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error>
-    /// Stops the microphone and restores the output audio that `start` lowered.
+    /// Lowers the system output audio while the current session's microphone
+    /// is open. A no-op when no session is running or output is already
+    /// lowered; `endAudioCapture`, `stop` and `cancel` restore it.
+    func lowerOtherAudio() async
+    /// Stops the microphone and restores the output audio that `lowerOtherAudio` lowered.
     /// Idempotent; `stop` calls it first, and a session can call it earlier to
     /// play a sound before the final transcript is ready.
     func endAudioCapture() async

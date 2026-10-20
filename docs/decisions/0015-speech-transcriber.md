@@ -27,7 +27,7 @@
 ## 决策
 
 实时识别使用 `SpeechTranscriber(locale:preset:.progressiveTranscription)`，接口与原方案同属
-SpeechAnalyzer，开麦先行、缓冲、预热引擎和 Quick Dictate 的 `SpeechDetector` 保持不变。
+SpeechAnalyzer，开麦先行、缓冲和预热引擎保持不变。
 `TranscriptSpacing.normalize` 去掉中文标点两侧的空格。由于 SpeechTranscriber 忽略
 contextual strings，删除 `SpeechVocabularyTerm` 与词典到 Apple Speech 的通路；词典继续通过
 AI prompt 的 `known_terms` 与 glossary 生效。

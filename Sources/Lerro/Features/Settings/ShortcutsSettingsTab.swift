@@ -23,7 +23,6 @@ struct ShortcutsSettingsTab: View {
                             .foregroundStyle(LerroTheme.secondaryText)
                     }
                 }
-                Toggle("说完自动结束", isOn: $session.preferences.quickDictateEnabled)
             }
         }
         .settingsForm(height: SettingsLayout.tallHeight)

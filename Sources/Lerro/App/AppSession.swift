@@ -61,8 +61,6 @@ final class AppSession {
     var audioLevel: Float = 0
     var captureElapsed: TimeInterval = 0
     var isHandsFreeCapture = false
-    private(set) var isQuickDictateCapture = false
-    private(set) var quickDictateDetectedSpeech = false
     private(set) var hudDeliveryFeedback: HUDDeliveryFeedback?
     private(set) var isSilenceWarningVisible = false
     private(set) var silenceWarningDeviceName: String?
@@ -139,7 +137,6 @@ final class AppSession {
 
     var showsHandsFreeStopHint: Bool {
         isHandsFreeCapture
-            && !isQuickDictateCapture
             && phase == .listening
             && preferences.handsFreeStopHintUseCount < Self.handsFreeStopHintLimit
     }
@@ -907,25 +904,6 @@ final class AppSession {
         }
     }
 
-    func toggleQuickDictate() {
-        guard preferences.quickDictateEnabled else { return }
-        guard !isCleaningCapture else { return }
-        if isStartingCapture {
-            guard activeMode == .dictation else { return }
-            cancelCapture()
-            return
-        }
-        switch phase {
-        case .idle, .success, .failed, .cancelled:
-            startCapture(.dictation, handsFree: true, quickDictate: true)
-        case .listening:
-            guard activeMode == .dictation else { return }
-            requestFinishCapture()
-        case .transcribing, .enhancing, .inserting:
-            return
-        }
-    }
-
     func activateIntelligenceMode(_ mode: IntelligenceMode) {
         guard !hasActiveCapture else {
             currentError = "请在当前听写完成后切换智能处理方式"
@@ -1017,8 +995,6 @@ final class AppSession {
             eventTask?.cancel()
             captureTimerTask?.cancel()
             isHandsFreeCapture = false
-            isQuickDictateCapture = false
-            quickDictateDetectedSpeech = false
             // Let any already-enqueued release for a more specific shortcut
             // clear the pending upgrade before a new capture generation starts.
             try? await Task.sleep(for: .milliseconds(20))
@@ -1851,7 +1827,6 @@ final class AppSession {
                 startCapture(
                     mode,
                     handsFree: true,
-                    quickDictate: mode == .dictation && preferences.quickDictateEnabled,
                     pressedAt: trigger.pressedAt
                 )
                 return
@@ -1927,7 +1902,6 @@ final class AppSession {
     private func startCapture(
         _ mode: CaptureMode,
         handsFree: Bool,
-        quickDictate: Bool = false,
         pressedAt: ContinuousClock.Instant? = nil
     ) {
         guard !isShortcutConfigurationActive else {
@@ -1970,8 +1944,6 @@ final class AppSession {
         committedTextDeliverySessionID = nil
         activeMode = mode
         isHandsFreeCapture = handsFree
-        isQuickDictateCapture = quickDictate && mode == .dictation
-        quickDictateDetectedSpeech = false
         captureError = nil
         partialTranscript = ""
         partialTranscriptIsStable = false
@@ -1980,20 +1952,20 @@ final class AppSession {
         isStartingCapture = true
         updateHUD()
         markTrace(.hudArmed, generation: generation)
-        // The microphone opens a few hundred milliseconds later, and lowering
-        // the other audio happens only then, so the sound plays in full.
-        if preferences.playsCaptureSounds {
-            Task { [dependencies] in
-                await dependencies.soundPlayer.play(.start)
-            }
-        }
+        // The microphone opens right away. Lowering the other audio waits for
+        // the start sound to finish, so a slow-waking output device cannot
+        // swallow it.
+        let startSound: Task<Void, Never>? = preferences.playsCaptureSounds
+            ? Task { [dependencies] in await dependencies.soundPlayer.play(.start) }
+            : nil
         completionTask?.cancel()
         completionTask = Task { [weak self] in
             await self?.beginCapture(
                 mode,
                 generation: generation,
                 intelligenceMode: intelligenceMode,
-                remoteProvider: remoteProvider
+                remoteProvider: remoteProvider,
+                startSound: startSound
             )
         }
     }
@@ -2002,7 +1974,8 @@ final class AppSession {
         _ mode: CaptureMode,
         generation: UUID,
         intelligenceMode: IntelligenceMode,
-        remoteProvider: RemoteProviderConfiguration?
+        remoteProvider: RemoteProviderConfiguration?,
+        startSound: Task<Void, Never>?
     ) async {
         stopOnboardingMicrophoneTest()
 
@@ -2013,8 +1986,6 @@ final class AppSession {
                 activeHotkeyOrigin = nil
                 isStartingCapture = false
                 isHandsFreeCapture = false
-                isQuickDictateCapture = false
-                quickDictateDetectedSpeech = false
             }
             return
         }
@@ -2047,9 +2018,7 @@ final class AppSession {
             let stream = try await dependencies.speech.start(
                 localeIdentifier: preferences.recognitionLocaleIdentifier,
                 microphoneDeviceUID: preferences.microphoneDeviceUID,
-                muteOtherAudio: preferences.muteOtherAudio,
                 saveAudio: preferences.shouldSaveCaptureAudio,
-                detectSpeechEndpoint: isQuickDictateCapture,
                 milestones: { [weak self] milestone, instant in
                     Task { @MainActor [weak self] in
                         self?.markTrace(milestone, generation: generation, at: instant)
@@ -2082,6 +2051,7 @@ final class AppSession {
             markTrace(.listening, generation: generation)
             startCaptureTimer(for: session)
             startSilenceMonitor(for: session)
+            lowerOtherAudio(afterStartSound: startSound, generation: generation, sessionID: session.id)
             eventTask?.cancel()
             eventTask = Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -2108,6 +2078,25 @@ final class AppSession {
         } catch {
             guard captureGeneration == generation else { return }
             fail(error)
+        }
+    }
+
+    /// Lowers the other audio once the start sound has finished, without
+    /// delaying the microphone. Skipped when the capture ended or the
+    /// preference was turned off in the meantime.
+    private func lowerOtherAudio(
+        afterStartSound startSound: Task<Void, Never>?,
+        generation: UUID,
+        sessionID: UUID
+    ) {
+        Task { @MainActor [weak self] in
+            await startSound?.value
+            guard let self,
+                  preferences.muteOtherAudio,
+                  captureGeneration == generation,
+                  activeSession?.id == sessionID,
+                  phase == .listening else { return }
+            await dependencies.speech.lowerOtherAudio()
         }
     }
 
@@ -2140,7 +2129,7 @@ final class AppSession {
             await dependencies.speech.endAudioCapture()
             guard activeSession?.id == session.id else { return }
             if preferences.playsCaptureSounds {
-                await dependencies.soundPlayer.play(.stop)
+                Task { [dependencies] in await dependencies.soundPlayer.play(.stop) }
             }
             let transcription = try await dependencies.speech.stop()
             recordedAudioRelativePath = transcription.audioRelativePath
@@ -2324,7 +2313,6 @@ final class AppSession {
 
         guard activeSession?.id == session.id else { throw CancellationError() }
         if isHandsFreeCapture,
-           !isQuickDictateCapture,
            preferences.handsFreeStopHintUseCount < Self.handsFreeStopHintLimit {
             preferences.handsFreeStopHintUseCount += 1
             savePreferences()
@@ -2367,8 +2355,6 @@ final class AppSession {
         isStartingCapture = false
         isWaitingForSpeechResources = false
         isHandsFreeCapture = false
-        isQuickDictateCapture = false
-        quickDictateDetectedSpeech = false
         phase = finalPhase
         resetSilenceWarning()
         partialTranscript = message ?? ""
@@ -2613,16 +2599,6 @@ final class AppSession {
         case .availability(let message):
             partialTranscript = message
             partialTranscriptIsStable = false
-        case .speechStarted:
-            if isQuickDictateCapture {
-                quickDictateDetectedSpeech = true
-            }
-        case .silenceElapsed:
-            if isQuickDictateCapture,
-               quickDictateDetectedSpeech,
-               phase == .listening {
-                requestFinishCapture()
-            }
         }
     }
 
@@ -3108,8 +3084,6 @@ final class AppSession {
         isCleaningCapture = true
         activeSession = nil
         isHandsFreeCapture = false
-        isQuickDictateCapture = false
-        quickDictateDetectedSpeech = false
         resetSilenceWarning()
         dependencies.hotkeys.resetTransientState()
         eventTask?.cancel()

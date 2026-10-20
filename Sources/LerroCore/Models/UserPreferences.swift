@@ -62,7 +62,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     public var appToneProfiles: [AppToneProfile]
     public var defaultToneInstruction: String
     public var automaticDictionaryLearningEnabled: Bool
-    public var quickDictateEnabled: Bool
     public var hasCompletedOnboarding: Bool
     public var onboardingStepIndex: Int?
     public var handsFreeStopHintUseCount: Int
@@ -95,7 +94,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         appToneProfiles: [AppToneProfile] = [],
         defaultToneInstruction: String = "",
         automaticDictionaryLearningEnabled: Bool = true,
-        quickDictateEnabled: Bool = false,
         hasCompletedOnboarding: Bool = false,
         onboardingStepIndex: Int? = nil,
         handsFreeStopHintUseCount: Int = 0,
@@ -118,7 +116,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         self.appToneProfiles = appToneProfiles
         self.defaultToneInstruction = defaultToneInstruction
         self.automaticDictionaryLearningEnabled = automaticDictionaryLearningEnabled
-        self.quickDictateEnabled = quickDictateEnabled
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.onboardingStepIndex = onboardingStepIndex
         self.handsFreeStopHintUseCount = handsFreeStopHintUseCount
@@ -143,7 +140,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         case appToneProfiles
         case defaultToneInstruction
         case automaticDictionaryLearningEnabled
-        case quickDictateEnabled
         case hasCompletedOnboarding
         case onboardingStepIndex
         case handsFreeStopHintUseCount
@@ -226,10 +222,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
                 Bool.self,
                 forKey: .automaticDictionaryLearningEnabled
             ) ?? defaults.automaticDictionaryLearningEnabled,
-            quickDictateEnabled: try container.decodeIfPresent(
-                Bool.self,
-                forKey: .quickDictateEnabled
-            ) ?? defaults.quickDictateEnabled,
             hasCompletedOnboarding: try container.decodeIfPresent(
                 Bool.self,
                 forKey: .hasCompletedOnboarding

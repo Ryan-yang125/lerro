@@ -8,5 +8,6 @@ public enum CaptureSound: Sendable {
 public protocol CaptureSoundPlaying: Sendable {
     /// Loads the sounds once so each `play` starts immediately.
     func prepare() async
+    /// Returns after the sound has finished playing.
     func play(_ sound: CaptureSound) async
 }

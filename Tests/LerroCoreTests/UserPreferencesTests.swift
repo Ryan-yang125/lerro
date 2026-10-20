@@ -24,7 +24,6 @@ struct UserPreferencesTests {
         #expect(preferences.appToneProfiles.isEmpty)
         #expect(preferences.automaticDictionaryLearningEnabled)
         #expect(!preferences.isAutomaticDictionaryLearningActive)
-        #expect(!preferences.quickDictateEnabled)
         #expect(!preferences.hasCompletedOnboarding)
         #expect(preferences.onboardingStepIndex == nil)
         #expect(IntelligenceMode.allCases == [.raw, .remote])
@@ -179,7 +178,6 @@ struct UserPreferencesTests {
         #expect(decoded.appLanguage == .english)
         #expect(decoded.automaticDictionaryLearningEnabled)
         #expect(decoded.isAutomaticDictionaryLearningActive)
-        #expect(!decoded.quickDictateEnabled)
     }
 
     @Test("Capture sounds default to on when missing and keep a saved off value")
@@ -209,7 +207,7 @@ struct UserPreferencesTests {
 
     @Test("Older preference documents keep their saved values and drop retired keys")
     func migratesOlderDocuments() throws {
-        let legacy = Data(#"{"recognitionLocaleIdentifier":"en_US","interactionSoundsEnabled":true,"hasCompletedOnboarding":true}"#.utf8)
+        let legacy = Data(#"{"recognitionLocaleIdentifier":"en_US","interactionSoundsEnabled":true,"quickDictateEnabled":true,"hasCompletedOnboarding":true}"#.utf8)
 
         let decoded = try JSONDecoder().decode(UserPreferences.self, from: legacy)
         let reencoded = String(decoding: try JSONEncoder().encode(decoded), as: UTF8.self)
@@ -221,8 +219,8 @@ struct UserPreferencesTests {
         #expect(decoded.translationLanguageIdentifiers == ["en_US"])
         #expect(decoded.appLanguage == .system)
         #expect(decoded.automaticDictionaryLearningEnabled)
-        #expect(!decoded.quickDictateEnabled)
         #expect(!reencoded.contains("interactionSoundsEnabled"))
+        #expect(!reencoded.contains("quickDictateEnabled"))
     }
 
     @Test("A saved intelligence mode that no longer exists decodes as raw")

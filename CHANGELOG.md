@@ -6,6 +6,19 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-10-21
+
+### Fixed
+
+- The start sound no longer goes missing after the Mac has been idle. With
+  lowering other audio enabled, Lerro now waits for the start sound to finish
+  before muting the output; the microphone still opens right away.
+
+### Removed
+
+- The “Stop automatically when you finish speaking” setting. It relied on Apple's
+  speech detector, which reports nothing in practice, so it never ended a capture.
+
 ## [1.9.1] - 2026-10-20
 
 ### Changed
@@ -548,7 +561,8 @@ All notable changes to Lerro will be documented here. The project follows
   plaintext BYOK credentials; logs, history, errors, fixtures, and public exports
   exclude API keys and Authorization headers.
 
-[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.9.1...HEAD
+[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.9.2...HEAD
+[1.9.2]: https://github.com/Ryan-yang125/lerro/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/Ryan-yang125/lerro/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/Ryan-yang125/lerro/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/Ryan-yang125/lerro/compare/v1.7.2...v1.8.0

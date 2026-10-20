@@ -21,6 +21,28 @@ export type LocalizedRelease = ReleaseCopy & Pick<Release, "version" | "build" |
 // distribution URL; older entries stay unchanged.
 export const releases: readonly Release[] = [
   {
+    version: "1.9.2",
+    build: "20",
+    publishedAt: "2026-10-21",
+    downloadUrl: "https://updates.lerroapp.com/releases/1.9.2/20/Lerro-macOS-arm64.dmg",
+    zh: {
+      publishedLabel: "2026 年 10 月 21 日",
+      summary: "修好偶尔听不到开始音效的问题。",
+      highlights: [
+        "开启「录音时降低其他声音」时，Mac 闲置一阵后开始音效有时听不到。现在会等开始音效放完再降低其他声音，麦克风照常立刻打开。",
+        "去掉「说完自动结束」设置：它依赖的苹果语音检测实际不报告结果，一直没有生效。",
+      ],
+    },
+    en: {
+      publishedLabel: "October 21, 2026",
+      summary: "The start sound no longer goes missing.",
+      highlights: [
+        "With lowering other audio enabled, the start sound was sometimes silent after the Mac had been idle. Lerro now waits for the start sound to finish before lowering other audio; the microphone still opens right away.",
+        "The “Stop automatically when you finish speaking” setting is removed. It relied on Apple's speech detector, which reports nothing in practice, so it never took effect.",
+      ],
+    },
+  },
+  {
     version: "1.9.1",
     build: "19",
     publishedAt: "2026-10-20",

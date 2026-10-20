@@ -18,7 +18,6 @@ V1.4 至 V1.5 在写入后继续展示回执，并提供撤回、语音修改、
 
 - 新安装默认 `raw` 模式（Apple Speech 转写）。
 - 生产 capture 入口只有 Dictate 与 Translate。AI 提供 Dictate 润色、Translate、自动词典分类和应用语气。
-- Quick Dictate 是独立开关，默认关闭；开启后 Dictate 的 toggle 会话安装 `SpeechDetector`，检测到首声后约 1.2 秒连续静音即完成。
 
 ### 2. Capture-bound 严格写入
 

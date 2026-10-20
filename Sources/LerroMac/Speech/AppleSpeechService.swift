@@ -9,8 +9,6 @@ import LerroCore
 
 @available(macOS 26.0, *)
 public actor AppleSpeechService: SpeechTranscribing {
-    static let quickDictateSilenceDuration: Duration = .milliseconds(1_200)
-
     private static let logger = Logger(
         subsystem: "app.lerro.mac",
         category: "audio-cleanup"
@@ -20,20 +18,15 @@ public actor AppleSpeechService: SpeechTranscribing {
     private var warmEngine: WarmEngine?
     private var analyzer: SpeechAnalyzer?
     private var transcriber: SpeechTranscriber?
-    private var speechDetector: SpeechDetector?
     private var rawContinuation: AsyncStream<CapturedAudio>.Continuation?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
     private var eventContinuation: AsyncThrowingStream<SpeechEvent, any Error>.Continuation?
     private var pipelineTask: Task<Void, any Error>?
     private var analysisTask: Task<Void, Never>?
     private var resultTask: Task<Void, Never>?
-    private var detectionTask: Task<Void, Never>?
-    private var silenceTask: Task<Void, Never>?
     private var tapInstalled = false
     private var stopRequested = false
     private var transcriptLedger = TranscriptLedger()
-    private var endpointTracker = SpeechEndpointTracker()
-    private var endpointEventsEnabled = false
     private var localeIdentifier = "zh_CN"
     private var startedAt: ContinuousClock.Instant?
     private var outputMuteSnapshot: CoreAudioHardware.OutputMuteSnapshot?
@@ -71,9 +64,7 @@ public actor AppleSpeechService: SpeechTranscribing {
     public func start(
         localeIdentifier: String,
         microphoneDeviceUID: String?,
-        muteOtherAudio: Bool,
         saveAudio: Bool,
-        detectSpeechEndpoint: Bool,
         milestones: @escaping CaptureMilestoneReporter
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error> {
         await cancel()
@@ -152,14 +143,10 @@ public actor AppleSpeechService: SpeechTranscribing {
         }
 
         engine.prepare()
-        if muteOtherAudio {
-            outputMuteSnapshot = CoreAudioHardware.muteDefaultOutput()
-        }
         do {
             try engine.start()
             milestones(.audioEngineStarted, .now)
         } catch {
-            restoreOutputAudioIfNeeded()
             inputNode.removeTap(onBus: 0)
             rawPair.continuation.finish()
             if let path = recording?.relativePath { deleteRecording(relativePath: path) }
@@ -176,8 +163,6 @@ public actor AppleSpeechService: SpeechTranscribing {
         self.audioRelativePath = recording?.relativePath
         self.sessionGeneration = generation
         self.transcriptLedger = TranscriptLedger()
-        self.endpointTracker.reset()
-        self.endpointEventsEnabled = false
         self.localeIdentifier = locale.identifier
         self.startedAt = .now
         self.milestoneReporter = milestones
@@ -186,7 +171,6 @@ public actor AppleSpeechService: SpeechTranscribing {
         let pipelineInput = AnalyzerPipelineInput(
             locale: locale,
             naturalFormat: naturalFormat,
-            detectSpeechEndpoint: detectSpeechEndpoint,
             rawStream: rawPair.stream,
             milestones: milestones
         )
@@ -198,12 +182,22 @@ public actor AppleSpeechService: SpeechTranscribing {
         return eventPair.stream
     }
 
-    /// Stops the microphone and restores the output audio lowered by `start`,
+    /// Mutes the default output while this session's microphone is running.
+    /// Does nothing before the engine starts, after it stops, or when the
+    /// output is already lowered.
+    public func lowerOtherAudio() async {
+        guard sessionGeneration != nil,
+              audioEngine != nil,
+              !stopRequested,
+              outputMuteSnapshot == nil else { return }
+        outputMuteSnapshot = CoreAudioHardware.muteDefaultOutput()
+    }
+
+    /// Stops the microphone and restores the output audio lowered by `lowerOtherAudio`,
     /// so a sound played afterwards is audible. Transcription keeps running
     /// until `stop` finalizes it.
     public func endAudioCapture() async {
-        guard let generation = sessionGeneration, let engine = audioEngine else { return }
-        endEndpointEvents(generation: generation)
+        guard sessionGeneration != nil, let engine = audioEngine else { return }
         stopRequested = true
         if tapInstalled {
             engine.inputNode.removeTap(onBus: 0)
@@ -259,7 +253,6 @@ public actor AppleSpeechService: SpeechTranscribing {
         do {
             try await analyzer.finalizeAndFinishThroughEndOfInput()
             await pendingResults?.value
-            detectionTask?.cancel()
         } catch {
             guard sessionGeneration == generation else { throw CancellationError() }
             eventContinuation?.finish(throwing: error)
@@ -300,7 +293,6 @@ public actor AppleSpeechService: SpeechTranscribing {
         let engine = audioEngine
         let deviceUID = audioEngineDeviceUID
         pipelineTask?.cancel()
-        endEndpointEvents(generation: generation)
         if let engine {
             if tapInstalled {
                 engine.inputNode.removeTap(onBus: 0)
@@ -349,18 +341,7 @@ public actor AppleSpeechService: SpeechTranscribing {
         try requireCurrent(generation)
         milestones(.speechAssetsReserved, .now)
 
-        // Apple's VAD gates transcription while installed, so keep it scoped
-        // to Quick Dictate sessions that explicitly request endpoint events.
-        let speechDetector: SpeechDetector? = input.detectSpeechEndpoint
-            ? SpeechDetector(
-                detectionOptions: .init(sensitivityLevel: .medium),
-                reportResults: true
-            )
-            : nil
-        var modules: [any SpeechModule] = [transcriber]
-        if let speechDetector {
-            modules.append(speechDetector)
-        }
+        let modules: [any SpeechModule] = [transcriber]
         guard let analysisFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
             compatibleWith: modules,
             considering: naturalFormat
@@ -395,10 +376,8 @@ public actor AppleSpeechService: SpeechTranscribing {
 
         self.analyzer = analyzer
         self.transcriber = transcriber
-        self.speechDetector = speechDetector
         self.inputContinuation = inputPair.continuation
         self.audioConverter = converter
-        self.endpointEventsEnabled = speechDetector != nil && !stopRequested
 
         self.analysisTask = Task { [weak self] in
             do {
@@ -415,20 +394,6 @@ public actor AppleSpeechService: SpeechTranscribing {
                 }
             } catch {
                 await self?.finishWithError(error, generation: generation)
-            }
-        }
-
-        if let speechDetector {
-            self.detectionTask = Task { [weak self] in
-                do {
-                    for try await result in speechDetector.results {
-                        await self?.receive(detectorResult: result, generation: generation)
-                    }
-                } catch is CancellationError {
-                    return
-                } catch {
-                    await self?.disableEndpointEvents(generation: generation)
-                }
             }
         }
 
@@ -612,56 +577,6 @@ public actor AppleSpeechService: SpeechTranscribing {
         eventContinuation?.yield(.partial(composed))
     }
 
-    private func receive(detectorResult: SpeechDetector.Result, generation: UUID) {
-        guard sessionGeneration == generation, endpointEventsEnabled else { return }
-        switch endpointTracker.observe(speechDetected: detectorResult.speechDetected) {
-        case .none:
-            break
-        case .speechStarted:
-            eventContinuation?.yield(.speechStarted)
-        case .silenceBegan:
-            scheduleSilenceEvent(generation: generation)
-        case .speechResumed:
-            silenceTask?.cancel()
-            silenceTask = nil
-        }
-    }
-
-    private func scheduleSilenceEvent(generation: UUID) {
-        silenceTask?.cancel()
-        silenceTask = Task { [weak self] in
-            do {
-                try await Task.sleep(for: Self.quickDictateSilenceDuration)
-            } catch {
-                return
-            }
-            await self?.emitSilenceElapsed(generation: generation)
-        }
-    }
-
-    private func emitSilenceElapsed(generation: UUID) {
-        guard sessionGeneration == generation,
-              endpointEventsEnabled,
-              endpointTracker.markSilenceElapsed() else {
-            return
-        }
-        silenceTask = nil
-        eventContinuation?.yield(.silenceElapsed)
-    }
-
-    private func disableEndpointEvents(generation: UUID) {
-        guard sessionGeneration == generation else { return }
-        endEndpointEvents(generation: generation)
-    }
-
-    private func endEndpointEvents(generation: UUID?) {
-        guard generation == nil || sessionGeneration == generation else { return }
-        endpointEventsEnabled = false
-        silenceTask?.cancel()
-        silenceTask = nil
-        endpointTracker.reset()
-    }
-
     /// The ledger text with SpeechTranscriber's spacing around CJK punctuation removed.
     private func composedText() -> String {
         TranscriptSpacing.normalize(transcriptLedger.composedText)
@@ -669,7 +584,6 @@ public actor AppleSpeechService: SpeechTranscribing {
 
     private func finishWithError(_ error: any Error, generation: UUID) {
         guard sessionGeneration == generation else { return }
-        endEndpointEvents(generation: generation)
         if let engine = audioEngine {
             if tapInstalled {
                 engine.inputNode.removeTap(onBus: 0)
@@ -756,18 +670,13 @@ public actor AppleSpeechService: SpeechTranscribing {
         pipelineTask?.cancel()
         analysisTask?.cancel()
         resultTask?.cancel()
-        detectionTask?.cancel()
-        silenceTask?.cancel()
         pipelineTask = nil
         analysisTask = nil
         resultTask = nil
-        detectionTask = nil
-        silenceTask = nil
         audioEngine = nil
         audioEngineDeviceUID = nil
         analyzer = nil
         transcriber = nil
-        speechDetector = nil
         rawContinuation = nil
         inputContinuation = nil
         eventContinuation = nil
@@ -780,8 +689,6 @@ public actor AppleSpeechService: SpeechTranscribing {
         milestoneReporter = nil
         reportedFirstPartial = false
         transcriptLedger = TranscriptLedger()
-        endpointTracker.reset()
-        endpointEventsEnabled = false
         sessionGeneration = nil
     }
 }
@@ -846,7 +753,6 @@ private struct CapturedAudio: @unchecked Sendable {
 private struct AnalyzerPipelineInput: @unchecked Sendable {
     let locale: Locale
     let naturalFormat: AVAudioFormat
-    let detectSpeechEndpoint: Bool
     let rawStream: AsyncStream<CapturedAudio>
     let milestones: CaptureMilestoneReporter
 }

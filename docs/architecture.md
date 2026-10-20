@@ -65,10 +65,11 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
    静音快照并恢复输出音频、取消各类任务、删除未持久化录音、重置热键临时状态。
 
 **提示音**：`playsCaptureSounds`（默认开启）控制开始与结束提示音。[`CaptureSoundPlayer`](../Sources/LerroMac/Audio/CaptureSoundPlayer.swift)
-启动时加载 `Contents/Resources/Sounds` 下的两个 `.caf` 并 `prepareToPlay()`，播放时不再读盘。开始音在 capture 被接受时播放，
-早于 `SpeechTranscribing.start` 打开麦克风并降低其他声音；结束音在用户完成 capture 时播放（含 Quick Dictate 自动结束），
-取消和失败不播放。`finishCapture` 先 `await speech.endAudioCapture()`（关闭麦克风并立即恢复输出音频），再播放结束音，
-最后 `speech.stop()` 等待最终转写，因此“录音时降低其他声音”不会静音结束音。fixture 使用 inert 播放器。
+启动时加载 `Contents/Resources/Sounds` 下的两个 `.caf` 并 `prepareToPlay()`，播放时不再读盘。`CaptureSoundPlaying.play` 在声音播放结束（或 1.5 秒安全超时）后才返回。
+开始音在 capture 被接受时播放，麦克风照常立即打开；`AppSession` 等开始音播完，且 capture 仍在 `listening` 时，
+才调用 `SpeechTranscribing.lowerOtherAudio()` 降低其他声音，避免休眠后唤醒较慢的输出设备吞掉开始音。
+结束音在用户完成 capture 时播放，取消和失败不播放。`finishCapture` 先 `await speech.endAudioCapture()`（关闭麦克风并立即恢复输出音频），
+再不阻塞地播放结束音并调用 `speech.stop()` 等待最终转写，因此“录音时降低其他声音”不会静音结束音。fixture 使用 inert 播放器。
 
 每次 capture 有一个 [`CaptureTrace`](../Sources/LerroCore/Models/CaptureTrace.swift)（起点为物理按键时刻，
 `ContinuousClock` 里程碑）。结果写入 os.Logger `app.lerro.mac` / `capture-trace`、Points of Interest signpost 和历史的
