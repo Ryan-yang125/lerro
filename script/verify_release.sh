@@ -401,14 +401,14 @@ if info.get("CFBundleLocalizations") != ["en", "zh-Hans"]:
 
 if info.get("SUFeedURL") != "https://updates.lerroapp.com/appcast/stable.xml":
     raise SystemExit("Sparkle feed URL differs from the production update endpoint")
-if info.get("SUEnableAutomaticChecks") is not False:
-    raise SystemExit("Sparkle scheduler must stay disabled for app-owned probing")
+if info.get("SUEnableAutomaticChecks") is not True:
+    raise SystemExit("Sparkle scheduled checks must stay enabled")
 if info.get("SUAutomaticallyUpdate") is not False:
     raise SystemExit("Sparkle automatic installation must stay disabled")
 if info.get("SUAllowsAutomaticUpdates") is not False:
     raise SystemExit("Sparkle automatic downloads must stay unavailable")
-if "SUScheduledCheckInterval" in info:
-    raise SystemExit("Sparkle check interval must stay app-owned")
+if info.get("SUScheduledCheckInterval") != 14400:
+    raise SystemExit("Sparkle check interval must be 4 hours")
 if not re.fullmatch(r"[A-Za-z0-9+/]{43}=", str(info.get("SUPublicEDKey", ""))):
     raise SystemExit("Sparkle public signing key is malformed")
 
