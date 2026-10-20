@@ -21,6 +21,32 @@ export type LocalizedRelease = ReleaseCopy & Pick<Release, "version" | "build" |
 // distribution URL; older entries stay unchanged.
 export const releases: readonly Release[] = [
   {
+    version: "1.9.0",
+    build: "18",
+    publishedAt: "2026-10-20",
+    downloadUrl: "https://updates.lerroapp.com/releases/1.9.0/18/Lerro-macOS-arm64.dmg",
+    zh: {
+      publishedLabel: "2026 年 10 月 20 日",
+      summary: "AI 做了什么、看到了什么、花了多少钱，每条听写都能看到。",
+      highlights: [
+        "历史详情新增「AI 处理」：AI 改了哪些词、去掉了哪些口头词，发给它的内容（你说的话、应用、词典、语气，以及哪些上下文没有发送），这次花了多少钱和怎么算的。原始请求和返回也能打开看。",
+        "设置 › 用量新增调用记录，每次 AI 调用一行，点一下跳到对应的历史记录。",
+        "设置 › 智能新增提示词查看：听写润色、翻译、自动学词三份提示词按段展示，配中文说明，示例做成卡片。",
+        "侧边栏收起后可以用窗口左上角的按钮或 ⌃⌘S 重新打开。",
+      ],
+    },
+    en: {
+      publishedLabel: "October 20, 2026",
+      summary: "See what the AI did, what it was sent, and what it cost for every dictation.",
+      highlights: [
+        "History adds an AI section: the words the AI corrected and the fillers it removed, what it was sent (your words, app, dictionary, tone, and which context was not sent), and what the call cost with the calculation. The raw request and reply are one click away.",
+        "Settings › Usage lists every AI call; select one to open its history entry.",
+        "Settings › Intelligence shows the dictation, translation and dictionary-learning prompts section by section, with the examples as cards.",
+        "A collapsed sidebar comes back with the button at the top left of the window or ⌃⌘S.",
+      ],
+    },
+  },
+  {
     version: "1.8.0",
     build: "17",
     publishedAt: "2026-10-19",
