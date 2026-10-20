@@ -24,15 +24,15 @@ struct MenuBarPanelView: View {
             ForEach(missingPermissions, id: \.self) { permission in
                 permissionRow(permission)
             }
+            if AppUpdateController.shared.updateAvailable {
+                updateRow
+            }
             captureTiles
             if let entry = lastEntry {
                 lastResultCard(entry)
             }
             todayLine
             pickerRows
-            if AppUpdateController.shared.updateAvailable {
-                updateRow
-            }
             footer
         }
         .padding(12)
@@ -400,6 +400,13 @@ struct MenuBarPanelView: View {
 
     // MARK: Update
 
+    private var updateTitle: String {
+        if let version = AppUpdateController.shared.availableVersion {
+            return LerroInterfaceLocalization.format("更新到 %@", locale: locale, arguments: version)
+        }
+        return localized("下载新版本")
+    }
+
     private var updateRow: some View {
         Button {
             focus.closePanel()
@@ -409,7 +416,7 @@ struct MenuBarPanelView: View {
                 Image(systemName: "arrow.down.circle")
                     .font(.system(size: 13, weight: .medium))
                     .frame(width: 16, height: 16)
-                Text(verbatim: localized("下载新版本"))
+                Text(verbatim: updateTitle)
                     .font(LerroFont.bodyEmphasis)
                 Spacer(minLength: 0)
             }
@@ -420,7 +427,7 @@ struct MenuBarPanelView: View {
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
-        .padding(.top, 6)
+        .padding(.bottom, 10)
     }
 
     // MARK: Footer

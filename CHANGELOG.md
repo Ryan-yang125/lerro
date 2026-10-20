@@ -6,6 +6,14 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+### Changed
+
+- New versions are easier to notice. Lerro checks every 4 hours. When you are
+  using Lerro, the update window opens; when Lerro is in the background, the menu
+  bar icon gets a dot, the menu bar panel starts with “Update to …”, and the main
+  window sidebar shows a new-version card. Downloading still starts only when you
+  click.
+
 ## [1.9.0] - 2026-10-20
 
 ### Added

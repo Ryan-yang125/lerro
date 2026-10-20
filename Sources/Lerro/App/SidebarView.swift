@@ -57,6 +57,9 @@ struct SidebarView: View {
     private var footer: some View {
         let status = session.intelligenceStatus
         return VStack(spacing: 6) {
+            if AppUpdateController.shared.updateAvailable {
+                updateCard
+            }
             Button {
                 showSettings(.intelligence)
             } label: {
@@ -86,14 +89,6 @@ struct SidebarView: View {
                 LerroIconButton(systemImage: "gearshape", help: "设置") {
                     showSettings(.general)
                 }
-                if AppUpdateController.shared.updateAvailable {
-                    LerroIconButton(
-                        systemImage: "arrow.down.circle",
-                        help: "发现新版本，立即下载"
-                    ) {
-                        AppUpdateController.shared.checkForUpdates()
-                    }
-                }
                 Spacer(minLength: 0)
                 Text(verbatim: AppMetadata.version)
                     .font(LerroFont.footnote)
@@ -103,6 +98,41 @@ struct SidebarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 10)
+    }
+
+    private var updateCard: some View {
+        let title = updateTitle
+        return Button {
+            AppUpdateController.shared.checkForUpdates()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle")
+                    .font(LerroFont.caption)
+                Text(verbatim: title)
+                    .font(LerroFont.caption.weight(.semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text(verbatim: localized("更新"))
+                    .font(LerroFont.caption)
+            }
+            .foregroundStyle(LerroTheme.accentText)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(LerroTheme.accentSoft)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(verbatim: "\(title)，\(localized("更新"))"))
+    }
+
+    private var updateTitle: String {
+        if let version = AppUpdateController.shared.availableVersion {
+            return LerroInterfaceLocalization.format("新版本 %@", locale: locale, arguments: version)
+        }
+        return localized("有新版本")
     }
 
     private func showSettings(_ tab: SettingsTab) {

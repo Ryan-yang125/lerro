@@ -13,8 +13,10 @@ Apple notarization、staple、Gatekeeper 与独立的归档签名。更新私钥
 
 应用接入 Sparkle 2。`AppUpdateController` 在正常应用生命周期启动 `SPUStandardUpdaterController`；设置和首页的「检查更新」调用
 Sparkle；fixture 与 XCTest 进程不创建它。[`Info.plist`](../../config/Info.plist) 固定 HTTPS feed
-`https://updates.lerroapp.com/appcast/stable.xml` 与 Ed25519 公钥。应用启动时及每 24 小时静默探测，发现更新后显示下载入口，
-下载与安装由用户点击后启动。Sparkle 自带的定时检查和自动下载保持关闭。
+`https://updates.lerroapp.com/appcast/stable.xml` 与 Ed25519 公钥。Sparkle 自带的定时检查每 4 小时
+（`SUScheduledCheckInterval`）检查一次，使用 Sparkle 为菜单栏应用提供的温和提醒（gentle reminders）：用户正在使用 Lerro 时
+直接显示 Sparkle 的更新窗口；Lerro 在后台时不打断听写，改为在菜单栏图标加圆点、菜单栏面板首行和主窗口侧边栏显示更新入口。
+下载与安装由用户点击后启动，自动下载保持关闭。
 
 归档私钥存于维护者的 macOS Keychain。`package_release.sh` 在 Developer ID 归档完成公证和 staple 后用 `sign_update` 签署最终 ZIP，
 把签名和长度写入 release manifest。

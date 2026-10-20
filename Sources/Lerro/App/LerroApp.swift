@@ -57,13 +57,16 @@ struct LerroApp: App {
             MenuBarPanelView(session: session)
                 .environment(\.locale, LerroInterfaceLocalization.locale(for: session.preferences.appLanguage))
         } label: {
+            let updateAvailable = AppUpdateController.shared.updateAvailable
             LerroMenuBarIcon(
                 assetName: menuBarAnimator.assetName,
                 fallbackSystemName: LerroMenuBarPresentation.systemImage(for: session.phase),
                 accessibilityLabel: LerroMenuBarPresentation.accessibilityLabel(
                     for: session.phase,
-                    locale: LerroInterfaceLocalization.locale(for: session.preferences.appLanguage)
-                )
+                    locale: LerroInterfaceLocalization.locale(for: session.preferences.appLanguage),
+                    updateAvailable: updateAvailable
+                ),
+                showsUpdateBadge: updateAvailable
             )
             .onChange(of: session.phase, initial: true) { _, phase in
                 menuBarAnimator.update(phase: phase)
@@ -109,7 +112,11 @@ enum LerroMenuBarPresentation {
         }
     }
 
-    static func accessibilityLabel(for phase: CapturePhase, locale: Locale) -> String {
+    static func accessibilityLabel(
+        for phase: CapturePhase,
+        locale: Locale,
+        updateAvailable: Bool = false
+    ) -> String {
         let key: String
         switch phase {
         case .idle, .success, .cancelled: key = "Lerro，空闲"
@@ -117,6 +124,10 @@ enum LerroMenuBarPresentation {
         case .transcribing, .enhancing, .inserting: key = "Lerro，正在处理"
         case .failed: key = "Lerro，需要处理"
         }
-        return LerroInterfaceLocalization.string(key, locale: locale)
+        let label = LerroInterfaceLocalization.string(key, locale: locale)
+        guard updateAvailable else { return label }
+        let isChinese = locale.language.languageCode?.identifier == "zh"
+        let suffix = LerroInterfaceLocalization.string("有新版本", locale: locale)
+        return isChinese ? "\(label)，\(suffix)" : "\(label), \(suffix.lowercased())"
     }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import Sparkle
@@ -10,30 +11,36 @@ final class AppUpdateController: NSObject {
     private var updaterController: SPUStandardUpdaterController?
     private var updateObserver: NSObjectProtocol?
     private var noUpdateObserver: NSObjectProtocol?
-    private var detectionTask: Task<Void, Never>?
     private(set) var updateAvailable = false
+    private(set) var availableVersion: String?
 
     private override init() {}
 
     func startIfEligible(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
+        if AppUpdateEnvironment.showsFixtureUpdate(environment) {
+            updateAvailable = true
+            availableVersion = "1.9.1"
+            return
+        }
         guard updaterController == nil, AppUpdateEnvironment.allowsLiveUpdater(environment) else {
             return
         }
 
-        updaterController = SPUStandardUpdaterController(
+        let controller = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: nil,
-            userDriverDelegate: nil
+            userDriverDelegate: self
         )
-        installUpdateObservers(for: updaterController!.updater)
-        updaterController!.updater.checkForUpdateInformation()
-        scheduleUpdateDetection()
+        updaterController = controller
+        installUpdateObservers(for: controller.updater)
     }
 
     func checkForUpdates() {
-        updaterController?.checkForUpdates(nil)
+        guard let updaterController else { return }
+        NSApp.activate()
+        updaterController.checkForUpdates(nil)
     }
 
     private func installUpdateObservers(for updater: SPUUpdater) {
@@ -42,34 +49,49 @@ final class AppUpdateController: NSObject {
             forName: .SUUpdaterDidFindValidUpdate,
             object: updater,
             queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.updateAvailable = true }
+        ) { [weak self] notification in
+            let item = notification.userInfo?[SUUpdaterAppcastItemNotificationKey] as? SUAppcastItem
+            let version = item?.displayVersionString
+            Task { @MainActor in
+                self?.updateAvailable = true
+                self?.availableVersion = version
+            }
         }
         noUpdateObserver = NotificationCenter.default.addObserver(
             forName: .SUUpdaterDidNotFindUpdate,
             object: updater,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.updateAvailable = false }
-        }
-    }
-
-    private func scheduleUpdateDetection() {
-        detectionTask?.cancel()
-        detectionTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: AppUpdatePolicy.detectionInterval)
-                guard !Task.isCancelled, let updater = self?.updaterController?.updater else {
-                    return
-                }
-                updater.checkForUpdateInformation()
+            Task { @MainActor in
+                self?.updateAvailable = false
+                self?.availableVersion = nil
             }
         }
     }
 }
 
-enum AppUpdatePolicy {
-    static let detectionInterval: Duration = .seconds(86_400)
+extension AppUpdateController: @preconcurrency SPUStandardUserDriverDelegate {
+    var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    func standardUserDriverShouldHandleShowingScheduledUpdate(
+        _ update: SUAppcastItem,
+        andInImmediateFocus immediateFocus: Bool
+    ) -> Bool {
+        immediateFocus
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(
+        _ handleShowingUpdate: Bool,
+        forUpdate update: SUAppcastItem,
+        state: SPUUserUpdateState
+    ) {
+        if handleShowingUpdate {
+            if !NSApp.isActive { NSApp.activate() }
+        } else {
+            updateAvailable = true
+            availableVersion = update.displayVersionString
+        }
+    }
 }
 
 enum AppUpdateEnvironment {
@@ -77,8 +99,9 @@ enum AppUpdateEnvironment {
         environment["LERRO_FIXTURE_MODE"] != "1"
             && environment["XCTestConfigurationFilePath"] == nil
     }
-}
 
-enum AppUpdatePresentation {
-    static let usesSystemBlue = true
+    static func showsFixtureUpdate(_ environment: [String: String]) -> Bool {
+        environment["LERRO_FIXTURE_MODE"] == "1"
+            && environment["LERRO_FIXTURE_UPDATE_AVAILABLE"] == "1"
+    }
 }

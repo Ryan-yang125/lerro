@@ -52,10 +52,12 @@
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>
-	<false/>
+	<true/>
 	<key>SUFeedURL</key>
 	<string>https://updates.lerroapp.com/appcast/stable.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>zsb8ktQi+MZcETLnngCctw1BrzHZvjyJY6cw6JZ842M=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>14400</integer>
 </dict>
 </plist>

@@ -1139,3 +1139,9 @@
 "%lld 次" = "%lld";
 "调用记录" = "Calls";
 "失败" = "Failed";
+
+/* Update reminders */
+"有新版本" = "Update available";
+"更新到 %@" = "Update to %@";
+"新版本 %@" = "New version %@";
+"更新" = "Update";

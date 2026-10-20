@@ -140,6 +140,7 @@ struct LerroMenuBarIcon: View {
     let assetName: String
     let fallbackSystemName: String
     let accessibilityLabel: String
+    var showsUpdateBadge = false
 
     var body: some View {
         Group {
@@ -149,6 +150,13 @@ struct LerroMenuBarIcon: View {
             } else {
                 Image(systemName: fallbackSystemName)
                     .symbolRenderingMode(.monochrome)
+                    .overlay(alignment: .topTrailing) {
+                        if showsUpdateBadge {
+                            Circle()
+                                .frame(width: 5, height: 5)
+                                .offset(x: 2, y: -1)
+                        }
+                    }
             }
         }
         .accessibilityLabel(Text(verbatim: accessibilityLabel))
@@ -168,7 +176,8 @@ struct LerroMenuBarIcon: View {
         }
         return LerroMenuBarTemplateImageLoader.load(
             baseURL: baseURL,
-            retinaURL: retinaURL
+            retinaURL: retinaURL,
+            showsUpdateBadge: showsUpdateBadge
         )
     }
 }
@@ -180,6 +189,7 @@ enum LerroMenuBarTemplateImageLoader {
     private struct CacheKey: Hashable {
         let baseURL: URL
         let retinaURL: URL
+        let showsUpdateBadge: Bool
     }
 
     private enum CacheEntry {
@@ -189,10 +199,14 @@ enum LerroMenuBarTemplateImageLoader {
 
     private static var cache: [CacheKey: CacheEntry] = [:]
 
-    static func load(baseURL: URL, retinaURL: URL) -> NSImage? {
+    static let badgeDiameter: CGFloat = 5
+    static let badgeRingWidth: CGFloat = 1
+
+    static func load(baseURL: URL, retinaURL: URL, showsUpdateBadge: Bool = false) -> NSImage? {
         let key = CacheKey(
             baseURL: baseURL.standardizedFileURL,
-            retinaURL: retinaURL.standardizedFileURL
+            retinaURL: retinaURL.standardizedFileURL,
+            showsUpdateBadge: showsUpdateBadge
         )
         if let cached = cache[key] {
             switch cached {
@@ -212,12 +226,76 @@ enum LerroMenuBarTemplateImageLoader {
         baseRepresentation.size = logicalSize
         retinaRepresentation.size = logicalSize
 
+        let representations: [NSBitmapImageRep]
+        if showsUpdateBadge {
+            guard let badgedBase = badged(baseRepresentation),
+                  let badgedRetina = badged(retinaRepresentation) else {
+                cache[key] = .unavailable
+                return nil
+            }
+            representations = [badgedBase, badgedRetina]
+        } else {
+            representations = [baseRepresentation, retinaRepresentation]
+        }
+
         let image = NSImage(size: logicalSize)
-        image.addRepresentation(baseRepresentation)
-        image.addRepresentation(retinaRepresentation)
+        representations.forEach(image.addRepresentation)
         image.isTemplate = true
         cache[key] = .image(image)
         return image
+    }
+
+    /// Draws the glyph, cuts a transparent ring at the top-right corner, then
+    /// fills the dot inside it. The result stays a template (alpha only).
+    private static func badged(_ source: NSBitmapImageRep) -> NSBitmapImageRep? {
+        let width = source.pixelsWide
+        let height = source.pixelsHigh
+        guard let target = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: width,
+            pixelsHigh: height,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ), let context = NSGraphicsContext(bitmapImageRep: target) else {
+            return nil
+        }
+        target.size = logicalSize
+
+        let scale = CGFloat(width) / logicalSize.width
+        let radius = badgeDiameter / 2 * scale
+        let ringRadius = radius + badgeRingWidth * scale
+        let center = CGPoint(
+            x: CGFloat(width) - radius - 0.5 * scale,
+            y: CGFloat(height) - radius - 0.5 * scale
+        )
+
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current = context
+        source.draw(in: NSRect(x: 0, y: 0, width: width, height: height))
+
+        context.compositingOperation = .clear
+        NSBezierPath(ovalIn: NSRect(
+            x: center.x - ringRadius,
+            y: center.y - ringRadius,
+            width: ringRadius * 2,
+            height: ringRadius * 2
+        )).fill()
+
+        context.compositingOperation = .sourceOver
+        NSColor.black.setFill()
+        NSBezierPath(ovalIn: NSRect(
+            x: center.x - radius,
+            y: center.y - radius,
+            width: radius * 2,
+            height: radius * 2
+        )).fill()
+        return target
     }
 }
 

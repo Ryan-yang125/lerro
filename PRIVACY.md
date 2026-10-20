@@ -121,8 +121,8 @@ management, preview, strict delivery, and recovery.
 
 ## Updates
 
-Lerro checks the signed Sparkle feed at `updates.lerroapp.com` on launch, every
-24 hours while running, and on an explicit user check. Cloudflare receives
+Lerro checks the signed Sparkle feed at `updates.lerroapp.com` every 4 hours
+while running and on an explicit user check. Cloudflare receives
 ordinary HTTPS metadata and update-selection information such as app version and
 platform. Private R2 and D1 storage contains release archives and public release
 metadata only.
