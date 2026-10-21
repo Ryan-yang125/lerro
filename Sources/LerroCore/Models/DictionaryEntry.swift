@@ -20,10 +20,6 @@ public struct DictionaryEntry: Codable, Identifiable, Hashable, Sendable {
     public var learnedFromEntryIDs: [UUID]
     public var lastUsedAt: Date?
 
-    public var isSnippet: Bool {
-        source == .manual && replacement != phrase
-    }
-
     public init(
         id: UUID = UUID(),
         phrase: String,

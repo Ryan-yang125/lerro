@@ -117,7 +117,6 @@ struct TermLearningTests {
         #expect(entry.createdAt == later)
         #expect(entry.useCount == 0)
         #expect(entry.lastUsedAt == nil)
-        #expect(!entry.isSnippet)
     }
 
     @Test("The same entry twice does not count twice")
@@ -177,16 +176,15 @@ struct TermLearningTests {
 
     // MARK: Usage counter
 
-    @Test("Usage counter increments matching non-snippet entries only")
+    @Test("Usage counter increments matching entries only")
     func usageCounter() {
         let learned = DictionaryEntry(phrase: "Xcode", source: .learned, useCount: 2)
         let manual = DictionaryEntry(phrase: "Laura", useCount: 0)
-        let snippet = DictionaryEntry(phrase: "地址", replacement: "上海市浦东新区")
         let unused = DictionaryEntry(phrase: "Figma")
 
         let used = DictionaryUsageCounter.entriesUsed(
-            in: "让 laura 用 XCODE 打开，地址：上海市浦东新区",
-            dictionary: [learned, manual, snippet, unused],
+            in: "让 laura 用 XCODE 打开",
+            dictionary: [learned, manual, unused],
             now: now
         )
 

@@ -116,7 +116,7 @@ struct AITransparencyTests {
         #expect(context.cursorBefore == "前文")
         #expect(context.cursorAfter == "后文")
         #expect(context.selectedText == "选中的文字")
-        #expect(context.knownTerms == ["Laura"])
+        #expect(context.knownTerms == ["Laura", "Xcode"])
         #expect(context.glossary == [AIGlossaryMapping(phrase: "叉扣", replacement: "Xcode")])
         #expect(context.tone == "简洁")
         #expect(context.targetLanguage == nil)

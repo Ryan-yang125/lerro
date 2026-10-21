@@ -138,10 +138,9 @@ public struct CloudPromptComposer: Sendable {
     ) -> [String] {
         let candidates = request.dictionary
             .filter { entry in
-                !entry.isSnippet
-                    && (entry.applicationBundleIdentifier == nil
-                        || (includeApplicationScope
-                            && entry.applicationBundleIdentifier == request.context.bundleIdentifier))
+                entry.applicationBundleIdentifier == nil
+                    || (includeApplicationScope
+                        && entry.applicationBundleIdentifier == request.context.bundleIdentifier)
             }
             .sorted { lhs, rhs in
                 let lhsScoped = lhs.applicationBundleIdentifier != nil

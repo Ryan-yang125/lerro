@@ -171,7 +171,7 @@ public enum TermLearner {
 }
 
 public enum DictionaryUsageCounter {
-    /// Non-snippet entries whose replacement (or phrase) appears in `text`, case-insensitively,
+    /// Entries whose replacement (or phrase) appears in `text`, case-insensitively,
     /// with `useCount` + 1 and `lastUsedAt` set to `now`. Only changed entries are returned.
     public static func entriesUsed(
         in text: String,
@@ -179,7 +179,6 @@ public enum DictionaryUsageCounter {
         now: Date
     ) -> [DictionaryEntry] {
         dictionary.compactMap { entry in
-            guard !entry.isSnippet else { return nil }
             let replacement = entry.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
             let target = replacement.isEmpty
                 ? entry.phrase.trimmingCharacters(in: .whitespacesAndNewlines)

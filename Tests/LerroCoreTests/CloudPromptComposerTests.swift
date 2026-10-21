@@ -364,19 +364,6 @@ struct CloudPromptComposerTests {
         #expect(personalization["known_terms"] as? [String] == ["GlobalTerm"])
     }
 
-    @Test("Known terms exclude snippets")
-    func excludesSnippetsFromKnownTerms() throws {
-        let terms = try knownTerms(
-            for: [
-                DictionaryEntry(phrase: "Xcode"),
-                DictionaryEntry(phrase: "myaddr", replacement: "1 Main Street")
-            ],
-            bundleIdentifier: nil
-        )
-
-        #expect(terms == ["Xcode"])
-    }
-
     private func knownTerms(
         for dictionary: [DictionaryEntry],
         bundleIdentifier: String?

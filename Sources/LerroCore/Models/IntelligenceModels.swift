@@ -195,7 +195,7 @@ public struct IntelligenceResult: Sendable, Equatable {
     public var url: URL?
     public var modelIdentifier: String
     public var source: IntelligenceResultSource
-    /// The remote call behind this result; nil for raw and snippet results.
+    /// The remote call behind this result; nil for raw results.
     public var call: AICallTrace?
 
     public init(

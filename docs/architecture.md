@@ -130,8 +130,8 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 
 ## 词典与自动学习
 
-- 词条来源：手动、learned、snippet（快捷短语）。learned 词条全局生效。词条进入 AI 提示词，词典页支持编辑、删除、CSV
-  （`phrase,replacement` 两列）、应用筛选。
+- 词条来源：手动、learned。learned 词条全局生效。词条进入 AI 提示词：`replacement` 与 `phrase` 不同的词条作为
+  听写词到写法的对照，其余作为已知词汇。词典页支持编辑、删除、CSV（`phrase,replacement` 两列）、应用筛选。
 - 自动学习：AI Dictate 成功写入后，`AccessibilityDeliveredTextObserver` 在同一应用和输入元素观察最多 60 秒，每 100 ms 读取，
   变化稳定 800 ms 后用本地 UTF-16 差异算法取最小 original/corrected span（前 80、后 40 个单元的上下文）。AI 返回严格 JSON
   的 0 至 3 个候选，confidence 不低于 0.7 且来源于输入 span 的候选保存为全局 learned 词条，HUD 显示 3 秒提示，可撤销。
@@ -141,7 +141,7 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
   `phrase == replacement`、`source = .learned` 的常用词条加入词典，记录 `heardAs`（曾被听成的样子）和
   `learnedFromEntryIDs`（来源历史记录），HUD 提示可撤销。撤销提示或在词典页删除这类词条会把词加入 `dismissed`，之后不再学习。
   候选和 `dismissed` 由 `TermLearningRepository` 保存在 `term-candidates.json`。
-- 使用次数：每次听写写入成功后，`DictionaryUsageCounter` 对最终文字统计非快捷语词条，变化的词条 `useCount + 1`
+- 使用次数：每次听写写入成功后，`DictionaryUsageCounter` 对最终文字统计词条，变化的词条 `useCount + 1`
   并更新 `lastUsedAt`。首页的本周摘要由 `DictionaryWeek.summary` 从历史和词典计算，随首页统计一起刷新。
 
 ## 存储

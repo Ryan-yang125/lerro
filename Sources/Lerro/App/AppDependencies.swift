@@ -172,7 +172,7 @@ struct AppDependencies: Sendable {
         func daysAgo(_ days: Int) -> Date {
             calendar.date(byAdding: .day, value: -days, to: today) ?? today
         }
-        let dictionary = fixtureDictionary().filter { !$0.isSnippet }
+        let dictionary = fixtureDictionary()
         var callIndex = 0
         func aiCall(
             mode: CaptureMode,
@@ -542,20 +542,6 @@ struct AppDependencies: Sendable {
         return [
             DictionaryEntry(phrase: "Lerro", createdAt: ago(40), updatedAt: ago(40), useCount: 31),
             DictionaryEntry(phrase: "DeepSeek", createdAt: ago(30), updatedAt: ago(30), useCount: 12),
-            DictionaryEntry(
-                phrase: "meeting link",
-                replacement: "https://meet.example.com/lerro",
-                createdAt: ago(25),
-                updatedAt: ago(25),
-                useCount: 8
-            ),
-            DictionaryEntry(
-                phrase: "我的邮箱",
-                replacement: "hello@example.com",
-                createdAt: ago(22),
-                updatedAt: ago(22),
-                useCount: 5
-            ),
             DictionaryEntry(
                 phrase: "CI",
                 applicationBundleIdentifier: "com.tinyspeck.slackmacgap",

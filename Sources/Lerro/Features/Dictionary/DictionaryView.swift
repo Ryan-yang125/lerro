@@ -7,15 +7,13 @@ private enum DictionaryScope: String, CaseIterable, Identifiable {
     case all = "全部"
     case learned = "Lerro 学会的"
     case manual = "你加的"
-    case snippets = "快捷语"
     var id: Self { self }
 
     func includes(_ entry: DictionaryEntry) -> Bool {
         switch self {
         case .all: true
         case .learned: entry.source == .learned
-        case .manual: entry.source == .manual && !entry.isSnippet
-        case .snippets: entry.isSnippet
+        case .manual: entry.source == .manual
         }
     }
 }
@@ -24,7 +22,6 @@ private enum DictionaryGroup: CaseIterable, Identifiable {
     case recent
     case learned
     case manual
-    case snippets
     var id: Self { self }
 
     var title: String {
@@ -32,7 +29,6 @@ private enum DictionaryGroup: CaseIterable, Identifiable {
         case .recent: "本周新学会"
         case .learned: "Lerro 学会的"
         case .manual: "你加的"
-        case .snippets: "快捷语"
         }
     }
 }
@@ -62,7 +58,6 @@ fileprivate extension DictionaryEntry {
     }
 
     var group: DictionaryGroup {
-        if isSnippet { return .snippets }
         if source == .learned { return isRecentlyLearned ? .recent : .learned }
         return .manual
     }
@@ -246,25 +241,10 @@ struct DictionaryView: View {
         .padding(.vertical, 3)
     }
 
-    @ViewBuilder
     private func title(_ entry: DictionaryEntry) -> some View {
-        if entry.isSnippet {
-            HStack(spacing: 6) {
-                Text(verbatim: entry.phrase)
-                    .font(LerroFont.body.weight(.semibold))
-                    .lineLimit(1)
-                Text(verbatim: "→")
-                    .foregroundStyle(LerroTheme.metadataText)
-                Text(verbatim: entry.replacement.replacingOccurrences(of: "\n", with: " "))
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(LerroTheme.secondaryText)
-                    .lineLimit(1)
-            }
-        } else {
-            Text(verbatim: entry.replacement)
-                .font(LerroFont.body.weight(.semibold))
-                .lineLimit(1)
-        }
+        Text(verbatim: entry.replacement)
+            .font(LerroFont.body.weight(.semibold))
+            .lineLimit(1)
     }
 
     @ViewBuilder
@@ -434,18 +414,11 @@ struct DictionaryView: View {
 // MARK: - Editor
 
 private struct DictionaryEditorSheet: View {
-    private enum Kind: String, CaseIterable, Identifiable {
-        case term = "词条"
-        case snippet = "快捷语"
-        var id: Self { self }
-    }
-
     let session: AppSession
     let existing: DictionaryEntry?
     let close: () -> Void
     @State private var phrase: String
     @State private var replacement: String
-    @State private var kind: Kind
     @State private var applicationBundleIdentifier: String
     @State private var isSaving = false
     @FocusState private var phraseFocused: Bool
@@ -457,7 +430,6 @@ private struct DictionaryEditorSheet: View {
         self.close = close
         _phrase = State(initialValue: entry?.phrase ?? "")
         _replacement = State(initialValue: entry?.replacement ?? "")
-        _kind = State(initialValue: entry?.isSnippet == true ? .snippet : .term)
         _applicationBundleIdentifier = State(initialValue: entry?.applicationBundleIdentifier ?? "")
     }
 
@@ -466,38 +438,17 @@ private struct DictionaryEditorSheet: View {
     private var trimmedReplacement: String { replacement.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private var canSave: Bool {
-        !trimmedPhrase.isEmpty && !(kind == .snippet && trimmedReplacement.isEmpty) && !isSaving
+        !trimmedPhrase.isEmpty && !isSaving
     }
 
     var body: some View {
         VStack(spacing: 0) {
             Form {
-                if !isLearned {
-                    Picker("类型", selection: $kind) {
-                        ForEach(Kind.allCases) { item in
-                            Text(LocalizedStringKey(item.rawValue)).tag(item)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-
                 TextField("听到", text: $phrase)
                     .focused($phraseFocused)
                     .onSubmit(save)
 
-                if kind == .snippet {
-                    LabeledContent("写成") {
-                        TextEditor(text: $replacement)
-                            .font(.system(size: 12, design: .monospaced))
-                            .scrollContentBackground(.hidden)
-                            .padding(6)
-                            .frame(height: 96)
-                            .background(LerroTheme.fillContainerThin, in: RoundedRectangle(
-                                cornerRadius: LerroTheme.controlRadius,
-                                style: .continuous
-                            ))
-                    }
-                } else if isLearned {
+                if isLearned {
                     TextField("写成", text: $replacement)
                 }
 
@@ -551,12 +502,10 @@ private struct DictionaryEditorSheet: View {
         guard canSave else { return }
         var entry = existing ?? DictionaryEntry(phrase: trimmedPhrase, source: .manual)
         entry.phrase = trimmedPhrase
-        switch (kind, entry.source) {
-        case (.snippet, _):
-            entry.replacement = trimmedReplacement
-        case (.term, .manual):
+        switch entry.source {
+        case .manual:
             entry.replacement = trimmedPhrase
-        case (.term, .learned):
+        case .learned:
             entry.replacement = trimmedReplacement.isEmpty ? trimmedPhrase : trimmedReplacement
         }
         entry.applicationBundleIdentifier = applicationBundleIdentifier.isEmpty

@@ -66,7 +66,7 @@ KNOWN_MILESTONES = (
 )
 LEGACY_FIELDS = ("transcription", "processing", "delivery")
 MODES = ("dictation", "translation", "ask")
-ROUTES = ("raw", "remote", "local", "localSnippet", "appleTranslation")
+ROUTES = ("raw", "remote", "local", "appleTranslation")
 
 
 def percentile(sorted_values: list[float], p: int) -> float:

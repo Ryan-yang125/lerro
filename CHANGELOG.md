@@ -15,6 +15,9 @@ All notable changes to Lerro will be documented here. The project follows
 
 ### Removed
 
+- Dictionary snippets (快捷语). Saying a short phrase no longer pastes a stored
+  text; existing entries with a different replacement are sent to the AI as word
+  mappings.
 - “Find Words in History” and the Suggestions tab on the Dictionary page. It sent
   one AI request per difference in your history and produced noisy suggestions,
   such as single characters and changes that reversed the meaning. Words you
@@ -30,6 +33,9 @@ All notable changes to Lerro will be documented here. The project follows
 
 ### Removed
 
+- Dictionary snippets (快捷语). Saying a short phrase no longer pastes a stored
+  text; existing entries with a different replacement are sent to the AI as word
+  mappings.
 - The “Stop automatically when you finish speaking” setting. It relied on Apple's
   speech detector, which reports nothing in practice, so it never ended a capture.
 
@@ -92,6 +98,9 @@ All notable changes to Lerro will be documented here. The project follows
 
 ### Removed
 
+- Dictionary snippets (快捷语). Saying a short phrase no longer pastes a stored
+  text; existing entries with a different replacement are sent to the AI as word
+  mappings.
 - The local AI mode (Qwen through MLX), its 3.03 GB model download, device-aware
   recommendations, and the vendored Hugging Face packages. AI polish and
   translation use the API you configure. A saved local mode loads as Apple-only.
@@ -268,6 +277,9 @@ All notable changes to Lerro will be documented here. The project follows
 
 ### Removed
 
+- Dictionary snippets (快捷语). Saying a short phrase no longer pastes a stored
+  text; existing entries with a different replacement are sent to the AI as word
+  mappings.
 - Ask and Rewrite production entry points, shortcuts, cards, and onboarding pages.
 - The six-second success receipt, post-delivery Undo and correction controls,
   spoken follow-up editing, redictation, version restore, and voice send.

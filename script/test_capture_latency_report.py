@@ -98,11 +98,11 @@ class CaptureLatencyReportTests(unittest.TestCase):
             traced_entry("2026-10-10T12:00:00", 0.1, mode="dictation", processingRoute="raw"),
             traced_entry("2026-10-11T12:00:00", 0.2, mode="translation", processingRoute="remote"),
             traced_entry("2026-10-12T12:00:00", 0.3, mode="dictation", processingRoute="local"),
-            traced_entry("2026-10-13T12:00:00", 0.4, mode="dictation", processingRoute="localSnippet"),
+            traced_entry("2026-10-13T12:00:00", 0.4, mode="dictation", processingRoute="appleTranslation"),
         ])
         self.assertEqual(self.run_report("--mode", "translation")["entries"], 1)
         self.assertEqual(self.run_report("--route", "local")["entries"], 1)
-        self.assertEqual(self.run_report("--route", "localSnippet")["entries"], 1)
+        self.assertEqual(self.run_report("--route", "appleTranslation")["entries"], 1)
         self.assertEqual(self.run_report("--since", "2026-10-12")["entries"], 2)
         self.assertEqual(self.run_report("--until", "2026-10-11")["entries"], 2)
         self.assertEqual(self.run_report("--since", "2026-10-11T00:00", "--until", "2026-10-12T00:00")["entries"], 1)

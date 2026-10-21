@@ -12,7 +12,13 @@ public enum HistoryProcessingRoute: String, Codable, Sendable {
     case local
     case remote
     case appleTranslation
-    case localSnippet
+
+    /// History files written by older versions may hold route names that no longer exist
+    /// (for example "localSnippet", which always produced raw text). They decode as `.raw`.
+    public init(from decoder: any Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: value) ?? .raw
+    }
 }
 
 public enum HistoryContextCategory: String, Codable, CaseIterable, Hashable, Sendable {

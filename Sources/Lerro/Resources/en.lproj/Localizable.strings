@@ -612,10 +612,7 @@
 "启用" = "Enabled";
 "删除这个应用语气？" = "Delete this app style?";
 "管理个性化" = "Manage Personalization";
-"快捷语" = "Snippet";
 "新建" = "New";
-"类型" = "Type";
-"词条" = "Term";
 "说出触发词" = "Spoken Trigger";
 "修正并学习" = "Correct and Learn";
 "识别成了" = "Recognized As";
@@ -632,7 +629,6 @@
 "此操作会删除这台 Mac 上保存的全部听写与指令记录。" = "This deletes all dictation and Command records saved on this Mac.";
 "完成一次听写、翻译或指令后，记录会出现在这里。" = "Complete a Dictation, Translation, or Command and it will appear here.";
 "开始指令" = "Start Command";
-"新增应用语气、快捷语与修正学习；指令可直接处理任意选中文字，并默认使用 Fn Space。" = "Adds app styles, snippets, and correction learning. Command can transform any selected text and uses Fn Space by default.";
 
 /* Lerro Live */
 "实时转写" = "Live Transcript";
@@ -671,7 +667,6 @@
 "光标上下文" = "Cursor Context";
 "原始转写" = "Raw Transcript";
 "Apple 翻译" = "Apple Translation";
-"本地快捷语" = "Local Snippet";
 "API 已共享：%@" = "Shared with API: %@";
 "录音 %.1fs · 转写 %.2fs · 处理 %.2fs · 写入 %.2fs" = "Recording %.1fs · Transcription %.2fs · Processing %.2fs · Delivery %.2fs";
 "明天下午三点把新版发布清单发给设计和工程团队" = "Send the new release checklist to the design and engineering teams at 3 PM tomorrow";
@@ -739,7 +734,6 @@
 "认识完整的语音工具箱" = "Explore the complete voice toolkit";
 "设备端翻译" = "On-device Translation";
 "设备端翻译并写入当前光标" = "Translate on device and insert at the cursor";
-"词典与快捷语" = "Dictionary and Snippets";
 "说得更简洁一些" = "Make it more concise";
 "这台 Mac 需要 API 模型" = "This Mac requires an API model";
 "连接测试只发送固定合成文字。API Key 会保存在本机 Lerro 设置 JSON 中。" = "The connection test sends only fixed synthetic text. Your API key is stored in Lerro's local settings JSON.";

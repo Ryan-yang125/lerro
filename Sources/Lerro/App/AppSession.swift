@@ -1423,7 +1423,7 @@ final class AppSession {
                 transcript: entry.rawText,
                 targetLanguage: entry.targetLanguage,
                 context: context,
-                dictionary: dictionaryEntries.filter { !$0.isSnippet },
+                dictionary: dictionaryEntries,
                 toneInstruction: resolvedTone(bundleIdentifier: entry.bundleIdentifier).instruction,
                 historyEntryID: entry.id
             )
@@ -2013,26 +2013,14 @@ final class AppSession {
             selectedText: session.context.selectedText,
             targetLanguage: session.targetLanguage,
             context: session.context,
-            dictionary: dictionaryEntries.filter { !$0.isSnippet },
+            dictionary: dictionaryEntries,
             toneInstruction: session.toneInstruction,
             historyEntryID: session.id
         )
 
         let result: IntelligenceResult
         var usedRawFallback = false
-        if session.mode == .dictation,
-           let snippet = SnippetResolver.resolve(
-               transcript: processingTranscript,
-               entries: dictionaryEntries,
-               applicationBundleIdentifier: session.context.bundleIdentifier
-           ) {
-            result = IntelligenceResult(
-                text: snippet.replacement,
-                disposition: .insert,
-                modelIdentifier: "local-snippet",
-                source: .raw
-            )
-        } else if session.intelligenceMode == .raw {
+        if session.intelligenceMode == .raw {
             result = try rawResult(for: request, task: task)
         } else {
             do {
@@ -2440,7 +2428,7 @@ final class AppSession {
                     applicationName: application.name,
                     bundleIdentifier: application.bundleIdentifier
                 ),
-                dictionary: dictionaryEntries.filter { !$0.isSnippet },
+                dictionary: dictionaryEntries,
                 toneInstruction: trimmed,
                 usageFeature: .tonePreview
             )).text
@@ -2450,7 +2438,6 @@ final class AppSession {
     }
 
     private func historyProcessingRoute(result: IntelligenceResult) -> HistoryProcessingRoute {
-        if result.modelIdentifier == "local-snippet" { return .localSnippet }
         return switch result.source {
         case .raw: .raw
         case .remote: .remote
@@ -2467,7 +2454,7 @@ final class AppSession {
             captured.insert(.nearbyText)
         }
         if session.context.selectedText?.isEmpty == false { captured.insert(.selectedText) }
-        if !dictionaryEntries.filter({ !$0.isSnippet }).isEmpty { captured.insert(.dictionary) }
+        if !dictionaryEntries.isEmpty { captured.insert(.dictionary) }
         if session.toneInstruction?.isEmpty == false { captured.insert(.tone) }
 
         guard result.source == .remote,
