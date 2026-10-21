@@ -14,6 +14,7 @@ public struct ApplicationPaths: Sendable {
     public let preferencesFile: URL
     public let aiUsageFile: URL
     public let dailyUsageFile: URL
+    public let termCandidatesFile: URL
     public let audioDirectory: URL
 
     public init(rootDirectory: URL) {
@@ -23,6 +24,7 @@ public struct ApplicationPaths: Sendable {
         self.preferencesFile = rootDirectory.appending(path: "preferences.json")
         self.aiUsageFile = rootDirectory.appending(path: "ai-usage.json")
         self.dailyUsageFile = rootDirectory.appending(path: "usage-days.json")
+        self.termCandidatesFile = rootDirectory.appending(path: "term-candidates.json")
         self.audioDirectory = rootDirectory.appending(path: "Audio", directoryHint: .isDirectory)
     }
 

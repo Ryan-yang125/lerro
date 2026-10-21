@@ -41,6 +41,11 @@ struct HomeView: View {
             .padding(.top, 6)
             .padding(.bottom, 8)
             HomeStatCards(statistics: statistics)
+            if !session.dictionaryWeekSummary.learnedTerms.isEmpty || session.dictionaryWeekSummary.corrections > 0 {
+                HomeLearningCard(summary: session.dictionaryWeekSummary) {
+                    session.destination = .dictionary
+                }
+            }
             HomeActivityCard(statistics: statistics)
             HStack(alignment: .top, spacing: 12) {
                 HomeTopAppsCard(apps: statistics.topApps)

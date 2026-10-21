@@ -6,6 +6,13 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+### Added
+
+- Terms the AI corrects in two separate dictations are added to the dictionary
+  automatically. Each one shows where it came from and what it was misheard as,
+  and can be removed. The Home page shows what Lerro learned this week, and
+  dictionary words are counted as they are used.
+
 ### Removed
 
 - “Find Words in History” and the Suggestions tab on the Dictionary page. It sent

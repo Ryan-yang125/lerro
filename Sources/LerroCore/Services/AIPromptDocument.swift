@@ -34,6 +34,7 @@ public struct AIPromptExample: Hashable, Sendable, Identifiable {
     public var said: String
     public var context: [AIPromptExampleContext]
     public var fixes: [AIWordFix]
+    public var terms: [String]
     public var output: String
 
     public init(
@@ -42,6 +43,7 @@ public struct AIPromptExample: Hashable, Sendable, Identifiable {
         said: String,
         context: [AIPromptExampleContext],
         fixes: [AIWordFix],
+        terms: [String] = [],
         output: String
     ) {
         self.id = id
@@ -49,6 +51,7 @@ public struct AIPromptExample: Hashable, Sendable, Identifiable {
         self.said = said
         self.context = context
         self.fixes = fixes
+        self.terms = terms
         self.output = output
     }
 }
@@ -117,7 +120,7 @@ public struct AIPromptDocument: Hashable, Sendable, Identifiable {
                 AIPromptSection(
                     id: "format",
                     title: "返回格式",
-                    summary: "规定模型怎么返回结果：先列出改了哪些词，再给最终文字。Lerro 按这个格式读取。",
+                    summary: "规定模型怎么返回结果：先列出改了哪些词，再标出其中的专有名词，最后给最终文字。Lerro 按这个格式读取。",
                     text: AIPromptTexts.dictateFormat
                 )
             ],
@@ -224,12 +227,14 @@ public struct AIPromptDocument: Hashable, Sendable, Identifiable {
             let fixes = (output["fixes"] as? [[String]] ?? []).compactMap { pair in
                 pair.count == 2 ? AIWordFix(recognized: pair[0], corrected: pair[1]) : nil
             }
+            let terms = output["terms"] as? [String] ?? []
             return AIPromptExample(
                 id: index + 1,
                 title: dictateExampleTitles[index],
                 said: (input["raw_data"] as? [String: Any])?["transcript"] as? String ?? "",
                 context: context,
                 fixes: fixes,
+                terms: terms,
                 output: output["text"] as? String ?? ""
             )
         }
@@ -269,43 +274,43 @@ private enum AIPromptTexts {
     static let dictateExamples = #"""
     Example 1 — selected text provides context
     Input: {"raw_data":{"transcript":"补一句预计下周一完成"},"workspace":{"application_type":"document","cursor_before":"接口联调已经完成。","selected_text":"移动端仍在测试。"},"personalization":{"tone":"简洁"}}
-    Output: {"fixes":[],"text":"预计下周一完成。"}
+    Output: {"fixes":[],"terms":[],"text":"预计下周一完成。"}
 
     Example 2 — explicit correction
     Input: {"raw_data":{"transcript":"我们周二下午见，等一下，改到周三上午十点"},"workspace":{"application_type":"chat"},"personalization":{"tone":"自然"}}
-    Output: {"fixes": [], "text": "我们改到周三上午十点见。"}
+    Output: {"fixes": [], "terms": [], "text": "我们改到周三上午十点见。"}
 
     Example 3 — meaningful emphasis
     Input: {"raw_data":{"transcript":"这个功能真的真的很重要速度非常非常快"},"workspace":{"application_type":"chat"},"personalization":{"tone":"自然"}}
-    Output: {"fixes": [], "text": "这个功能真的真的很重要，速度非常非常快。"}
+    Output: {"fixes": [], "terms": [], "text": "这个功能真的真的很重要，速度非常非常快。"}
 
     Example 4 — explicit list
     Input: {"raw_data":{"transcript":"有三个检查项第一确认签名第二验证公证第三跑隔离环境"},"workspace":{"application_type":"document"},"personalization":{"tone":"清晰"}}
-    Output: {"fixes": [], "text": "有三个检查项：\n1. 确认签名\n2. 验证公证\n3. 运行隔离环境测试"}
+    Output: {"fixes": [], "terms": [], "text": "有三个检查项：\n1. 确认签名\n2. 验证公证\n3. 运行隔离环境测试"}
 
     Example 5 — spoken paragraph controls
     Input: {"raw_data":{"transcript":"结论可以上线下一段风险有两个第一峰值延迟第二供应商限流下一段建议先灰度百分之十"},"workspace":{"application_type":"document"},"personalization":{"tone":"清晰"}}
-    Output: {"fixes": [], "text": "结论：可以上线。\n\n风险有两个：\n1. 峰值延迟\n2. 供应商限流\n\n建议先灰度百分之十。"}
+    Output: {"fixes": [], "terms": [], "text": "结论：可以上线。\n\n风险有两个：\n1. 峰值延迟\n2. 供应商限流\n\n建议先灰度百分之十。"}
 
     Example 6 — priority, deadline, and changed decision
     Input: {"raw_data":{"transcript":"周四前更新说明、买线材、跑验收。验收最重要放第一。线材不用买了找小林借"},"workspace":{"application_type":"notes"},"personalization":{"tone":"便于扫读"}}
-    Output: {"fixes": [], "text": "周四前完成：\n1. 跑验收（最重要）\n2. 更新说明\n3. 找小林借线材"}
+    Output: {"fixes": [], "terms": [], "text": "周四前完成：\n1. 跑验收（最重要）\n2. 更新说明\n3. 找小林借线材"}
 
     Example 7 — explicitly excluded aside
     Input: {"raw_data":{"transcript":"我们周五发布，顺便说一下日期还要确认这句不用写进去，发布说明今天先完成"},"workspace":{"application_type":"chat"},"personalization":{"tone":"直接"}}
-    Output: {"fixes": [], "text": "我们周五发布。发布说明今天先完成。"}
+    Output: {"fixes": [], "terms": [], "text": "我们周五发布。发布说明今天先完成。"}
 
     Example 8 — speech recognition errors and known terms
     Input: {"raw_data":{"transcript":"把叉扣的构建缓存清一下，这跟上次那个问题不是一个码了，然后让罗拉看一下那个Zorp型参数"},"workspace":{"application_type":"chat"},"personalization":{"known_terms":["Xcode","Laura"],"tone":"自然"}}
-    Output: {"fixes": [["叉扣", "Xcode"], ["不是一个码", "不是一码事"], ["罗拉", "Laura"]], "text": "把 Xcode 的构建缓存清一下，这跟上次那个问题不是一码事。然后让 Laura 看一下那个 Zorp 型参数。"}
+    Output: {"fixes": [["叉扣", "Xcode"], ["不是一个码", "不是一码事"], ["罗拉", "Laura"]], "terms": ["Xcode", "Laura"], "text": "把 Xcode 的构建缓存清一下，这跟上次那个问题不是一码事。然后让 Laura 看一下那个 Zorp 型参数。"}
 
     Example 9 — words that sound right but are not real words or do not fit the sentence
     Input: {"raw_data":{"transcript":"嗯这个超参数要用网格搜锁来调，跑完看一下精准绿跟召回绿，每个任务再估一下公式，结论写到Nocion里，设计稿让 Bloxy 那边出"},"workspace":{"application_type":"chat"},"personalization":{"known_terms":["Notion","Figma"],"tone":"自然"}}
-    Output: {"fixes": [["网格搜锁", "网格搜索"], ["精准绿", "精准率"], ["召回绿", "召回率"], ["公式", "工时"], ["Nocion", "Notion"]], "text": "这个超参数要用网格搜索来调，跑完看一下精准率跟召回率，每个任务再估一下工时，结论写到 Notion 里，设计稿让 Bloxy 那边出。"}
+    Output: {"fixes": [["网格搜锁", "网格搜索"], ["精准绿", "精准率"], ["召回绿", "召回率"], ["公式", "工时"], ["Nocion", "Notion"]], "terms": ["网格搜索", "精准率", "召回率", "Notion"], "text": "这个超参数要用网格搜索来调，跑完看一下精准率跟召回率，每个任务再估一下工时，结论写到 Notion 里，设计稿让 Bloxy 那边出。"}
     """#
 
     static let dictateFormat = #"""
-    Return only a JSON object {"fixes": [[recognized, corrected], ...], "text": final text}. First list in "fixes" every recognized word you judged to be a recognition error and its correction (empty when none); an unfamiliar name such as Bloxy is not an error just because a known term exists. Then put the final polished text in "text": it applies the word fixes and every cleanup rule, removing fillers such as 嗯、呃、啊, stutters such as 不不不, false starts, and accidental repetition. No explanation or Markdown fence.
+    Return only a JSON object {"fixes": [[recognized, corrected], ...], "terms": [corrected, ...], "text": final text}. First list in "fixes" every recognized word you judged to be a recognition error and its correction (empty when none); an unfamiliar name such as Bloxy is not an error just because a known term exists. Then list in "terms" the corrected words from "fixes" that are names of people, products, companies or places, acronyms, or specialised jargon (empty when none); leave out ordinary words. Then put the final polished text in "text": it applies the word fixes and every cleanup rule, removing fillers such as 嗯、呃、啊, stutters such as 不不不, false starts, and accidental repetition. No explanation or Markdown fence.
     """#
 
     static let translateRules = #"""

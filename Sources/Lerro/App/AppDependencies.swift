@@ -22,6 +22,7 @@ struct AppDependencies: Sendable {
     let preferences: any PreferencesRepository
     let aiUsage: any AIUsageRepository
     let dailyUsage: any DailyUsageRepository
+    let termLearning: any TermLearningRepository
     let intelligence: any IntelligenceProcessing
     let captureTrace: any CaptureTraceObserving
 
@@ -58,6 +59,7 @@ struct AppDependencies: Sendable {
             preferences: preferences,
             aiUsage: aiUsage,
             dailyUsage: FileDailyUsageRepository(fileURL: paths.dailyUsageFile),
+            termLearning: FileTermLearningRepository(fileURL: paths.termCandidatesFile),
             intelligence: PipelineIntelligenceService(
                 remoteRuntime: OpenAICompatibleRemoteLanguageModelRuntime(),
                 usageRecorder: aiUsage
@@ -111,9 +113,36 @@ struct AppDependencies: Sendable {
             preferences: InMemoryPreferencesRepository(value: preferences),
             aiUsage: InMemoryAIUsageRepository(records: fixtureAIUsageRecords(history: history)),
             dailyUsage: InMemoryDailyUsageRepository(days: fixtureDailyUsage()),
+            termLearning: InMemoryTermLearningRepository(state: fixtureTermLearningState()),
             intelligence: FixtureIntelligence(),
             captureTrace: DiscardingCaptureTraceObserver()
         )
+    }
+
+    private enum FixtureID {
+        static let capexEntry = UUID(uuidString: "5C0F1B52-0000-4000-8000-000000000001")!
+        static let swiftPMEntry = UUID(uuidString: "5C0F1B52-0000-4000-8000-000000000002")!
+        static let anthropicEntries = [
+            UUID(uuidString: "5C0F1B52-0000-4000-8000-000000000011")!,
+            UUID(uuidString: "5C0F1B52-0000-4000-8000-000000000012")!
+        ]
+        static let liteEntries = [
+            UUID(uuidString: "5C0F1B52-0000-4000-8000-000000000021")!,
+            UUID(uuidString: "5C0F1B52-0000-4000-8000-000000000022")!
+        ]
+    }
+
+    private static func fixtureTermLearningState() -> TermLearningState {
+        let now = Date.now
+        return TermLearningState(candidates: [
+            TermLearner.normalized("CapEx"): TermCandidate(
+                term: "CapEx",
+                heardAs: ["CAPax"],
+                entryIDs: [FixtureID.capexEntry],
+                firstSeenAt: now,
+                lastSeenAt: now
+            )
+        ])
     }
 
     private static func fixtureHistory() -> [HistoryEntry] {
@@ -140,6 +169,9 @@ struct AppDependencies: Sendable {
                 .firstPartial: 0.9
             ]
         )
+        func daysAgo(_ days: Int) -> Date {
+            calendar.date(byAdding: .day, value: -days, to: today) ?? today
+        }
         let dictionary = fixtureDictionary().filter { !$0.isSnippet }
         var callIndex = 0
         func aiCall(
@@ -152,7 +184,8 @@ struct AppDependencies: Sendable {
             window: String?,
             cursorBefore: String?,
             target: String?,
-            fixes: [[String]]
+            fixes: [[String]],
+            terms: [String]
         ) -> AICallTrace? {
             let task: IntelligenceTask = mode == .translation ? .translate : .polish
             let request = IntelligenceRequest(
@@ -175,7 +208,7 @@ struct AppDependencies: Sendable {
             } else {
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.withoutEscapingSlashes]
-                let payload = FixtureDictateResponse(fixes: fixes, text: final)
+                let payload = FixtureDictateResponse(fixes: fixes, terms: terms, text: final)
                 response = (try? encoder.encode(payload)).map { String(decoding: $0, as: UTF8.self) } ?? final
             }
             defer { callIndex += 1 }
@@ -201,6 +234,7 @@ struct AppDependencies: Sendable {
             _ day: Date,
             _ hour: Int,
             _ minute: Int,
+            id: UUID = UUID(),
             mode: CaptureMode = .dictation,
             raw: String,
             final: String,
@@ -212,9 +246,11 @@ struct AppDependencies: Sendable {
             status: HistoryStatus = .completed,
             enhanced: Bool = true,
             target: String? = nil,
-            fixes: [[String]] = []
+            fixes: [[String]] = [],
+            terms: [String] = []
         ) -> HistoryEntry {
             var item = HistoryEntry(
+                id: id,
                 createdAt: at(day, hour, minute),
                 mode: mode,
                 rawText: raw,
@@ -243,7 +279,8 @@ struct AppDependencies: Sendable {
                     window: window,
                     cursorBefore: cursorBefore,
                     target: target,
-                    fixes: fixes
+                    fixes: fixes,
+                    terms: terms
                 )
             }
             return item
@@ -255,9 +292,14 @@ struct AppDependencies: Sendable {
             entry(today, 9, 48, raw: "那个明天下午三点把新版发布清单发给设计和那个工程团队。",
                   final: "明天下午三点把新版发布清单发给设计和工程团队。",
                   duration: 6.2, app: "邮件", bundle: "com.apple.mail", window: "新版发布"),
-            entry(today, 11, 20, raw: "这个 PR 嗯先不合，等 CI 跑完再看一下签名那一步。",
+            entry(today, 11, 20, id: FixtureID.swiftPMEntry, raw: "这个 PR 嗯先不合，等 CI 跑完再看一下签名那一步。",
                   final: "这个 PR 先不合，等 CI 跑完再看一下签名那一步。",
                   duration: 7.4, app: "Slack", bundle: "com.tinyspeck.slackmacgap", window: "#release"),
+            entry(today, 10, 15, id: FixtureID.capexEntry,
+                  raw: "这个季度的 CAPax 预算先不动，等财务确认。",
+                  final: "这个季度的 CapEx 预算先不动，等财务确认。",
+                  duration: 6.6, app: "邮件", bundle: "com.apple.mail", window: "预算",
+                  fixes: [["CAPax", "CapEx"]], terms: ["CapEx"]),
             entry(today, 13, 42, raw: "周五之前把词典导入的 CSV 格式整理成文档，就是顺便补上示例。",
                   final: "周五之前把词典导入的 CSV 格式整理成文档，顺便补上示例。",
                   duration: 9.1, app: "备忘录", bundle: "com.apple.Notes"),
@@ -270,7 +312,28 @@ struct AppDependencies: Sendable {
                   duration: 7.0, app: "Claude", bundle: "com.anthropic.claudefordesktop",
                   cursorBefore: "关于启动动画，我的想法是：",
                   status: .failed,
-                  fixes: [["哈德", "HUD"], ["标识", "标志"]]),
+                  fixes: [["哈德", "HUD"], ["标识", "标志"]],
+                  terms: ["HUD"]),
+            entry(daysAgo(3), 10, 30, id: FixtureID.anthropicEntries[0],
+                  raw: "我在看 ensorpic 新模型的发布说明。",
+                  final: "我在看 Anthropic 新模型的发布说明。",
+                  duration: 5.9, app: "Claude", bundle: "com.anthropic.claudefordesktop",
+                  fixes: [["ensorpic", "Anthropic"]], terms: ["Anthropic"]),
+            entry(daysAgo(2), 15, 5, id: FixtureID.anthropicEntries[1],
+                  raw: "ensorpic 这周又更新了接口文档。",
+                  final: "Anthropic 这周又更新了接口文档。",
+                  duration: 4.8, app: "Slack", bundle: "com.tinyspeck.slackmacgap", window: "#dev",
+                  fixes: [["ensorpic", "Anthropic"]], terms: ["Anthropic"]),
+            entry(daysAgo(5), 17, 20, id: FixtureID.liteEntries[0],
+                  raw: "先出 light 版本，再补完整功能。",
+                  final: "先出 Lite 版本，再补完整功能。",
+                  duration: 5.2, app: "备忘录", bundle: "com.apple.Notes",
+                  fixes: [["light", "Lite"]], terms: ["Lite"]),
+            entry(daysAgo(4), 9, 40, id: FixtureID.liteEntries[1],
+                  raw: "官网上要加一个 light 版的下载入口。",
+                  final: "官网上要加一个 Lite 版的下载入口。",
+                  duration: 5.7, app: "Claude", bundle: "com.anthropic.claudefordesktop",
+                  fixes: [["light", "Lite"]], terms: ["Lite"]),
             entry(yesterday, 10, 2, raw: "今天上午先把设置窗口的几个标签页过一遍。",
                   final: "今天上午先把设置窗口的几个标签页过一遍。",
                   duration: 5.0, app: "备忘录", bundle: "com.apple.Notes", enhanced: false),
@@ -359,6 +422,7 @@ struct AppDependencies: Sendable {
 
     private struct FixtureDictateResponse: Encodable {
         var fixes: [[String]]
+        var terms: [String]
         var text: String
     }
 
@@ -511,30 +575,53 @@ struct AppDependencies: Sendable {
                 source: .learned,
                 createdAt: ago(20),
                 updatedAt: ago(20),
-                useCount: 3
+                useCount: 3,
+                heardAs: ["swift pm"],
+                learnedFromEntryIDs: [FixtureID.swiftPMEntry],
+                lastUsedAt: ago(3)
+            ),
+            DictionaryEntry(
+                phrase: "Anthropic",
+                source: .learned,
+                createdAt: ago(2),
+                updatedAt: ago(2),
+                useCount: 2,
+                heardAs: ["ensorpic"],
+                learnedFromEntryIDs: FixtureID.anthropicEntries,
+                lastUsedAt: ago(1)
+            ),
+            DictionaryEntry(
+                phrase: "Lite",
+                source: .learned,
+                createdAt: ago(4),
+                updatedAt: ago(4),
+                useCount: 1,
+                heardAs: ["light"],
+                learnedFromEntryIDs: FixtureID.liteEntries,
+                lastUsedAt: ago(4)
             ),
             DictionaryEntry(
                 phrase: "code x",
                 replacement: "Codex",
                 source: .learned,
-                createdAt: ago(1),
-                updatedAt: ago(1),
+                createdAt: ago(12),
+                updatedAt: ago(12),
                 useCount: 5
             ),
             DictionaryEntry(
                 phrase: "乐若",
                 replacement: "Lerro",
                 source: .learned,
-                createdAt: ago(2),
-                updatedAt: ago(2),
+                createdAt: ago(9),
+                updatedAt: ago(9),
                 useCount: 2
             ),
             DictionaryEntry(
                 phrase: "swift ui",
                 replacement: "SwiftUI",
                 source: .learned,
-                createdAt: ago(5),
-                updatedAt: ago(5),
+                createdAt: ago(16),
+                updatedAt: ago(16),
                 useCount: 3
             )
         ]

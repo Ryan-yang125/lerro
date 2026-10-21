@@ -25,8 +25,18 @@ this record, and it is deleted with the entry. It does not store focused-value
 fingerprints, the system prompt text (only its version), or the API key.
 
 Dictionary records contain a phrase, replacement, source, optional application
-scope, and usage metadata. Learned entries can be reviewed, edited, promoted to
-global scope, undone from the learning notification, or deleted.
+scope, how many times and when the entry was last used (updated locally after each
+delivered dictation), and, for terms learned from AI corrections, the misheard
+forms and the IDs of the history entries they came from. Learned entries can be
+reviewed, edited, promoted to global scope, undone from the learning
+notification, or deleted.
+
+Term learning state in `term-candidates.json` (mode `0600`) holds candidate terms
+the AI corrected once, their misheard forms, the IDs of the history entries they
+appeared in, and terms you removed so they are not learned again. A term is added
+to the dictionary after it is corrected in two separate dictations. The file is
+deleted together with all history, and nothing is written while history is set to
+never save or automatic dictionary learning is off.
 
 AI usage records in `ai-usage.json` describe each remote model call: time,
 feature, provider, model ID, input, output and cached token counts reported by

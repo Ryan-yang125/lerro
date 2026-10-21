@@ -59,7 +59,7 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
    partial 只用于预览。`TranscriptSpacing.normalize` 去掉中文标点两侧的空格。Apple Speech 不接收词典内容。
 4. **处理**：`raw` 模式把 Apple transcript 直接交付。`remote` 模式下 Dictate 由 `PipelineIntelligenceService`
    润色，Translate 翻译。Dictate 的模型失败回退原始 transcript，Translate 保持明确失败。
-5. **交付**：见下节。成功后保存历史（`historyRetention == .never` 时跳过），更新用量，启动词典学习观察，
+5. **交付**：见下节。成功后保存历史（`historyRetention == .never` 时跳过），更新用量和词典使用次数，累计 AI 标出的专有名词，启动词典学习观察，
    清空 session，回到 `idle`。
 6. **取消**：取消信号贯穿启动、Speech、模型任务和 Command-V 提交前检查。统一清理：停止音频、释放 Core Audio
    静音快照并恢复输出音频、取消各类任务、删除未持久化录音、重置热键临时状态。
@@ -136,6 +136,13 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
   变化稳定 800 ms 后用本地 UTF-16 差异算法取最小 original/corrected span（前 80、后 40 个单元的上下文）。AI 返回严格 JSON
   的 0 至 3 个候选，confidence 不低于 0.7 且来源于输入 span 的候选保存为全局 learned 词条，HUD 显示 3 秒提示，可撤销。
   语义、事实、日期、语气、增删句或大段重写返回空候选。离开应用或字段、secure input、AX 不可用、新 capture、超时都会安静结束观察。
+- 专有名词学习：Dictate 的 JSON 回复含 `fixes`（听错 → 改对）和 `terms`（其中的专有名词）。历史记录保存成功、带 `aiCall`
+  且自动词典学习开关开启时，`AppSession` 调用 `TermLearner.observe` 累计候选；同一个词出现在 2 条不同听写里，就以
+  `phrase == replacement`、`source = .learned` 的常用词条加入词典，记录 `heardAs`（曾被听成的样子）和
+  `learnedFromEntryIDs`（来源历史记录），HUD 提示可撤销。撤销提示或在词典页删除这类词条会把词加入 `dismissed`，之后不再学习。
+  候选和 `dismissed` 由 `TermLearningRepository` 保存在 `term-candidates.json`。
+- 使用次数：每次听写写入成功后，`DictionaryUsageCounter` 对最终文字统计非快捷语词条，变化的词条 `useCount + 1`
+  并更新 `lastUsedAt`。首页的本周摘要由 `DictionaryWeek.summary` 从历史和词典计算，随首页统计一起刷新。
 
 ## 存储
 
@@ -146,7 +153,8 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 | --- | --- |
 | `preferences.json`（`0600`） | 偏好、Provider 配置、API Key、价格覆盖 |
 | `history.json` | 听写记录：raw/final 文本、路由、模型 ID、上下文类别、阶段耗时、交付状态、AI 调用原样记录（`aiCall`） |
-| `dictionary.json` | 词典 |
+| `dictionary.json` | 词典，含每个词条的使用次数、最近使用时间，以及自动学会词条的听错写法和来源历史 ID |
+| `term-candidates.json`（`0600`） | 专有名词学习状态：候选词、曾被听成的写法、出现过的历史记录 ID，以及被用户删除而不再学习的词；随全部历史一起删除，`historyRetention == .never` 时不写入 |
 | `ai-usage.json` | 远程调用的时间、功能、Provider、模型 ID、token 数、延迟、成败、所属历史 ID |
 | `usage-days.json` | 首页统计的每日汇总：字数、次数、时长、各应用字数、各小时次数；不含文字，保留 400 天 |
 | `Audio/` | 可选录音（CAF），`saveAudio` 默认关闭 |

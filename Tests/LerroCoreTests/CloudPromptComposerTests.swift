@@ -20,7 +20,7 @@ struct CloudPromptComposerTests {
         let payload = try decodePayload(prompts.user)
         let rawData = try #require(payload["raw_data"] as? [String: Any])
 
-        #expect(CloudPromptComposer.dictatePromptVersion == "J_input_method_fixes_json_v1")
+        #expect(CloudPromptComposer.dictatePromptVersion == "K_input_method_terms_json_v1")
         #expect(prompts.system.components(separatedBy: "Example ").count - 1 == 9)
         #expect(!prompts.system.contains("resolution exception"))
         #expect(!prompts.system.contains("Mina"))

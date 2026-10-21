@@ -452,6 +452,163 @@ struct AppSessionCoreFlowTests {
         #expect(await harness.intelligence.requests().last?.historyEntryID == entry?.id)
     }
 
+    private static let termFixResponse = """
+    {"fixes":[["CAPax","CapEx"]],"terms":["CapEx"],"text":"本季度 CapEx 预算不变"}
+    """
+
+    private func termLearningPreferences() -> UserPreferences {
+        var preferences = basePreferences()
+        preferences.intelligenceMode = .remote
+        preferences.remoteProvider = RemoteProviderConfiguration(
+            baseURL: "https://api.example.com/v1",
+            modelIdentifier: "test-model",
+            apiKey: "test-key"
+        )
+        return preferences
+    }
+
+    @Test("A term the AI corrects in two separate dictations is learned and shown in a toast")
+    @MainActor
+    func termCorrectedTwiceIsLearned() async throws {
+        let harness = makeHarness(
+            text: "本季度 CAPax 预算不变",
+            preferences: termLearningPreferences(),
+            intelligenceText: "本季度 CapEx 预算不变",
+            intelligenceResponse: Self.termFixResponse
+        )
+        await harness.session.start()
+
+        await dictate(harness.session)
+        #expect(await harness.dictionary.entries().isEmpty)
+        #expect(harness.session.termLearningStatus(for: "CapEx") == .pending(remaining: 1))
+        #expect(harness.session.dictionaryLearningToast == nil)
+
+        await dictate(harness.session)
+        #expect(await waitUntil { harness.session.dictionaryLearningToast != nil })
+        let entries = await harness.dictionary.entries()
+        let learned = try #require(entries.first)
+        #expect(entries.count == 1)
+        #expect(learned.source == .learned)
+        #expect(learned.phrase == "CapEx")
+        #expect(learned.replacement == "CapEx")
+        #expect(learned.heardAs == ["CAPax"])
+        #expect(learned.learnedFromEntryIDs.count == 2)
+        #expect(harness.session.dictionaryEntries.map(\.id) == [learned.id])
+        #expect(harness.session.termLearningStatus(for: "CapEx") == .inDictionary)
+        #expect(harness.session.dictionaryLearningToast?.phrase == "CAPax")
+        #expect(harness.session.dictionaryLearningToast?.replacement == "CapEx")
+    }
+
+    @Test("Deleting a learned term dismisses it so later dictations do not learn it again")
+    @MainActor
+    func deletingLearnedTermDismissesIt() async throws {
+        let harness = makeHarness(
+            text: "本季度 CAPax 预算不变",
+            preferences: termLearningPreferences(),
+            intelligenceText: "本季度 CapEx 预算不变",
+            intelligenceResponse: Self.termFixResponse
+        )
+        await harness.session.start()
+        await dictate(harness.session)
+        await dictate(harness.session)
+        let learned = try #require(await harness.dictionary.entries().first)
+
+        harness.session.deleteDictionaryEntry(learned)
+        #expect(await waitUntil { await harness.dictionary.entries().isEmpty })
+        #expect(await waitUntil {
+            await harness.termLearning.load().dismissed.contains(TermLearner.normalized("CapEx"))
+        })
+
+        await dictate(harness.session)
+        await dictate(harness.session)
+        #expect(await harness.dictionary.entries().isEmpty)
+        #expect(harness.session.termLearningStatus(for: "CapEx") == .notLearning)
+    }
+
+    @Test("Undoing the learning toast dismisses the learned term")
+    @MainActor
+    func undoingToastDismissesTerm() async {
+        let harness = makeHarness(
+            text: "本季度 CAPax 预算不变",
+            preferences: termLearningPreferences(),
+            intelligenceText: "本季度 CapEx 预算不变",
+            intelligenceResponse: Self.termFixResponse
+        )
+        await harness.session.start()
+        await dictate(harness.session)
+        await dictate(harness.session)
+        #expect(await waitUntil { harness.session.dictionaryLearningToast != nil })
+
+        harness.session.undoDictionaryLearning()
+        #expect(await waitUntil { await harness.dictionary.entries().isEmpty })
+        #expect(await waitUntil {
+            await harness.termLearning.load().dismissed.contains(TermLearner.normalized("CapEx"))
+        })
+    }
+
+    @Test("Term learning stays off when history is never saved or the learning setting is off")
+    @MainActor
+    func termLearningHonorsGates() async {
+        var noHistory = termLearningPreferences()
+        noHistory.historyRetention = .never
+        var learningOff = termLearningPreferences()
+        learningOff.automaticDictionaryLearningEnabled = false
+        for preferences in [noHistory, learningOff] {
+            let harness = makeHarness(
+                text: "本季度 CAPax 预算不变",
+                preferences: preferences,
+                intelligenceText: "本季度 CapEx 预算不变",
+                intelligenceResponse: Self.termFixResponse
+            )
+            await harness.session.start()
+            await dictate(harness.session)
+            await dictate(harness.session)
+            #expect(await harness.dictionary.entries().isEmpty)
+            #expect(await harness.termLearning.load() == .empty)
+        }
+    }
+
+    @Test("Deleting all history clears term learning")
+    @MainActor
+    func deleteAllHistoryClearsTermLearning() async {
+        let harness = makeHarness(
+            text: "本季度 CAPax 预算不变",
+            preferences: termLearningPreferences(),
+            intelligenceText: "本季度 CapEx 预算不变",
+            intelligenceResponse: Self.termFixResponse
+        )
+        await harness.session.start()
+        await dictate(harness.session)
+        #expect(await harness.termLearning.load().candidates.count == 1)
+
+        harness.session.deleteAllHistory()
+        #expect(await waitUntil { await harness.termLearning.load() == .empty })
+        #expect(await waitUntil { harness.session.termLearningState == .empty })
+    }
+
+    @Test("A delivered dictation increments the use count of dictionary entries it contains")
+    @MainActor
+    func dictionaryUsageCounting() async throws {
+        let entry = DictionaryEntry(phrase: "CapEx")
+        let unused = DictionaryEntry(phrase: "Kubernetes")
+        let harness = makeHarness(
+            text: "本季度 CAPax 预算不变",
+            preferences: termLearningPreferences(),
+            dictionary: InMemoryDictionaryRepository(entries: [entry, unused]),
+            intelligenceText: "本季度 CapEx 预算不变"
+        )
+        await harness.session.start()
+        await dictate(harness.session)
+
+        #expect(await waitUntil {
+            await harness.dictionary.entries().first { $0.id == entry.id }?.useCount == 1
+        })
+        let entries = await harness.dictionary.entries()
+        let used = try #require(entries.first { $0.id == entry.id })
+        #expect(used.lastUsedAt != nil)
+        #expect(entries.first { $0.id == unused.id }?.useCount == 0)
+    }
+
     @Test("Showing a history entry selects the page and sets the focus and highlight IDs")
     @MainActor
     func showHistoryEntryFocusesEntry() async {
@@ -914,6 +1071,7 @@ struct AppSessionCoreFlowTests {
         deliveryFails: Bool = false,
         dictionary: InMemoryDictionaryRepository? = nil,
         intelligenceText: String? = nil,
+        intelligenceResponse: String? = nil,
         learningDecision: DictionaryLearningDecision = .noLearning,
         applications: [ApplicationDescriptor] = [],
         intelligenceFails: Bool = false,
@@ -932,6 +1090,7 @@ struct AppSessionCoreFlowTests {
         let observer = StubObserver()
         let intelligence = StubIntelligence(
             resultText: intelligenceText ?? text,
+            responseText: intelligenceResponse,
             learningDecision: learningDecision,
             fails: intelligenceFails,
             classificationDelay: classificationDelay
@@ -939,6 +1098,7 @@ struct AppSessionCoreFlowTests {
         let trace = RecordingTraceObserver()
         let history = InMemoryHistoryRepository(entries: historyEntries)
         let dictionary = dictionary ?? InMemoryDictionaryRepository()
+        let termLearning = InMemoryTermLearningRepository()
         let aiUsage = InMemoryAIUsageRepository(records: aiUsageRecords)
         let preferences = preferences ?? basePreferences()
         let dependencies = AppDependencies(
@@ -960,6 +1120,7 @@ struct AppSessionCoreFlowTests {
             preferences: InMemoryPreferencesRepository(value: preferences),
             aiUsage: aiUsage,
             dailyUsage: InMemoryDailyUsageRepository(),
+            termLearning: termLearning,
             intelligence: intelligence,
             captureTrace: trace
         )
@@ -974,6 +1135,7 @@ struct AppSessionCoreFlowTests {
             intelligence: intelligence,
             history: history,
             dictionary: dictionary,
+            termLearning: termLearning,
             aiUsage: aiUsage,
             trace: trace
         )
@@ -1014,6 +1176,7 @@ private struct Harness {
     let intelligence: StubIntelligence
     let history: InMemoryHistoryRepository
     let dictionary: InMemoryDictionaryRepository
+    let termLearning: InMemoryTermLearningRepository
     let aiUsage: InMemoryAIUsageRepository
     let trace: RecordingTraceObserver
 }
@@ -1233,6 +1396,7 @@ private actor StubObserver: DeliveredTextObserving {
 
 private actor StubIntelligence: IntelligenceProcessing {
     private let resultText: String
+    private let responseText: String?
     private let learningDecision: DictionaryLearningDecision
     private let fails: Bool
     private let classificationDelay: Duration?
@@ -1240,10 +1404,12 @@ private actor StubIntelligence: IntelligenceProcessing {
     private var classifications = 0
 
     init(
-        resultText: String, learningDecision: DictionaryLearningDecision,
+        resultText: String, responseText: String? = nil,
+        learningDecision: DictionaryLearningDecision,
         fails: Bool = false, classificationDelay: Duration? = nil
     ) {
         self.resultText = resultText
+        self.responseText = responseText
         self.learningDecision = learningDecision
         self.fails = fails
         self.classificationDelay = classificationDelay
@@ -1264,7 +1430,7 @@ private actor StubIntelligence: IntelligenceProcessing {
                     provider: .custom,
                     modelIdentifier: "test-model",
                     userPrompt: "{\"raw_data\":{\"transcript\":\"\(request.transcript)\"}}",
-                    response: resultText,
+                    response: responseText ?? resultText,
                     tokens: AITokenUsage(inputTokens: 100, outputTokens: 10),
                     latencyMilliseconds: 500,
                     startedAt: .now

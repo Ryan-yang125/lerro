@@ -75,6 +75,8 @@ final class AppSession {
     var audioInputDevices: [AudioInputDevice] = []
     var preferences = UserPreferences()
     private(set) var homeStatistics: HomeStatistics = .empty
+    private(set) var termLearningState: TermLearningState = .empty
+    private(set) var dictionaryWeekSummary: DictionaryWeekSummary = .empty
     private(set) var recentHistoryEntries: [HistoryEntry] = []
     var visualFixturePresentation: String?
     var isPanelOnlyVisualFixture = false
@@ -423,7 +425,17 @@ final class AppSession {
                 "词典读取失败：\(error.localizedDescription)"
             ).localizedDescription
         }
+        do {
+            termLearningState = try await dependencies.termLearning.load()
+        } catch {
+            termLearningState = .empty
+            Self.usageLogger.error("Term learning load failed: \(String(describing: type(of: error)), privacy: .public)")
+        }
         updateUsageSummary()
+    }
+
+    func termLearningStatus(for term: String) -> TermLearningStatus {
+        TermLearner.status(of: term, state: termLearningState, dictionary: dictionaryEntries)
     }
 
     func refreshLanguageResources(invalidatePreparations: Bool = false) async {
@@ -1075,6 +1087,10 @@ final class AppSession {
     func undoDictionaryLearning() {
         guard let toast = dictionaryLearningToast else { return }
         dismissDictionaryLearningToast()
+        let learnedTerms = dictionaryEntries
+            .filter { toast.entryIDs.contains($0.id) && !$0.learnedFromEntryIDs.isEmpty }
+            .map(\.replacement)
+        dismissLearnedTerms(learnedTerms)
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
@@ -1241,6 +1257,9 @@ final class AppSession {
     }
 
     func deleteDictionaryEntry(_ entry: DictionaryEntry) {
+        if !entry.learnedFromEntryIDs.isEmpty {
+            dismissLearnedTerms([entry.replacement])
+        }
         Task { [weak self] in
             guard let self else { return }
             do {
@@ -1321,6 +1340,8 @@ final class AppSession {
                 try await deleteAudioFiles(relativePaths: allEntries.map(\.audioRelativePath))
                 try await dependencies.history.deleteAll()
                 try await dependencies.dailyUsage.deleteAll()
+                try await dependencies.termLearning.deleteAll()
+                termLearningState = .empty
             } catch {
                 currentError = userFacingError(error, context: "本地数据处理失败")
             }
@@ -2127,6 +2148,12 @@ final class AppSession {
         markTrace(.historySaved, generation: generation)
         try await applyRetentionAndClean(preferences.historyRetention, now: .now)
         await refreshHistoryAndUsage()
+        if session.mode == .dictation {
+            await recordDictionaryUsage(in: result.text)
+            if preferences.historyRetention != .never {
+                await learnTerms(from: history)
+            }
+        }
         if let systemReceipt,
            session.mode == .dictation,
            session.intelligenceMode != .raw,
@@ -2243,11 +2270,25 @@ final class AppSession {
         }
         guard let first = saved.first else { return 0 }
         await refreshDictionaryAndUsage()
+        presentDictionaryLearningToast(
+            saved: saved,
+            phrase: first.phrase,
+            applicationName: applicationName
+        )
+        return saved.count
+    }
+
+    private func presentDictionaryLearningToast(
+        saved: [DictionaryEntry],
+        phrase: String,
+        applicationName: String
+    ) {
+        guard let first = saved.first else { return }
         dictionaryLearningToastTask?.cancel()
         let toast = DictionaryLearningToast(
             id: UUID(),
             entryIDs: saved.map(\.id),
-            phrase: first.phrase,
+            phrase: phrase,
             replacement: first.replacement,
             applicationName: applicationName,
             count: saved.count
@@ -2255,7 +2296,75 @@ final class AppSession {
         dictionaryLearningToast = toast
         updateHUD()
         scheduleDictionaryLearningToastDismissal(toastID: toast.id)
-        return saved.count
+    }
+
+    /// Counts proper nouns the AI corrected in this saved dictation. A term enters
+    /// the dictionary after it appears in two different history entries.
+    private func learnTerms(from history: HistoryEntry) async {
+        guard preferences.automaticDictionaryLearningEnabled,
+              let call = history.aiCall else { return }
+        let fixes = call.fixes
+        let terms = call.terms
+        guard !fixes.isEmpty, !terms.isEmpty else { return }
+        let outcome = TermLearner.observe(
+            state: termLearningState,
+            fixes: fixes,
+            terms: terms,
+            finalText: history.finalText,
+            entryID: history.id,
+            dictionary: dictionaryEntries,
+            now: .now
+        )
+        do {
+            for entry in outcome.learned {
+                try await dependencies.dictionary.save(entry)
+            }
+            termLearningState = outcome.state
+            try await dependencies.termLearning.save(outcome.state)
+        } catch {
+            Self.usageLogger.error("Term learning save failed: \(String(describing: type(of: error)), privacy: .public)")
+            await refreshDictionaryAndUsage()
+            return
+        }
+        guard let first = outcome.learned.first else { return }
+        await refreshDictionaryAndUsage()
+        presentDictionaryLearningToast(
+            saved: outcome.learned,
+            phrase: first.heardAs.last ?? first.phrase,
+            applicationName: history.applicationName
+        )
+    }
+
+    private func dismissLearnedTerms(_ terms: [String]) {
+        guard !terms.isEmpty else { return }
+        for term in terms {
+            termLearningState = TermLearner.dismiss(term, in: termLearningState)
+        }
+        let snapshot = termLearningState
+        Task { [dependencies] in
+            do {
+                try await dependencies.termLearning.save(snapshot)
+            } catch {
+                Self.usageLogger.error("Term learning save failed: \(String(describing: type(of: error)), privacy: .public)")
+            }
+        }
+    }
+
+    private func recordDictionaryUsage(in text: String) async {
+        let used = DictionaryUsageCounter.entriesUsed(
+            in: text,
+            dictionary: dictionaryEntries,
+            now: .now
+        )
+        guard !used.isEmpty else { return }
+        do {
+            for entry in used {
+                try await dependencies.dictionary.save(entry)
+            }
+        } catch {
+            Self.usageLogger.error("Dictionary usage save failed: \(String(describing: type(of: error)), privacy: .public)")
+        }
+        await refreshDictionaryAndUsage()
     }
 
     func learnOnboardingCorrection(
@@ -2567,6 +2676,15 @@ final class AppSession {
     private func rebuildHomeStatistics() {
         homeStatistics = HomeStatistics(days: dailyUsageDays, now: .now, calendar: .current)
         homeStatisticsDay = Calendar.current.startOfDay(for: .now)
+        rebuildDictionaryWeekSummary()
+    }
+
+    private func rebuildDictionaryWeekSummary() {
+        dictionaryWeekSummary = DictionaryWeek.summary(
+            history: historyUsageEntries,
+            dictionary: dictionaryEntries,
+            now: .now
+        )
     }
 
     private func recordDailyUsage(_ entry: HistoryEntry) async {
@@ -2583,6 +2701,7 @@ final class AppSession {
         recentHistoryEntries = Array(
             historyUsageEntries.sorted { $0.createdAt > $1.createdAt }.prefix(6)
         )
+        rebuildDictionaryWeekSummary()
     }
 
     private func normalizedHistorySearch(_ value: String) -> String {

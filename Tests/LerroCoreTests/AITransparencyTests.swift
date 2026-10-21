@@ -10,7 +10,7 @@ struct AITransparencyTests {
     @Test("Prompt documents keep the sent prompt bytes unchanged")
     func promptHashes() {
         #expect(sha256(AIPromptDocument.document(for: .dictate).fullText)
-            == "9bdd084286a436b35bcaf5e2c0203265b3bdab76a0c8d63c46a98f540645febe")
+            == "2d9fe5c9dc6cedced9215d48e7ddc43f842aca348ff7f355fa241dd2fccf89f7")
         #expect(sha256(AIPromptDocument.document(for: .translate).fullText)
             == "a79abd3ac992bf91e8b3f0ddbeeec8020d0e35022ca8de636e4e53d5bf677bae")
         #expect(sha256(AIPromptDocument.document(for: .dictionaryLearning).fullText)
@@ -54,6 +54,7 @@ struct AITransparencyTests {
             AIPromptExampleContext(label: "语气", value: "简洁")
         ])
         #expect(first.fixes.isEmpty)
+        #expect(first.terms.isEmpty)
         #expect(first.output == "预计下周一完成。")
 
         let list = document.examples[3]
@@ -64,6 +65,10 @@ struct AITransparencyTests {
         #expect(known.context.contains(AIPromptExampleContext(label: "常用词", value: "Xcode、Laura")))
         #expect(known.fixes.first == AIWordFix(recognized: "叉扣", corrected: "Xcode"))
         #expect(known.fixes.count == 3)
+        #expect(known.terms == ["Xcode", "Laura"])
+        #expect(document.examples[8].terms == ["网格搜索", "精准率", "召回率", "Notion"])
+        #expect(document.examples.prefix(7).allSatisfy { $0.terms.isEmpty })
+        #expect(document.version == "K_input_method_terms_json_v1")
     }
 
     @Test("Translate and learning documents have no examples")
@@ -161,6 +166,32 @@ struct AITransparencyTests {
         #expect(CloudPromptComposer.dictateFixes(from: #"{"text": "x"}"#).isEmpty)
         #expect(CloudPromptComposer.dictateFixes(from: "plain text").isEmpty)
         #expect(CloudPromptComposer.dictateFixes(from: "{broken").isEmpty)
+    }
+
+    @Test("Dictate terms are read from plain and fenced JSON")
+    func dictateTerms() {
+        let plain = #"{"fixes": [["叉扣", "Xcode"]], "terms": ["Xcode"], "text": "x"}"#
+        let fenced = "```json\n\(plain)\n```"
+
+        #expect(CloudPromptComposer.dictateTerms(from: plain) == ["Xcode"])
+        #expect(CloudPromptComposer.dictateTerms(from: fenced) == ["Xcode"])
+    }
+
+    @Test("Dictate terms are empty when missing, malformed or unparsable")
+    func dictateTermsMissing() {
+        #expect(CloudPromptComposer.dictateTerms(from: #"{"fixes": [], "text": "x"}"#).isEmpty)
+        #expect(CloudPromptComposer.dictateTerms(from: #"{"terms": "Xcode", "text": "x"}"#).isEmpty)
+        #expect(CloudPromptComposer.dictateTerms(from: #"{"terms": [1, 2], "text": "x"}"#).isEmpty)
+        #expect(CloudPromptComposer.dictateTerms(from: "plain text").isEmpty)
+        #expect(CloudPromptComposer.dictateTerms(from: "{broken").isEmpty)
+    }
+
+    @Test("Trace terms apply to dictate responses only")
+    func traceTerms() {
+        let response = #"{"fixes": [["a", "Bcd"]], "terms": ["Bcd"], "text": "x"}"#
+
+        #expect(trace(prompt: .dictate, response: response).terms == ["Bcd"])
+        #expect(trace(prompt: .translate, response: response).terms.isEmpty)
     }
 
     @Test("Trace fixes apply to dictate responses only")

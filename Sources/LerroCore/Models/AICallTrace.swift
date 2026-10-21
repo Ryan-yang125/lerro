@@ -55,6 +55,11 @@ public struct AICallTrace: Codable, Hashable, Sendable {
     public var fixes: [AIWordFix] {
         prompt == .dictate ? CloudPromptComposer.dictateFixes(from: response) : []
     }
+
+    /// Proper-noun corrections from a dictate response; empty for other prompts or unparsable output.
+    public var terms: [String] {
+        prompt == .dictate ? CloudPromptComposer.dictateTerms(from: response) : []
+    }
 }
 
 public struct AIWordFix: Hashable, Sendable {

@@ -50,6 +50,12 @@ public protocol DictionaryRepository: Sendable {
     func importEntries(_ entries: [DictionaryEntry]) async throws
 }
 
+public protocol TermLearningRepository: Sendable {
+    func load() async throws -> TermLearningState
+    func save(_ state: TermLearningState) async throws
+    func deleteAll() async throws
+}
+
 public protocol PreferencesRepository: Sendable {
     func load() async throws -> UserPreferences
     func save(_ preferences: UserPreferences) async throws

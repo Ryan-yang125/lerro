@@ -1,7 +1,7 @@
 import Foundation
 
 public struct CloudPromptComposer: Sendable {
-    public static let dictatePromptVersion = "J_input_method_fixes_json_v1"
+    public static let dictatePromptVersion = "K_input_method_terms_json_v1"
     public static let translatePromptVersion = "translate_v1"
     public static let maximumKnownTerms = 40
     public static let maximumKnownTermCharacters = 40
@@ -212,6 +212,15 @@ public struct CloudPromptComposer: Sendable {
         return (response.fixes ?? []).compactMap { pair in
             pair.count == 2 ? AIWordFix(recognized: pair[0], corrected: pair[1]) : nil
         }
+    }
+
+    /// Corrected words the model marked as proper nouns in the Dictate JSON response.
+    /// Missing or non-string-array `terms` returns an empty list.
+    public static func dictateTerms(from generated: String) -> [String] {
+        guard let data = unfencedJSON(generated).data(using: .utf8),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return [] }
+        return object["terms"] as? [String] ?? []
     }
 
     private static func unfencedJSON(_ generated: String) -> String {

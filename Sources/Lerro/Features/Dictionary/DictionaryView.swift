@@ -5,8 +5,8 @@ import LerroCore
 
 private enum DictionaryScope: String, CaseIterable, Identifiable {
     case all = "全部"
-    case learned = "自动学习"
-    case manual = "手动"
+    case learned = "Lerro 学会的"
+    case manual = "你加的"
     case snippets = "快捷语"
     var id: Self { self }
 
@@ -16,6 +16,23 @@ private enum DictionaryScope: String, CaseIterable, Identifiable {
         case .learned: entry.source == .learned
         case .manual: entry.source == .manual && !entry.isSnippet
         case .snippets: entry.isSnippet
+        }
+    }
+}
+
+private enum DictionaryGroup: CaseIterable, Identifiable {
+    case recent
+    case learned
+    case manual
+    case snippets
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .recent: "本周新学会"
+        case .learned: "Lerro 学会的"
+        case .manual: "你加的"
+        case .snippets: "快捷语"
         }
     }
 }
@@ -40,22 +57,20 @@ private enum DictionaryEditorTarget: Identifiable {
 }
 
 fileprivate extension DictionaryEntry {
-    var scopeSortKey: String { applicationBundleIdentifier ?? "" }
-
-    var sourceSortKey: Int {
-        if isSnippet { return 2 }
-        return source == .learned ? 0 : 1
-    }
-
     var isRecentlyLearned: Bool {
         source == .learned && createdAt > Date.now.addingTimeInterval(-7 * 24 * 60 * 60)
+    }
+
+    var group: DictionaryGroup {
+        if isSnippet { return .snippets }
+        if source == .learned { return isRecentlyLearned ? .recent : .learned }
+        return .manual
     }
 }
 
 struct DictionaryView: View {
     @Bindable var session: AppSession
     @State private var scope: DictionaryScope = .all
-    @State private var sortOrder: [KeyPathComparator<DictionaryEntry>] = []
     @State private var selection = Set<DictionaryEntry.ID>()
     @State private var editorTarget: DictionaryEditorTarget?
     @State private var pendingDeletion: [DictionaryEntry] = []
@@ -72,7 +87,7 @@ struct DictionaryView: View {
                         : "尝试新的关键词，或清空当前搜索。"
                 )
             } else {
-                table(entries)
+                list(entries)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -141,41 +156,25 @@ struct DictionaryView: View {
         }
     }
 
-    private func table(_ entries: [DictionaryEntry]) -> some View {
-        Table(entries, selection: $selection, sortOrder: $sortOrder) {
-            TableColumn("听到", value: \.phrase) { entry in
-                Text(verbatim: entry.phrase)
-                    .font(LerroFont.body)
-                    .lineLimit(1)
-            }
-            .width(min: 100, ideal: 180)
-
-            TableColumn("写成", value: \.replacement) { entry in
-                replacementCell(entry)
-            }
-            .width(min: 140, ideal: 260)
-
-            TableColumn("范围", value: \.scopeSortKey) { entry in
-                scopeCell(entry)
-            }
-            .width(min: 90, ideal: 140)
-
-            TableColumn("来源", value: \.sourceSortKey) { entry in
-                Text(LocalizedStringKey(sourceTitle(entry)))
-                    .font(LerroFont.body)
-                    .foregroundStyle(LerroTheme.secondaryText)
-            }
-            .width(min: 64, ideal: 84)
-
-            TableColumn("使用", value: \.useCount) { entry in
-                Text(verbatim: "\(entry.useCount)")
-                    .font(LerroFont.body.monospacedDigit())
-                    .foregroundStyle(LerroTheme.secondaryText)
-            }
-            .width(min: 48, ideal: 60)
-            .alignment(.numeric)
+    private func list(_ entries: [DictionaryEntry]) -> some View {
+        let sections = DictionaryGroup.allCases.compactMap { group -> (DictionaryGroup, [DictionaryEntry])? in
+            let members = entries.filter { $0.group == group }
+            return members.isEmpty ? nil : (group, members)
         }
-        .tableStyle(.inset)
+        return List(selection: $selection) {
+            ForEach(Array(sections.enumerated()), id: \.element.0) { index, section in
+                Section {
+                    ForEach(section.1) { entry in
+                        row(entry)
+                            .listRowBackground(section.0 == .recent ? LerroTheme.success.opacity(0.08) : nil)
+                    }
+                } header: {
+                    sectionHeader(section.0, showsLimitNote: index == 0 && scope == .all)
+                }
+            }
+        }
+        .listStyle(.inset)
+        .alternatingRowBackgrounds(.disabled)
         .contextMenu(forSelectionType: DictionaryEntry.ID.self) { ids in
             let targets = selectedEntries(for: ids)
             if targets.count == 1, let entry = targets.first {
@@ -198,46 +197,132 @@ struct DictionaryView: View {
         }
     }
 
-    private func replacementCell(_ entry: DictionaryEntry) -> some View {
-        HStack(spacing: 6) {
-            if entry.isSnippet {
+    private func sectionHeader(_ group: DictionaryGroup, showsLimitNote: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(LocalizedStringKey(group.title))
+                .font(LerroFont.cardTitle)
+                .foregroundStyle(LerroTheme.text)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            if showsLimitNote {
+                Text("发给 AI 的是用得最多的 40 个")
+                    .font(LerroFont.footnote)
+                    .foregroundStyle(LerroTheme.metadataText)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func row(_ entry: DictionaryEntry) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                title(entry)
+                sourceLine(entry)
+            }
+            Spacer(minLength: 8)
+            if let bundleIdentifier = entry.applicationBundleIdentifier {
+                let name = applicationName(for: bundleIdentifier)
+                LerroAppIcon(bundleIdentifier: bundleIdentifier, name: name, size: 16)
+                    .help(name)
+                    .accessibilityLabel(Text(verbatim: name))
+            }
+            Text(verbatim: trailingText(entry))
+                .font(LerroFont.caption.monospacedDigit())
+                .foregroundStyle(LerroTheme.metadataText)
+                .lineLimit(1)
+            Button {
+                pendingDeletion = [entry]
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(LerroTheme.tertiaryText)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("删除")
+            .accessibilityLabel(Text("删除"))
+        }
+        .padding(.vertical, 3)
+    }
+
+    @ViewBuilder
+    private func title(_ entry: DictionaryEntry) -> some View {
+        if entry.isSnippet {
+            HStack(spacing: 6) {
+                Text(verbatim: entry.phrase)
+                    .font(LerroFont.body.weight(.semibold))
+                    .lineLimit(1)
+                Text(verbatim: "→")
+                    .foregroundStyle(LerroTheme.metadataText)
                 Text(verbatim: entry.replacement.replacingOccurrences(of: "\n", with: " "))
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(LerroTheme.secondaryText)
                     .lineLimit(1)
-            } else {
-                Text(verbatim: entry.replacement)
-                    .font(LerroFont.bodyEmphasis)
-                    .lineLimit(1)
             }
-            if entry.isRecentlyLearned {
-                Text("新")
-                    .font(LerroFont.footnote.weight(.semibold))
-                    .foregroundStyle(LerroTheme.accent)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(LerroTheme.accentSoft, in: Capsule())
-                    .accessibilityLabel(Text("最近学到"))
-            }
+        } else {
+            Text(verbatim: entry.replacement)
+                .font(LerroFont.body.weight(.semibold))
+                .lineLimit(1)
         }
     }
 
     @ViewBuilder
-    private func scopeCell(_ entry: DictionaryEntry) -> some View {
-        if let bundleIdentifier = entry.applicationBundleIdentifier {
-            let name = applicationName(for: bundleIdentifier)
-            HStack(spacing: 6) {
-                LerroAppIcon(bundleIdentifier: bundleIdentifier, name: name, size: 16)
-                Text(verbatim: name)
-                    .font(LerroFont.body)
-                    .lineLimit(1)
+    private func sourceLine(_ entry: DictionaryEntry) -> some View {
+        if entry.source == .learned {
+            if let historyID = entry.learnedFromEntryIDs.last {
+                HStack(spacing: 4) {
+                    Text(verbatim: learnedSummary(entry))
+                    Text(verbatim: "·")
+                    Button {
+                        session.showHistoryEntry(historyID)
+                    } label: {
+                        Text("查看")
+                            .foregroundStyle(LerroTheme.accentText)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .font(LerroFont.caption)
+                .foregroundStyle(LerroTheme.secondaryText)
+                .lineLimit(1)
+            } else if entry.phrase != entry.replacement {
+                Text(verbatim: LerroInterfaceLocalization.format(
+                    "你把「%@」改成了它",
+                    locale: locale,
+                    arguments: entry.phrase
+                ))
+                .font(LerroFont.caption)
+                .foregroundStyle(LerroTheme.secondaryText)
+                .lineLimit(1)
             }
-            .accessibilityElement(children: .combine)
         } else {
-            Text("全局")
-                .font(LerroFont.body)
+            Text("手动添加")
+                .font(LerroFont.caption)
                 .foregroundStyle(LerroTheme.secondaryText)
         }
+    }
+
+    private func learnedSummary(_ entry: DictionaryEntry) -> String {
+        let count = entry.learnedFromEntryIDs.count
+        guard let heard = entry.heardAs.last else {
+            return LerroInterfaceLocalization.format("出现在 %lld 条听写里", locale: locale, arguments: count)
+        }
+        return LerroInterfaceLocalization.format(
+            "出现在 %lld 条听写里 · 曾被听成 %@",
+            locale: locale,
+            arguments: count,
+            heard
+        )
+    }
+
+    private func trailingText(_ entry: DictionaryEntry) -> String {
+        guard entry.group == .recent else {
+            return LerroInterfaceLocalization.format("用了 %lld 次", locale: locale, arguments: entry.useCount)
+        }
+        let calendar = Calendar.current
+        if calendar.isDateInToday(entry.createdAt) { return localized("今天") }
+        if calendar.isDateInYesterday(entry.createdAt) { return localized("昨天") }
+        return entry.createdAt.formatted(.dateTime.month().day().locale(locale))
     }
 
     // MARK: Data
@@ -250,7 +335,11 @@ struct DictionaryView: View {
                     || entry.phrase.localizedCaseInsensitiveContains(query)
                     || entry.replacement.localizedCaseInsensitiveContains(query))
         }
-        return filtered.sorted(using: sortOrder)
+        return filtered.sorted { lhs, rhs in
+            if lhs.group == .recent, rhs.group == .recent { return lhs.createdAt > rhs.createdAt }
+            if lhs.useCount != rhs.useCount { return lhs.useCount > rhs.useCount }
+            return lhs.phrase.localizedStandardCompare(rhs.phrase) == .orderedAscending
+        }
     }
 
     private func count(of scope: DictionaryScope) -> Int {
@@ -266,11 +355,6 @@ struct DictionaryView: View {
             ?? session.preferences.appToneProfiles.first { $0.bundleIdentifier == bundleIdentifier }?.applicationName
             ?? bundleIdentifier.split(separator: ".").last.map(String.init)
             ?? bundleIdentifier
-    }
-
-    private func sourceTitle(_ entry: DictionaryEntry) -> String {
-        if entry.isSnippet { return "快捷语" }
-        return entry.source == .learned ? "自动学习" : "手动"
     }
 
     private func promoteToGlobal(_ targets: [DictionaryEntry]) {

@@ -107,7 +107,10 @@ struct HistoryAICallView: View {
                 if !fixes.isEmpty {
                     AIChipFlow {
                         ForEach(Array(fixes.enumerated()), id: \.offset) { _, fix in
-                            fixChip(fix)
+                            HStack(spacing: 6) {
+                                fixChip(fix)
+                                learningBadge(for: fix)
+                            }
                         }
                     }
                 }
@@ -139,6 +142,40 @@ struct HistoryAICallView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: "\(fix.recognized) → \(fix.corrected)"))
+    }
+
+    @ViewBuilder
+    private func learningBadge(for fix: AIWordFix) -> some View {
+        let corrected = TermLearner.normalized(fix.corrected)
+        if call.terms.contains(where: { TermLearner.normalized($0) == corrected }) {
+            switch session.termLearningStatus(for: fix.corrected) {
+            case .inDictionary:
+                HStack(spacing: 3) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .accessibilityHidden(true)
+                    Text("已记住")
+                }
+                .font(LerroFont.footnote.weight(.medium))
+                .foregroundStyle(LerroTheme.success)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(LerroTheme.success.opacity(0.14), in: Capsule())
+            case .pending(let remaining):
+                Text(verbatim: LerroInterfaceLocalization.format(
+                    "再出现 %lld 次就记住",
+                    locale: locale,
+                    arguments: remaining
+                ))
+                .font(LerroFont.footnote)
+                .foregroundStyle(LerroTheme.secondaryText)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(LerroTheme.fillContainerTough, in: Capsule())
+            case .notLearning:
+                EmptyView()
+            }
+        }
     }
 
     private func removedChip(_ fragment: String) -> some View {
@@ -511,7 +548,7 @@ struct HistoryAICallView: View {
 // MARK: Chip flow
 
 /// Left-to-right layout that wraps to the next line when a row is full.
-private struct AIChipFlow: Layout {
+struct AIChipFlow: Layout {
     var spacing: CGFloat = 6
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

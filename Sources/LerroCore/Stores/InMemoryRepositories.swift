@@ -86,3 +86,11 @@ public actor InMemoryDailyUsageRepository: DailyUsageRepository {
     public func replaceAll(_ days: [DailyUsage]) { values = days.sorted { $0.day < $1.day } }
     public func deleteAll() { values.removeAll() }
 }
+
+public actor InMemoryTermLearningRepository: TermLearningRepository {
+    private var value: TermLearningState
+    public init(state: TermLearningState = .empty) { self.value = state }
+    public func load() -> TermLearningState { value }
+    public func save(_ state: TermLearningState) { value = state }
+    public func deleteAll() { value = .empty }
+}

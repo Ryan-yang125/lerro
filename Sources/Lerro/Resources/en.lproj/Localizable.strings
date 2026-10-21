@@ -1127,3 +1127,18 @@
 "更新到 %@" = "Update to %@";
 "新版本 %@" = "New version %@";
 "更新" = "Update";
+
+/* Dictionary learning */
+"Lerro 学会的" = "Learned by Lerro";
+"你加的" = "Added by you";
+"本周新学会" = "New this week";
+"发给 AI 的是用得最多的 40 个" = "The 40 most used are sent to AI";
+"出现在 %lld 条听写里 · 曾被听成 %@" = "Appeared in %lld dictations · heard as %@";
+"出现在 %lld 条听写里" = "Appeared in %lld dictations";
+"你把「%@」改成了它" = "You changed “%@” to it";
+"用了 %lld 次" = "Used %lld times";
+"已记住" = "Remembered";
+"再出现 %lld 次就记住" = "Remembered after %lld more";
+"这周 Lerro 学会了 %lld 个词" = "Lerro learned %lld words this week";
+"这周的识别纠正" = "Recognition fixes this week";
+"AI 这周帮你纠正了 %lld 处识别错误，其中 %lld 处用到了词典里的词。" = "AI fixed %lld recognition errors for you this week, %lld of them using words from your dictionary.";
