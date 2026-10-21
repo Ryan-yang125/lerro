@@ -21,6 +21,32 @@ export type LocalizedRelease = ReleaseCopy & Pick<Release, "version" | "build" |
 // distribution URL; older entries stay unchanged.
 export const releases: readonly Release[] = [
   {
+    version: "1.9.3",
+    build: "21",
+    publishedAt: "2026-10-22",
+    downloadUrl: "https://updates.lerroapp.com/releases/1.9.3/21/Lerro-macOS-arm64.dmg",
+    zh: {
+      publishedLabel: "2026 年 10 月 22 日",
+      summary: "词典会自己学：常被听错的名字和术语，自动记下来。",
+      highlights: [
+        "AI 在两次不同的听写里都纠正过的专有名词（人名、产品、公司、缩写、行业词），会自动加进词典。每个词都写着被听成过什么、来自哪几条听写，不想要可以直接删。",
+        "首页新增「这周 Lerro 学会了几个词」；历史详情里，被记住的改词会标出「已记住」。",
+        "词典里的词会记录实际用了多少次，发给 AI 的是用得最多的那些。",
+        "去掉「从历史找词」和「快捷语」。",
+      ],
+    },
+    en: {
+      publishedLabel: "October 22, 2026",
+      summary: "The dictionary learns on its own: names and terms that keep getting misheard are remembered.",
+      highlights: [
+        "Names, products, companies, acronyms and jargon that the AI corrects in two separate dictations are added to the dictionary automatically. Each shows what it was misheard as and which dictations it came from, and can be removed.",
+        "Home shows what Lerro learned this week; in History, remembered corrections are marked.",
+        "Dictionary words record how often they are used, and the most used ones are sent to the AI.",
+        "Find Words in History and dictionary snippets are removed.",
+      ],
+    },
+  },
+  {
     version: "1.9.2",
     build: "20",
     publishedAt: "2026-10-21",
