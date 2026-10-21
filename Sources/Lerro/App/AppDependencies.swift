@@ -19,7 +19,6 @@ struct AppDependencies: Sendable {
     let loginItem: any LoginItemManaging
     let history: any HistoryRepository
     let dictionary: any DictionaryRepository
-    let dictionarySuggestions: any DictionarySuggestionRepository
     let preferences: any PreferencesRepository
     let aiUsage: any AIUsageRepository
     let dailyUsage: any DailyUsageRepository
@@ -56,7 +55,6 @@ struct AppDependencies: Sendable {
             loginItem: MacLoginItemManager(),
             history: FileHistoryRepository(fileURL: paths.historyFile),
             dictionary: FileDictionaryRepository(fileURL: paths.dictionaryFile),
-            dictionarySuggestions: FileDictionarySuggestionRepository(fileURL: paths.dictionarySuggestionsFile),
             preferences: preferences,
             aiUsage: aiUsage,
             dailyUsage: FileDailyUsageRepository(fileURL: paths.dailyUsageFile),
@@ -110,7 +108,6 @@ struct AppDependencies: Sendable {
             loginItem: FixtureLoginItemManager(),
             history: InMemoryHistoryRepository(entries: history),
             dictionary: InMemoryDictionaryRepository(entries: dictionary),
-            dictionarySuggestions: InMemoryDictionarySuggestionRepository(value: fixtureDictionarySuggestions()),
             preferences: InMemoryPreferencesRepository(value: preferences),
             aiUsage: InMemoryAIUsageRepository(records: fixtureAIUsageRecords(history: history)),
             dailyUsage: InMemoryDailyUsageRepository(days: fixtureDailyUsage()),
@@ -541,31 +538,6 @@ struct AppDependencies: Sendable {
                 useCount: 3
             )
         ]
-    }
-
-    private static func fixtureDictionarySuggestions() -> DictionarySuggestionState {
-        let now = Date.now
-        func ago(_ days: Double) -> Date { now.addingTimeInterval(-days * 86_400) }
-        var state = DictionarySuggestionState()
-        state.suggestions = [
-            DictionarySuggestion(
-                phrase: "糊涂", replacement: "富途", occurrences: 3,
-                lastSeen: ago(1), applicationName: "Claude"
-            ),
-            DictionarySuggestion(
-                phrase: "史册", replacement: "实测", occurrences: 2,
-                lastSeen: ago(2), applicationName: "Slack"
-            ),
-            DictionarySuggestion(
-                phrase: "畅巧", replacement: "长桥", occurrences: 2,
-                lastSeen: ago(4), applicationName: "备忘录"
-            ),
-            DictionarySuggestion(
-                phrase: "折腾死命而", replacement: "Druckenmiller", occurrences: 1,
-                lastSeen: ago(6), applicationName: "Claude"
-            )
-        ]
-        return state
     }
 
     private static func fixtureAppToneProfiles() -> [AppToneProfile] {

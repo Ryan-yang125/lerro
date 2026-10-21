@@ -132,8 +132,6 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 
 - 词条来源：手动、learned、snippet（快捷短语）。learned 词条全局生效。词条进入 AI 提示词，词典页支持编辑、删除、CSV
   （`phrase,replacement` 两列）、应用筛选。
-- 词典建议：用户在词典页点「从历史找词」时，`CorrectionHunkExtractor` 比较 AI 处理过的历史条目的 raw 与 final 文本，
-  每个片段交给同一个分类器，confidence 不低于 0.7 的候选汇总到 `dictionary-suggestions.json`。
 - 自动学习：AI Dictate 成功写入后，`AccessibilityDeliveredTextObserver` 在同一应用和输入元素观察最多 60 秒，每 100 ms 读取，
   变化稳定 800 ms 后用本地 UTF-16 差异算法取最小 original/corrected span（前 80、后 40 个单元的上下文）。AI 返回严格 JSON
   的 0 至 3 个候选，confidence 不低于 0.7 且来源于输入 span 的候选保存为全局 learned 词条，HUD 显示 3 秒提示，可撤销。
@@ -148,7 +146,7 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 | --- | --- |
 | `preferences.json`（`0600`） | 偏好、Provider 配置、API Key、价格覆盖 |
 | `history.json` | 听写记录：raw/final 文本、路由、模型 ID、上下文类别、阶段耗时、交付状态、AI 调用原样记录（`aiCall`） |
-| `dictionary.json`、`dictionary-suggestions.json` | 词典与建议 |
+| `dictionary.json` | 词典 |
 | `ai-usage.json` | 远程调用的时间、功能、Provider、模型 ID、token 数、延迟、成败、所属历史 ID |
 | `usage-days.json` | 首页统计的每日汇总：字数、次数、时长、各应用字数、各小时次数；不含文字，保留 400 天 |
 | `Audio/` | 可选录音（CAF），`saveAudio` 默认关闭 |

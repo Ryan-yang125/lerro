@@ -6,6 +6,13 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+### Removed
+
+- “Find Words in History” and the Suggestions tab on the Dictionary page. It sent
+  one AI request per difference in your history and produced noisy suggestions,
+  such as single characters and changes that reversed the meaning. Words you
+  correct after dictation are still learned automatically.
+
 ## [1.9.2] - 2026-10-21
 
 ### Fixed

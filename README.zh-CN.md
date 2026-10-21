@@ -39,7 +39,7 @@
 
 人名、公司名、项目名，苹果识别很难一次认对。你改掉 Lerro 写错的词，AI 判断是认错了，就会加进词典。Lerro 也可以翻一遍历史记录，把反复认错的词列出来，你点一下加入。
 
-![词典建议](site/public/readme/zh-dictionary.png)
+![自动学习的词典](site/public/readme/zh-dictionary.png)
 
 每个 App 还可以设置自己的语气，比如聊天里口语一些，邮件里用完整句子。
 

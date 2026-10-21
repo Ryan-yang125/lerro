@@ -20,11 +20,6 @@ enum OnboardingCorrectionResult: Equatable {
     case failed(String)
 }
 
-struct DictionarySuggestionScanProgress: Equatable {
-    var processed: Int
-    var total: Int
-}
-
 @MainActor
 @Observable
 final class AppSession {
@@ -77,8 +72,6 @@ final class AppSession {
     private(set) var isLoadingHistoryPage = false
     private(set) var historyListRevision: UInt64 = 0
     var dictionaryEntries: [DictionaryEntry] = []
-    private(set) var dictionarySuggestions: [DictionarySuggestion] = []
-    private(set) var dictionarySuggestionScan: DictionarySuggestionScanProgress?
     var audioInputDevices: [AudioInputDevice] = []
     var preferences = UserPreferences()
     private(set) var homeStatistics: HomeStatistics = .empty
@@ -204,8 +197,6 @@ final class AppSession {
     private var completionTask: Task<Void, Never>?
     private var deliveredTextObservationTask: Task<Void, Never>?
     private var dictionaryLearningToastTask: Task<Void, Never>?
-    private var dictionarySuggestionState = DictionarySuggestionState()
-    private var dictionarySuggestionScanTask: Task<Void, Never>?
     private var recoveryDismissTask: Task<Void, Never>?
     private var hudDeliveryFeedbackTask: Task<Void, Never>?
     private var hudDeliveryFeedbackToken: UUID?
@@ -297,10 +288,6 @@ final class AppSession {
         case .remote:
             preferences.remoteProvider.isReadyForUse
         }
-    }
-
-    var canScanDictionarySuggestions: Bool {
-        selectedAIIsReady && preferences.intelligenceMode != .raw
     }
 
     var isCaptureCancellationAvailable: Bool {
@@ -436,7 +423,6 @@ final class AppSession {
                 "词典读取失败：\(error.localizedDescription)"
             ).localizedDescription
         }
-        await loadDictionarySuggestions()
         updateUsageSummary()
     }
 
@@ -1264,196 +1250,6 @@ final class AppSession {
                 currentError = "词条删除失败：\(error.localizedDescription)"
             }
         }
-    }
-
-    // MARK: Dictionary suggestions
-
-    private static let dictionarySuggestionConfidence = 0.7
-    private static let dictionarySuggestionConcurrency = 3
-
-    func scanHistoryForDictionarySuggestions() {
-        guard canScanDictionarySuggestions, dictionarySuggestionScanTask == nil else { return }
-        let mode = preferences.intelligenceMode
-        let remoteProvider = mode == .remote
-            ? normalizedRemoteProvider(preferences.remoteProvider)
-            : nil
-        dictionarySuggestionScan = DictionarySuggestionScanProgress(processed: 0, total: 0)
-        dictionarySuggestionScanTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            await runDictionarySuggestionScan(mode: mode, remoteProvider: remoteProvider)
-            dictionarySuggestionScan = nil
-            dictionarySuggestionScanTask = nil
-        }
-    }
-
-    func cancelDictionarySuggestionScan() {
-        dictionarySuggestionScanTask?.cancel()
-    }
-
-    func acceptDictionarySuggestion(_ suggestion: DictionarySuggestion) {
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await dependencies.dictionary.save(DictionaryEntry(
-                    phrase: suggestion.phrase,
-                    replacement: suggestion.replacement,
-                    source: .learned
-                ))
-            } catch {
-                currentError = "词典保存失败：\(error.localizedDescription)"
-                return
-            }
-            dictionarySuggestionState.remove(suggestion)
-            await persistDictionarySuggestionState()
-            await refreshDictionaryAndUsage()
-        }
-    }
-
-    func ignoreDictionarySuggestion(_ suggestion: DictionarySuggestion) {
-        dictionarySuggestionState.ignore(suggestion)
-        updateVisibleDictionarySuggestions()
-        Task { [weak self] in
-            await self?.persistDictionarySuggestionState()
-        }
-    }
-
-    private func loadDictionarySuggestions() async {
-        guard dictionarySuggestionScanTask == nil else { return }
-        do {
-            dictionarySuggestionState = try await dependencies.dictionarySuggestions.load()
-        } catch {
-            currentError = userFacingError(error, context: "词典建议读取失败")
-        }
-        updateVisibleDictionarySuggestions()
-    }
-
-    private func persistDictionarySuggestionState() async {
-        do {
-            try await dependencies.dictionarySuggestions.save(dictionarySuggestionState)
-        } catch {
-            currentError = userFacingError(error, context: "词典建议保存失败")
-        }
-    }
-
-    private func updateVisibleDictionarySuggestions() {
-        let existingReplacements = Set(dictionaryEntries.map {
-            $0.replacement.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        })
-        dictionarySuggestions = dictionarySuggestionState.suggestions
-            .filter { suggestion in
-                !dictionarySuggestionState.ignoredKeys.contains(suggestion.id)
-                    && !existingReplacements.contains(
-                        suggestion.replacement.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                    )
-            }
-            .sorted { lhs, rhs in
-                if lhs.occurrences != rhs.occurrences { return lhs.occurrences > rhs.occurrences }
-                if lhs.lastSeen != rhs.lastSeen { return lhs.lastSeen > rhs.lastSeen }
-                return lhs.id < rhs.id
-            }
-    }
-
-    private func runDictionarySuggestionScan(
-        mode: IntelligenceMode,
-        remoteProvider: RemoteProviderConfiguration?
-    ) async {
-        let history: [HistoryEntry]
-        do {
-            history = try await dependencies.history.entries()
-        } catch {
-            currentError = userFacingError(error, context: "历史读取失败")
-            return
-        }
-
-        struct ScanEntry {
-            var entry: HistoryEntry
-            var pendingHunks: Int
-            var failed = false
-            var candidates: [DictionaryLearningCandidate] = []
-        }
-        struct ScanJob: Sendable {
-            var entryIndex: Int
-            var request: DictionaryLearningRequest
-        }
-
-        var scanEntries: [ScanEntry] = []
-        var jobs: [ScanJob] = []
-        for entry in history
-        where entry.mode == .dictation
-            && entry.wasEnhanced
-            && !entry.rawText.isEmpty
-            && !entry.finalText.isEmpty
-            && !dictionarySuggestionState.scannedEntryIDs.contains(entry.id) {
-            let hunks = CorrectionHunkExtractor.hunks(raw: entry.rawText, final: entry.finalText)
-            guard !hunks.isEmpty else {
-                dictionarySuggestionState.scannedEntryIDs.insert(entry.id)
-                continue
-            }
-            let entryIndex = scanEntries.count
-            scanEntries.append(ScanEntry(entry: entry, pendingHunks: hunks.count))
-            for hunk in hunks {
-                jobs.append(ScanJob(
-                    entryIndex: entryIndex,
-                    request: DictionaryLearningRequest(
-                        mode: mode,
-                        remoteProvider: remoteProvider,
-                        originalSpan: hunk.original,
-                        correctedSpan: hunk.corrected,
-                        contextBefore: hunk.contextBefore,
-                        contextAfter: hunk.contextAfter,
-                        applicationName: entry.applicationName,
-                        bundleIdentifier: entry.bundleIdentifier,
-                        historyEntryID: entry.id
-                    )
-                ))
-            }
-        }
-
-        var processed = 0
-        dictionarySuggestionScan = DictionarySuggestionScanProgress(processed: 0, total: jobs.count)
-        let intelligence = dependencies.intelligence
-        await withTaskGroup(of: (Int, [DictionaryLearningCandidate]?).self) { group in
-            var iterator = jobs.makeIterator()
-            func launchNext(in group: inout TaskGroup<(Int, [DictionaryLearningCandidate]?)>) {
-                guard !Task.isCancelled, let job = iterator.next() else { return }
-                group.addTask {
-                    let decision = try? await intelligence.classifyCorrection(job.request)
-                    return (job.entryIndex, decision?.candidates)
-                }
-            }
-            for _ in 0..<Self.dictionarySuggestionConcurrency {
-                launchNext(in: &group)
-            }
-            for await (entryIndex, candidates) in group {
-                processed += 1
-                dictionarySuggestionScan = DictionarySuggestionScanProgress(
-                    processed: processed,
-                    total: jobs.count
-                )
-                if let candidates {
-                    scanEntries[entryIndex].candidates.append(contentsOf: candidates)
-                } else {
-                    scanEntries[entryIndex].failed = true
-                }
-                scanEntries[entryIndex].pendingHunks -= 1
-                if scanEntries[entryIndex].pendingHunks == 0, !scanEntries[entryIndex].failed {
-                    let scanned = scanEntries[entryIndex]
-                    for candidate in scanned.candidates
-                    where candidate.confidence >= Self.dictionarySuggestionConfidence {
-                        dictionarySuggestionState.merge(
-                            candidate: candidate,
-                            seenAt: scanned.entry.createdAt,
-                            applicationName: scanned.entry.applicationName
-                        )
-                    }
-                    dictionarySuggestionState.scannedEntryIDs.insert(scanned.entry.id)
-                    updateVisibleDictionarySuggestions()
-                }
-                launchNext(in: &group)
-            }
-        }
-        updateVisibleDictionarySuggestions()
-        await persistDictionarySuggestionState()
     }
 
     func saveAppToneProfile(
@@ -2733,7 +2529,6 @@ final class AppSession {
     private func refreshDictionaryAndUsage() async {
         do {
             dictionaryEntries = try await dependencies.dictionary.entries()
-            updateVisibleDictionarySuggestions()
             updateUsageSummary()
         } catch {
             currentError = LerroError.localData(

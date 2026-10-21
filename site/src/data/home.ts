@@ -51,8 +51,6 @@ export interface HomeCopy {
       title: string;
       segs: { label: string; on?: boolean }[];
       rows: { from: string; to: string; n: string }[];
-      add: string;
-      ignore: string;
       learned: string;
       chips: { from: string; to: string }[];
     };
@@ -188,19 +186,17 @@ const zh: HomeCopy = {
     sub: "你身边的人名、公司名、项目名，苹果识别很难一次认对。把写错的词改掉，Lerro 会记下来。",
     points: [
       { sym: "g-dictionary", text: "写入后你手动改了词，AI 判断是认错了，就自动加进词典。" },
-      { sym: "g-polish", text: "翻一遍历史记录，把反复认错的词列出来，你点一下加入。" },
+      { sym: "g-polish", text: "AI 润色时会参考词典里的词，把听错的名字和术语改对。" },
     ],
     mock: {
       title: "词典",
-      segs: [{ label: "全部 12" }, { label: "自动学习 5" }, { label: "建议 4", on: true }],
+      segs: [{ label: "全部 12" }, { label: "自动学习 5", on: true }, { label: "手动 7" }],
       rows: [
         { from: "code x", to: "Codex", n: "×3" },
         { from: "小云却", to: "小云雀", n: "×2" },
         { from: "乐若", to: "Lerro", n: "×2" },
         { from: "swift ui", to: "SwiftUI", n: "×1" },
       ],
-      add: "加入",
-      ignore: "忽略",
       learned: "最近学到",
       chips: [
         { from: "deepseak", to: "DeepSeek" },
@@ -338,14 +334,12 @@ const en: HomeCopy = {
     sub: "Apple's recognition rarely gets the names of people, companies and projects around you right on the first try. Fix a wrong word and Lerro remembers it.",
     points: [
       { sym: "g-dictionary", text: "When you edit a word after it is written, AI decides whether it was misheard and adds it to the dictionary automatically." },
-      { sym: "g-polish", text: "Lerro reads through your history, lists words that are repeatedly misheard, and you add them with one click." },
+      { sym: "g-polish", text: "AI polish uses the words in your dictionary to fix misheard names and terms." },
     ],
     mock: {
       ...zh.dictionary.mock,
       title: "Dictionary",
-      segs: [{ label: "All 12" }, { label: "Auto-learned 5" }, { label: "Suggestions 4", on: true }],
-      add: "Add",
-      ignore: "Ignore",
+      segs: [{ label: "All 12" }, { label: "Auto-learned 5", on: true }, { label: "Manual 7" }],
       learned: "Recently learned",
     },
   },

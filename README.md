@@ -48,7 +48,7 @@ recognition error and adds it to the dictionary. Lerro can also scan your
 history and list the words it keeps getting wrong, so you can add them with one
 click.
 
-![Dictionary suggestions](site/public/readme/en-dictionary.png)
+![Auto-learned dictionary](site/public/readme/en-dictionary.png)
 
 Each app can also have its own tone, for example casual in chat and complete
 sentences in email.

@@ -105,12 +105,7 @@ terms (shared names and vocabulary, each at most 40 characters) even when they d
 not appear in the transcript. Dictionary entries and terms are sent only while the
 dictionary context category is enabled; application-scoped terms also require the
 application category. Correction learning
-uses the smaller span-only payload described above. When you choose 从历史找词 on
-the Dictionary page, Lerro compares the raw and final text of AI-processed history
-entries on the Mac and sends each changed fragment (at most 20 characters per
-side) with up to 40 characters of surrounding final text, the application name,
-and the optional Bundle ID to the selected AI. Suggestions, ignored suggestions,
-and the IDs of scanned entries are stored in `dictionary-suggestions.json`. The provider receives this
+uses the smaller span-only payload described above. The provider receives this
 content plus normal connection and billing metadata under its terms.
 
 AI is required for refinement, translation, automatic correction learning, and

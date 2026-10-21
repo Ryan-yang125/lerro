@@ -11,7 +11,6 @@ public struct ApplicationPaths: Sendable {
     public let rootDirectory: URL
     public let historyFile: URL
     public let dictionaryFile: URL
-    public let dictionarySuggestionsFile: URL
     public let preferencesFile: URL
     public let aiUsageFile: URL
     public let dailyUsageFile: URL
@@ -21,7 +20,6 @@ public struct ApplicationPaths: Sendable {
         self.rootDirectory = rootDirectory
         self.historyFile = rootDirectory.appending(path: "history.json")
         self.dictionaryFile = rootDirectory.appending(path: "dictionary.json")
-        self.dictionarySuggestionsFile = rootDirectory.appending(path: "dictionary-suggestions.json")
         self.preferencesFile = rootDirectory.appending(path: "preferences.json")
         self.aiUsageFile = rootDirectory.appending(path: "ai-usage.json")
         self.dailyUsageFile = rootDirectory.appending(path: "usage-days.json")

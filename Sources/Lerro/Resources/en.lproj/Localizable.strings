@@ -696,7 +696,6 @@
 "你的 Lerro 已准备完成" = "Your Lerro is ready";
 "保存专有名词和整段模板；精确说出触发词即可展开。" = "Save names and complete templates, then speak the exact trigger to expand them.";
 "修改" = "Edit";
-"停止" = "Stop";
 "写入后的 60 秒内，再按一次听写并说出修改指令，Lerro 会安全更新同一段文字。" = "Within 60 seconds of insertion, press Dictate again and speak an edit instruction. Lerro safely updates the same text.";
 "切换应用、移动输入框或修改目标文字后，回执操作会安全停用，避免改到其他位置。" = "Receipt actions safely disable after you switch apps, move fields, or change the target text.";
 "删除指定句子并保留其余内容" = "Delete the specified sentence and preserve the rest";
@@ -1002,12 +1001,6 @@
 "用量" = "Usage";
 "每百万 Token" = "Per 1M Tokens";
 "日期" = "Date";
-"建议" = "Suggestions";
-"加入" = "Add";
-"忽略" = "Ignore";
-"从历史找词" = "Find Words in History";
-"还没有建议" = "No suggestions yet";
-"需要启用 AI" = "AI Required";
 "需要权限" = "Permission Needed";
 "麦克风未授权" = "Microphone not allowed";
 "辅助功能未授权" = "Accessibility not allowed";

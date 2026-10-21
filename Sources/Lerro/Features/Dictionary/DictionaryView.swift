@@ -8,7 +8,6 @@ private enum DictionaryScope: String, CaseIterable, Identifiable {
     case learned = "自动学习"
     case manual = "手动"
     case snippets = "快捷语"
-    case suggestions = "建议"
     var id: Self { self }
 
     func includes(_ entry: DictionaryEntry) -> Bool {
@@ -17,7 +16,6 @@ private enum DictionaryScope: String, CaseIterable, Identifiable {
         case .learned: entry.source == .learned
         case .manual: entry.source == .manual && !entry.isSnippet
         case .snippets: entry.isSnippet
-        case .suggestions: false
         }
     }
 }
@@ -66,9 +64,7 @@ struct DictionaryView: View {
     var body: some View {
         let entries = displayedEntries
         Group {
-            if scope == .suggestions {
-                suggestionsContent
-            } else if entries.isEmpty {
+            if entries.isEmpty {
                 LerroEmptyState(
                     title: session.dictionarySearch.isEmpty ? "建立您的个人词典" : "没有匹配词语",
                     hint: session.dictionarySearch.isEmpty
@@ -92,11 +88,6 @@ struct DictionaryView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-            }
-            if scope == .suggestions {
-                ToolbarItem {
-                    scanControl
-                }
             }
             ToolbarItem {
                 Menu {
@@ -122,9 +113,6 @@ struct DictionaryView: View {
         }
         .task {
             session.refreshAvailableApplications()
-            if session.visualFixturePresentation == "dictionary-suggestions" {
-                scope = .suggestions
-            }
         }
         .onChange(of: session.dictionaryEntries) { _, entries in
             selection.formIntersection(Set(entries.map(\.id)))
@@ -151,65 +139,6 @@ struct DictionaryView: View {
         } message: {
             Text("删除后无法恢复。")
         }
-    }
-
-    @ViewBuilder
-    private var scanControl: some View {
-        if let progress = session.dictionarySuggestionScan {
-            HStack(spacing: 8) {
-                ProgressView(value: Double(progress.processed), total: Double(max(progress.total, 1)))
-                    .frame(width: 96)
-                Button("停止") { session.cancelDictionarySuggestionScan() }
-                    .buttonStyle(LerroButtonStyle(.secondary))
-            }
-        } else {
-            Button("从历史找词") { session.scanHistoryForDictionarySuggestions() }
-                .buttonStyle(LerroButtonStyle(.secondary))
-                .disabled(!session.canScanDictionarySuggestions)
-        }
-    }
-
-    @ViewBuilder
-    private var suggestionsContent: some View {
-        let suggestions = displayedSuggestions
-        if suggestions.isEmpty {
-            if !session.dictionarySearch.isEmpty && !session.dictionarySuggestions.isEmpty {
-                LerroEmptyState(title: "没有匹配词语")
-            } else {
-                LerroEmptyState(title: session.canScanDictionarySuggestions ? "还没有建议" : "需要启用 AI")
-            }
-        } else {
-            List(suggestions) { suggestion in
-                suggestionRow(suggestion)
-            }
-            .listStyle(.inset)
-        }
-    }
-
-    private func suggestionRow(_ suggestion: DictionarySuggestion) -> some View {
-        HStack(spacing: 8) {
-            Text(verbatim: suggestion.phrase)
-                .font(LerroFont.body)
-                .foregroundStyle(LerroTheme.secondaryText)
-                .lineLimit(1)
-            Image(systemName: "arrow.right")
-                .font(LerroFont.caption)
-                .foregroundStyle(LerroTheme.secondaryText)
-                .accessibilityHidden(true)
-            Text(verbatim: suggestion.replacement)
-                .font(LerroFont.bodyEmphasis)
-                .foregroundStyle(LerroTheme.text)
-                .lineLimit(1)
-            Spacer(minLength: 12)
-            Text(verbatim: "×\(suggestion.occurrences)")
-                .font(LerroFont.caption.monospacedDigit())
-                .foregroundStyle(LerroTheme.secondaryText)
-            Button("加入") { session.acceptDictionarySuggestion(suggestion) }
-                .buttonStyle(LerroButtonStyle(.primary))
-            Button("忽略") { session.ignoreDictionarySuggestion(suggestion) }
-                .buttonStyle(LerroButtonStyle(.secondary))
-        }
-        .padding(.vertical, 2)
     }
 
     private func table(_ entries: [DictionaryEntry]) -> some View {
@@ -324,17 +253,7 @@ struct DictionaryView: View {
         return filtered.sorted(using: sortOrder)
     }
 
-    private var displayedSuggestions: [DictionarySuggestion] {
-        let query = session.dictionarySearch.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return session.dictionarySuggestions }
-        return session.dictionarySuggestions.filter {
-            $0.phrase.localizedCaseInsensitiveContains(query)
-                || $0.replacement.localizedCaseInsensitiveContains(query)
-        }
-    }
-
     private func count(of scope: DictionaryScope) -> Int {
-        if scope == .suggestions { return session.dictionarySuggestions.count }
         return session.dictionaryEntries.reduce(0) { $0 + (scope.includes($1) ? 1 : 0) }
     }
 

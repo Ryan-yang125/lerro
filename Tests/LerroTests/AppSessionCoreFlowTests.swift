@@ -899,169 +899,6 @@ struct AppSessionCoreFlowTests {
         #expect(!harness.trace.markedMilestones(for: completed.id).contains(.analyzerPrepared))
     }
 
-    // MARK: Dictionary suggestions
-
-    private func suggestionPreferences() -> UserPreferences {
-        var preferences = basePreferences()
-        preferences.intelligenceMode = .remote
-        preferences.remoteProvider = RemoteProviderConfiguration(
-            baseURL: "https://api.example.com/v1",
-            modelIdentifier: "test-model",
-            apiKey: "test-key"
-        )
-        return preferences
-    }
-
-    private func suggestionDecision() throws -> DictionaryLearningDecision {
-        try DictionaryLearningDecision(validating: [
-            DictionaryLearningCandidate(phrase: "史册", replacement: "实测", confidence: 0.95)
-        ])
-    }
-
-    private func suggestionHistoryEntry(
-        raw: String,
-        final: String,
-        enhanced: Bool = true
-    ) -> HistoryEntry {
-        HistoryEntry(
-            mode: .dictation,
-            rawText: raw,
-            finalText: final,
-            duration: 3,
-            applicationName: "Editor",
-            bundleIdentifier: "com.example.Editor",
-            wasEnhanced: enhanced
-        )
-    }
-
-    /// Two entries with the same correction, one identical entry and one raw entry.
-    private func suggestionHistory() -> [HistoryEntry] {
-        [
-            suggestionHistoryEntry(raw: "我昨天做了史册，结果不错", final: "我昨天做了实测，结果不错"),
-            suggestionHistoryEntry(raw: "今天再做一次史册", final: "今天再做一次实测"),
-            suggestionHistoryEntry(raw: "没有任何修改", final: "没有任何修改"),
-            suggestionHistoryEntry(raw: "未润色的史册", final: "未润色的实测", enhanced: false)
-        ]
-    }
-
-    @MainActor
-    private func scanForSuggestions(_ harness: Harness) async {
-        harness.session.scanHistoryForDictionarySuggestions()
-        _ = await waitUntil { harness.session.dictionarySuggestionScan == nil }
-    }
-
-    @Test("Scanning history turns AI corrections into suggestions and marks entries scanned")
-    @MainActor
-    func scanProducesSuggestions() async throws {
-        let history = suggestionHistory()
-        let harness = makeHarness(
-            text: "unused",
-            preferences: suggestionPreferences(),
-            learningDecision: try suggestionDecision(),
-            historyEntries: history
-        )
-        await harness.session.start()
-        #expect(harness.session.canScanDictionarySuggestions)
-
-        await scanForSuggestions(harness)
-
-        let suggestion = try #require(harness.session.dictionarySuggestions.first)
-        #expect(harness.session.dictionarySuggestions.count == 1)
-        #expect(suggestion.phrase == "史册")
-        #expect(suggestion.replacement == "实测")
-        #expect(suggestion.occurrences == 2)
-        #expect(suggestion.applicationName == "Editor")
-        #expect(await harness.intelligence.classificationCount() == 2)
-
-        let state = try await harness.suggestions.load()
-        #expect(state.scannedEntryIDs == Set(history.prefix(3).map(\.id)))
-
-        await scanForSuggestions(harness)
-        #expect(await harness.intelligence.classificationCount() == 2)
-        #expect(harness.session.dictionarySuggestions.first?.occurrences == 2)
-    }
-
-    @Test("Scanning is unavailable while AI is off")
-    @MainActor
-    func scanRequiresAI() async {
-        let harness = makeHarness(text: "unused", historyEntries: suggestionHistory())
-        await harness.session.start()
-        #expect(!harness.session.canScanDictionarySuggestions)
-        harness.session.scanHistoryForDictionarySuggestions()
-        #expect(harness.session.dictionarySuggestionScan == nil)
-        #expect(await harness.intelligence.classificationCount() == 0)
-    }
-
-    @Test("Accepting a suggestion saves a learned dictionary entry and removes it")
-    @MainActor
-    func acceptSuggestion() async throws {
-        let harness = makeHarness(
-            text: "unused",
-            preferences: suggestionPreferences(),
-            learningDecision: try suggestionDecision(),
-            historyEntries: suggestionHistory()
-        )
-        await harness.session.start()
-        await scanForSuggestions(harness)
-        let suggestion = try #require(harness.session.dictionarySuggestions.first)
-
-        harness.session.acceptDictionarySuggestion(suggestion)
-        #expect(await waitUntil { harness.session.dictionaryEntries.count == 1 })
-
-        let entry = try #require(await harness.dictionary.entries().first)
-        #expect(entry.phrase == "史册")
-        #expect(entry.replacement == "实测")
-        #expect(entry.source == .learned)
-        #expect(entry.applicationBundleIdentifier == nil)
-        #expect(harness.session.dictionarySuggestions.isEmpty)
-        #expect(await waitUntil { (try? await harness.suggestions.load().suggestions.isEmpty) == true })
-    }
-
-    @Test("Ignoring a suggestion persists its key and hides it from later scans")
-    @MainActor
-    func ignoreSuggestion() async throws {
-        let harness = makeHarness(
-            text: "unused",
-            preferences: suggestionPreferences(),
-            learningDecision: try suggestionDecision(),
-            historyEntries: suggestionHistory()
-        )
-        await harness.session.start()
-        await scanForSuggestions(harness)
-        let suggestion = try #require(harness.session.dictionarySuggestions.first)
-
-        harness.session.ignoreDictionarySuggestion(suggestion)
-        #expect(harness.session.dictionarySuggestions.isEmpty)
-        #expect(await waitUntil {
-            (try? await harness.suggestions.load().ignoredKeys.contains(suggestion.id)) == true
-        })
-
-        try await harness.history.save(suggestionHistoryEntry(raw: "再测一次史册", final: "再测一次实测"))
-        await scanForSuggestions(harness)
-        #expect(await harness.intelligence.classificationCount() == 3)
-        #expect(harness.session.dictionarySuggestions.isEmpty)
-        #expect(try await harness.suggestions.load().suggestions.isEmpty)
-    }
-
-    @Test("Suggestions whose replacement is already in the dictionary are hidden")
-    @MainActor
-    func existingReplacementHidesSuggestion() async throws {
-        let dictionary = InMemoryDictionaryRepository(entries: [DictionaryEntry(phrase: "实测")])
-        let harness = makeHarness(
-            text: "unused",
-            preferences: suggestionPreferences(),
-            dictionary: dictionary,
-            learningDecision: try suggestionDecision(),
-            historyEntries: suggestionHistory()
-        )
-        await harness.session.start()
-        await scanForSuggestions(harness)
-
-        #expect(await harness.intelligence.classificationCount() == 2)
-        #expect(harness.session.dictionarySuggestions.isEmpty)
-        #expect(try await harness.suggestions.load().suggestions.count == 1)
-    }
-
     @MainActor
     private func dictate(_ session: AppSession) async {
         session.toggleCapture(.dictation)
@@ -1102,7 +939,6 @@ struct AppSessionCoreFlowTests {
         let trace = RecordingTraceObserver()
         let history = InMemoryHistoryRepository(entries: historyEntries)
         let dictionary = dictionary ?? InMemoryDictionaryRepository()
-        let suggestions = InMemoryDictionarySuggestionRepository()
         let aiUsage = InMemoryAIUsageRepository(records: aiUsageRecords)
         let preferences = preferences ?? basePreferences()
         let dependencies = AppDependencies(
@@ -1121,7 +957,6 @@ struct AppSessionCoreFlowTests {
             loginItem: StubLoginItem(),
             history: history,
             dictionary: dictionary,
-            dictionarySuggestions: suggestions,
             preferences: InMemoryPreferencesRepository(value: preferences),
             aiUsage: aiUsage,
             dailyUsage: InMemoryDailyUsageRepository(),
@@ -1139,7 +974,6 @@ struct AppSessionCoreFlowTests {
             intelligence: intelligence,
             history: history,
             dictionary: dictionary,
-            suggestions: suggestions,
             aiUsage: aiUsage,
             trace: trace
         )
@@ -1180,7 +1014,6 @@ private struct Harness {
     let intelligence: StubIntelligence
     let history: InMemoryHistoryRepository
     let dictionary: InMemoryDictionaryRepository
-    let suggestions: InMemoryDictionarySuggestionRepository
     let aiUsage: InMemoryAIUsageRepository
     let trace: RecordingTraceObserver
 }
