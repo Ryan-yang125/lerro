@@ -8,17 +8,22 @@ interface Props {
 const { t } = Astro.props;
 ---
 <section class="intro">
-  <div class="glow"></div>
   <div class="wrap">
-    <h1>{t.h1.line1}<br /><span class="soft">{t.h1.soft}</span>{t.h1.rest}<span class="cur"></span></h1>
-    <p class="lead">{t.lead}</p>
-    <div class="cta">
+    <p class="kicker rise">{t.kicker}</p>
+    <h1 class="rise" style="--d:.08s">{t.h1.line1}<br /><span class="soft">{t.h1.line2}</span><span class="cur"></span></h1>
+    <p class="lead rise" style="--d:.18s">{t.lead}</p>
+    <div class="cta rise" style="--d:.26s">
       <a class="btn" href={downloadUrl}>
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.8-3.5.8-.7 0-1.8-.8-3-.8-1.6 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.3 0 2.1-1.1 2.8-2.3.9-1.3 1.3-2.6 1.3-2.6s-2.5-1-2.5-3.7zM14.2 5.8c.6-.8 1.1-1.9 1-3-1 0-2.1.6-2.8 1.4-.6.7-1.1 1.8-1 2.9 1 .1 2.1-.6 2.8-1.3z"/></svg>{t.download}
       </a>
-      <a class="btn ghost" href="#story">{t.story}</a>
+      <a class="link" href="#story">{t.story}<span aria-hidden="true">↓</span></a>
     </div>
-    <p class="req">{t.req}</p>
-    <div class="scrollhint"><i></i>{t.scroll}</div>
+    <p class="req rise" style="--d:.3s">{t.req}</p>
   </div>
+  <ol class="rule rise" style="--d:.4s">
+    <li><i>{t.steps[0]}</i> fn</li>
+    <li><i>{t.steps[1]}</i></li>
+    <li><i>{t.steps[2]}</i></li>
+    <li><i>{t.steps[3]}</i></li>
+  </ol>
 </section>

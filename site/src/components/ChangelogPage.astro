@@ -31,7 +31,7 @@ const copy = {
         <ul class="release-list">
           {release.highlights.map((item) => <li>{item}</li>)}
         </ul>
-        <a class={index === 0 ? "btn sm" : "btn sm ghost"} href={release.downloadUrl}>{copy.download} {release.version}</a>
+        <a class={index === 0 ? "btn sm" : "link"} href={release.downloadUrl}>{copy.download} {release.version}</a>
       </article>
     ))}
   </div>

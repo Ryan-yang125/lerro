@@ -91,13 +91,15 @@ export interface HomeCopy {
   meta: { title: string; description: string };
   nav: { how: string; price: string; faq: string; download: string };
   hero: {
-    /** h1 is `line1`, a line break, then `soft` (dimmed) and `rest`; spaces are part of the strings. */
-    h1: { line1: string; soft: string; rest: string };
+    kicker: string;
+    /** h1 is `line1` (ink), a line break, then `line2` (tertiary color); spaces are part of the strings. */
+    h1: { line1: string; line2: string };
     lead: string;
     download: string;
     story: string;
     req: string;
-    scroll: string;
+    /** Quiet row under the hero; the first step is followed by the fn key. */
+    steps: [string, string, string, string];
   };
   story: {
     steps: [string, string, string, string];
@@ -163,12 +165,13 @@ const zh: HomeCopy = {
   },
   nav: { how: "怎么开始", price: "价格", faq: "常见问题", download: "免费下载" },
   hero: {
-    h1: { line1: "说出来，", soft: "就", rest: "写好了" },
+    kicker: "MAC 上的语音输入",
+    h1: { line1: "说出来，", line2: "就写好了" },
     lead: "回微信、写邮件、整理周报，按一下快捷键说就行。口头禅自动去掉，说错的地方自动改好，标点和分段也帮你加上。",
     download: "免费下载 Mac 版",
     story: "往下看它怎么工作",
     req: "macOS 26 · Apple 芯片 · 免费、开源、不用注册",
-    scroll: "往下滚动",
+    steps: ["按一下", "说出来", "AI 整理", "写进去"],
   },
   story: {
     steps: ["按一下", "说出来", "AI 整理", "写进去"],
@@ -279,12 +282,13 @@ const en: HomeCopy = {
   },
   nav: { how: "Get started", price: "Pricing", faq: "FAQ", download: "Download" },
   hero: {
-    h1: { line1: "Speak it. ", soft: "It's", rest: " written." },
+    kicker: "VOICE INPUT FOR MAC",
+    h1: { line1: "Speak it. ", line2: "It's written." },
     lead: "Reply on WeChat, write an email, or put together a weekly report: press a shortcut and talk. Filler words are removed, corrections are applied, and punctuation and paragraphs are added for you.",
     download: "Download Lerro for Mac",
     story: "See how it works",
     req: "macOS 26 · Apple silicon · Free, open source, no sign-up",
-    scroll: "Scroll down",
+    steps: ["Press", "Speak", "AI cleanup", "Written"],
   },
   story: {
     steps: ["Press", "Speak", "AI cleanup", "Written"],
