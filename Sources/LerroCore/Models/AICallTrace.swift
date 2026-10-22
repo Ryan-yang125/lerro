@@ -12,7 +12,6 @@ public enum AIPromptKind: String, Codable, CaseIterable, Hashable, Sendable, Ide
 public struct AICallTrace: Codable, Hashable, Sendable {
     public var prompt: AIPromptKind
     public var promptVersion: String
-    public var provider: RemoteProviderKind
     /// The configured model ID that was sent.
     public var modelIdentifier: String
     /// Exact user message.
@@ -26,7 +25,6 @@ public struct AICallTrace: Codable, Hashable, Sendable {
     public init(
         prompt: AIPromptKind,
         promptVersion: String,
-        provider: RemoteProviderKind,
         modelIdentifier: String,
         userPrompt: String,
         response: String,
@@ -36,7 +34,6 @@ public struct AICallTrace: Codable, Hashable, Sendable {
     ) {
         self.prompt = prompt
         self.promptVersion = promptVersion
-        self.provider = provider
         self.modelIdentifier = modelIdentifier
         self.userPrompt = userPrompt
         self.response = response

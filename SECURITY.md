@@ -37,7 +37,7 @@ Lerro is a local-first macOS voice-writing application. This policy covers:
 - First-party release artifacts distributed by the project.
 
 The security boundary includes local user text and audio, macOS permission
-identity, focused application identity, clipboard contents, the user's provider
+identity, focused application identity, clipboard contents, the user's DeepSeek
 API key, release credentials in the maintainer's environment, and the integrity
 of published archives.
 
@@ -69,11 +69,11 @@ user consent by themselves.
 - A stale session or generation cannot update a newer capture.
 - Logs exclude transcripts, focused or selected text, prompts, model output,
   audio, credentials, personal paths, and email addresses.
-- The provider API key is a plaintext field in the local `preferences.json`. The
+- The DeepSeek API key is a plaintext field in the local `preferences.json`. The
   Application Support root uses mode `0700`, the file uses mode `0600`, and every
   atomic replacement reapplies the file mode.
-- Remote requests use an ephemeral URL session, an HTTPS endpoint policy (HTTP only
-  for loopback), bounded responses, blocked cross-origin redirects, cancellation,
+- Remote requests go only to the fixed HTTPS endpoint `https://api.deepseek.com`,
+  use an ephemeral URL session, bounded responses, blocked cross-origin redirects, cancellation,
   and credential-safe errors. Connection tests carry only fixed synthetic content.
 - Raw-audio retention is opt-in. A "never save" history policy prevents new
   history and recording writes.

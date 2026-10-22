@@ -72,8 +72,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
             promptVersion: request.task == .translate
                 ? CloudPromptComposer.translatePromptVersion
                 : CloudPromptComposer.dictatePromptVersion,
-            provider: invocation.configuration.provider,
-            modelIdentifier: invocation.configuration.modelIdentifier,
+            modelIdentifier: RemoteProviderConfiguration.modelIdentifier,
             userPrompt: invocation.userPrompt,
             response: generated,
             tokens: timed.generation.tokens,
@@ -88,7 +87,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
                 task: request.task
             ),
             disposition: disposition,
-            modelIdentifier: invocation.configuration.modelIdentifier,
+            modelIdentifier: RemoteProviderConfiguration.modelIdentifier,
             source: .remote,
             call: call
         )
@@ -153,6 +152,15 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         }
     }
 
+    public func remoteBalance(
+        configuration: RemoteProviderConfiguration
+    ) async throws -> DeepSeekBalance {
+        guard let remoteRuntime else {
+            throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
+        }
+        return try await remoteRuntime.balance(configuration: configuration)
+    }
+
     /// Runs one remote call and appends a usage record for it. Cancelled calls
     /// record nothing. Recording failures never affect the call.
     private func recordingUsage<Result: Sendable>(
@@ -170,8 +178,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
             try? await usageRecorder?.append(AIUsageRecord(
                 date: date,
                 feature: feature,
-                provider: configuration.provider,
-                modelIdentifier: configuration.modelIdentifier,
+                modelIdentifier: RemoteProviderConfiguration.modelIdentifier,
                 tokens: tokens,
                 latencyMilliseconds: Self.milliseconds(since: start, clock: clock),
                 succeeded: succeeded,

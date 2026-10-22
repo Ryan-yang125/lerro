@@ -9,7 +9,8 @@ brand
 Lerro is for Apple silicon Mac users on macOS 26 who write throughout the day
 and want speech to become correct, editable text at the active cursor. Many mix
 Chinese and English in one sentence. They value speed, native macOS behavior,
-transparent permissions, and the freedom to bring their own AI provider.
+transparent permissions, and paying only for the AI they use through their own
+DeepSeek account.
 
 ## Product purpose
 
@@ -18,7 +19,7 @@ cursor. A user presses a shortcut, speaks, presses it again, and keeps writing.
 There is no account, subscription, or hosted Lerro service.
 
 - Apple `SpeechTranscriber` transcribes live, with the microphone opening first.
-- Optional AI (the user's own OpenAI-compatible API key, DeepSeek by default)
+- Optional AI cleanup through the user's own DeepSeek API key
   fixes misheard words, polishes, and translates, using a personal dictionary and
   per-app tone.
 - Delivery goes to the exact target field through the clipboard and Command-V.
@@ -39,7 +40,7 @@ utility. Claims state exactly which paths stay local and when the network is use
 - Generic AI landing pages built from repeated equal cards, gradients, and vague
   promises.
 - Absolute privacy or offline claims that hide Apple resource downloads, update
-  checks, or the user's AI provider traffic.
+  checks, or the user's DeepSeek traffic.
 - Decorative effects that compete with the real application screenshots.
 
 ## Design principles

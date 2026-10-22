@@ -55,35 +55,11 @@ struct SidebarView: View {
     }
 
     private var footer: some View {
-        let status = session.intelligenceStatus
-        return VStack(spacing: 6) {
+        VStack(spacing: 6) {
             if AppUpdateController.shared.updateAvailable {
                 updateCard
             }
-            Button {
-                showSettings(.intelligence)
-            } label: {
-                HStack(spacing: 8) {
-                    LerroStatusDot(color: status.isReady ? LerroTheme.success : LerroTheme.warning)
-                    (Text(verbatim: status.title)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(LerroTheme.text)
-                        + Text(verbatim: " · \(status.detail)")
-                        .foregroundStyle(LerroTheme.secondaryText))
-                        .font(LerroFont.caption)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.primary.opacity(0.06))
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(verbatim: "\(status.title) · \(status.detail)"))
+            aiStatusButton
 
             HStack(spacing: 4) {
                 LerroIconButton(systemImage: "gearshape", help: "设置") {
@@ -98,6 +74,111 @@ struct SidebarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 10)
+    }
+
+    @ViewBuilder
+    private var aiStatusButton: some View {
+        switch session.aiStatus {
+        case .off:
+            statusButton(
+                dot: LerroTheme.tertiaryText,
+                title: localized("AI 整理"),
+                detail: " · " + localized("未开启"),
+                fill: Color.primary.opacity(0.06),
+                showsChevron: true
+            ) {
+                session.presentAIGuide()
+            }
+        case .ready:
+            statusButton(
+                dot: LerroTheme.success,
+                title: readyTitle,
+                detail: readyDetail,
+                fill: Color.primary.opacity(0.06),
+                showsChevron: false
+            ) {
+                showSettings(.ai)
+            }
+        case .outOfBalance:
+            statusButton(
+                dot: LerroTheme.warning,
+                title: localized("余额"),
+                detail: " " + balanceAmount(loadedBalance),
+                fill: LerroTheme.warning.opacity(0.14),
+                trailingLink: localized("去充值")
+            ) {
+                session.openURL(DeepSeekLinks.topUp)
+            }
+        }
+    }
+
+    private func statusButton(
+        dot: Color,
+        title: String,
+        detail: String,
+        fill: Color,
+        showsChevron: Bool = false,
+        trailingLink: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                LerroStatusDot(color: dot)
+                (Text(verbatim: title)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(LerroTheme.text)
+                    + Text(verbatim: detail)
+                    .foregroundStyle(LerroTheme.secondaryText))
+                    .font(LerroFont.caption)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if let trailingLink {
+                    Text(verbatim: trailingLink)
+                        .font(LerroFont.caption)
+                        .foregroundStyle(LerroTheme.accentText)
+                }
+                if showsChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(LerroTheme.tertiaryText)
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(fill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(verbatim: title + detail + (trailingLink.map { "，\($0)" } ?? "")))
+    }
+
+    private var loadedBalance: DeepSeekBalance? {
+        if case .loaded(let balance) = session.deepSeekBalance { return balance }
+        return nil
+    }
+
+    private var readyTitle: String {
+        localized(loadedBalance == nil ? "AI 整理已开启" : "AI 整理")
+    }
+
+    /// " · 余额 ¥8.42" once the balance is loaded.
+    private var readyDetail: String {
+        guard let balance = loadedBalance else { return "" }
+        return " · " + localized("余额") + " " + balanceAmount(balance)
+    }
+
+    /// "¥8.42". Without a loaded balance, "¥0.00".
+    private func balanceAmount(_ balance: DeepSeekBalance?) -> String {
+        let code = balance?.currencyCode ?? "CNY"
+        let symbol: String
+        switch code {
+        case "CNY": symbol = "¥"
+        case "USD": symbol = "$"
+        default: symbol = code + " "
+        }
+        let value = balance?.total ?? 0
+        return symbol + value.formatted(.number.precision(.fractionLength(2)).locale(locale))
     }
 
     private var updateCard: some View {

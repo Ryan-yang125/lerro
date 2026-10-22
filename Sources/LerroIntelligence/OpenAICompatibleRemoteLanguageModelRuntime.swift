@@ -45,18 +45,17 @@ public actor OpenAICompatibleRemoteLanguageModelRuntime: RemoteLanguageModelRunt
         )
     }
 
+    public func balance(
+        configuration: RemoteProviderConfiguration
+    ) async throws -> DeepSeekBalance {
+        try await client(for: configuration).balance()
+    }
+
     private func client(
         for configuration: RemoteProviderConfiguration
     ) throws -> OpenAICompatibleHTTPClient {
-        guard let baseURL = URL(string: configuration.baseURL) else {
-            throw OpenAICompatibleRuntimeError.invalidEndpoint
-        }
-        return try OpenAICompatibleHTTPClient(
-            endpoint: OpenAICompatibleEndpoint(
-                providerIdentifier: configuration.provider.rawValue,
-                baseURL: baseURL,
-                modelIdentifier: configuration.modelIdentifier
-            ),
+        try OpenAICompatibleHTTPClient(
+            endpoint: OpenAICompatibleEndpoint(),
             apiKey: configuration.apiKey,
             protocolClasses: protocolClasses
         )

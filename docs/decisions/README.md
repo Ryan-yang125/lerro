@@ -7,13 +7,14 @@ An ADR records a decision that shapes modules, data, permissions, distribution, 
 | [0002](0002-lerro-product-identity.md) | Product name, targets, Bundle ID, data root |
 | [0003](0003-explicit-hotkey-gesture-semantics.md) | `hold` and `toggle`, modifier-only keys, active event tap |
 | [0004](0004-transactional-command-v-delivery.md) | Clipboard transaction and Command-V commit point |
-| [0006](0006-byok-openai-compatible-providers.md) | Bring-your-own-key OpenAI-compatible provider, plaintext key in `preferences.json` |
+| [0006](0006-byok-openai-compatible-providers.md) | Bring-your-own-key OpenAI-compatible runtime, plaintext key in `preferences.json` (provider scope superseded by 0016) |
 | [0007](0007-cloudflare-distribution-and-sparkle-updates.md) | Cloudflare Worker, R2, D1 distribution and Sparkle updates |
 | [0008](0008-accessibility-owned-fn-shortcuts.md) | Two system permissions and physical ownership of Fn/Globe |
 | [0012](0012-strict-delivery-ai-dictionary-learning.md) | Capture-bound strict delivery, recovery, AI dictionary learning |
 | [0013](0013-brand-capsule-hud.md) | Single-capsule ink HUD |
 | [0014](0014-main-window-rebuild.md) | Native main window, separate Settings window, ink-blue accent |
 | [0015](0015-speech-transcriber.md) | `SpeechTranscriber` for live recognition |
+| [0016](0016-deepseek-only.md) | DeepSeek is the only AI service; balance from the official endpoint |
 
 Numbers only increase and are never reused. Gaps are decisions that were superseded or removed together with the feature they covered (local MLX models, delivery receipts, voice edits, the vendored Hugging Face stack).
 

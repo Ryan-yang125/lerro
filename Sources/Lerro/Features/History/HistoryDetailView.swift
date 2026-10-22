@@ -303,9 +303,9 @@ struct HistoryDetailView: View {
         case .local: key = "本地 AI"
         case .remote:
             if let model = entry.modelIdentifier, !model.isEmpty { return model }
-            key = "API 模型"
+            key = "AI 整理"
         case .appleTranslation: key = "Apple 翻译"
-        case nil: key = entry.wasEnhanced ? "AI 润色" : "原始听写"
+        case nil: key = entry.wasEnhanced ? "AI 整理" : "原始听写"
         }
         return HistoryPresentation.localized(key, locale: locale)
     }

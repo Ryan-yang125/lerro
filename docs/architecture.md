@@ -51,14 +51,16 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 
 1. **启动**：忽略设置或 onboarding 录制快捷键期间的触发；`transcribing`、`enhancing`、`inserting`
    阶段忽略重复开始或停止。检查麦克风、辅助功能和安全输入框；冻结目标应用、输入元素、完整文本值、
-   选区、安全状态指纹，以及智能模式、Provider 配置、API Key、上下文开关、语气和目标语言。
+   选区、安全状态指纹，以及 AI 整理开关、API Key、上下文开关、语气和目标语言。
 2. **收音**：等待当前语言的 Apple Speech 资源就绪后立即打开麦克风，HUD 显示。麦克风打开后在后台准备
    `SpeechTranscriber` 与 `SpeechAnalyzer`，音频按顺序缓存在内存，分析器就绪后先送缓存再送实时音频。
    空闲时 `AppleSpeechService` 保留一个已建好但未启动的 `AVAudioEngine`，麦克风指示灯只在录音期间亮起。
 3. **转写**：`SpeechTranscriber` 使用 `.progressiveTranscription`（[ADR 0015](decisions/0015-speech-transcriber.md)），
    partial 只用于预览。`TranscriptSpacing.normalize` 去掉中文标点两侧的空格。Apple Speech 不接收词典内容。
-4. **处理**：`raw` 模式把 Apple transcript 直接交付。`remote` 模式下 Dictate 由 `PipelineIntelligenceService`
-   润色，Translate 翻译。Dictate 的模型失败回退原始 transcript，Translate 保持明确失败。
+4. **处理**：AI 整理关闭（`raw`）或没有 API Key 时，Dictate 把 Apple transcript 直接交付，Translate 在开始前失败并提示开启 AI 整理。
+   `remote` 模式下 Dictate 由 `PipelineIntelligenceService` 整理，Translate 翻译。Dictate 的模型失败回退原始 transcript，
+   Translate 保持明确失败。DeepSeek 返回余额不足（HTTP 402）时，Dictate 回退原文，HUD 显示「DeepSeek 余额用完了，这次写的是原文」，
+   Translate 以「DeepSeek 余额用完了」失败。
 5. **交付**：见下节。成功后保存历史（`historyRetention == .never` 时跳过），更新用量和词典使用次数，累计 AI 标出的专有名词，启动词典学习观察，
    清空 session，回到 `idle`。
 6. **取消**：取消信号贯穿启动、Speech、模型任务和 Command-V 提交前检查。统一清理：停止音频、释放 Core Audio
@@ -101,18 +103,26 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 4. 失败时 `PasteboardRecoveryTextCopier` 把最终文本留在剪贴板，历史保存 failed 记录和最终文本，HUD 显示含「再次复制」
    与「关闭」的恢复卡。
 
-## 智能处理
+## AI 整理
 
 | 模式 | 行为 |
 | --- | --- |
 | `raw` | Apple transcript 直接交付，新安装的默认值 |
-| `remote` | 用户的 OpenAI-compatible API（DeepSeek、OpenAI、Gemini、Custom） |
+| `remote` | 用户自己的 DeepSeek API Key，只支持 DeepSeek（[ADR 0016](decisions/0016-deepseek-only.md)） |
 
-- Provider、Base URL、Model ID、API Key、上下文开关保存在 `preferences.json`；API Key 为明文字段。DeepSeek 预设为
-  `https://api.deepseek.com` 与 `deepseek-flash`，使用 temperature 0 并关闭 thinking。
+- API Key 与上下文开关保存在 `preferences.json`；API Key 为明文字段。地址固定为 `https://api.deepseek.com`，模型固定为
+  `deepseek-flash`，使用 temperature 0 并关闭 thinking。用户界面不提供服务商、模型和地址选项。
 - [`OpenAICompatibleRemoteLanguageModelRuntime`](../Sources/LerroIntelligence/OpenAICompatibleRemoteLanguageModelRuntime.swift)
-  使用 Chat Completions，ephemeral URLSession，接受 HTTPS 与 loopback HTTP，阻止跨 origin 重定向，限制响应大小，
-  错误信息经过脱敏。连接测试只发送固定合成消息。
+  使用 Chat Completions，ephemeral URLSession，阻止跨 origin 重定向，限制响应大小，错误信息经过脱敏。连接测试只发送固定合成消息。
+  HTTP 401 与 403 映射为 `LerroError.invalidAPIKey`，HTTP 402 映射为 `LerroError.insufficientBalance`。
+- 余额：`balance(configuration:)` 请求 `GET https://api.deepseek.com/user/balance`，解析为 `DeepSeekBalance`（可用状态、金额、币种，
+  优先人民币）。DeepSeek 没有用量接口，用量由本地 `ai-usage.json` 统计。`AppSession` 持有 `deepSeekBalance` 状态，在启动、
+  成功的远程调用之后（60 秒内不重复）、设置里的 AI 整理页出现时刷新；余额已加载且为空，或最近一次调用遇到余额不足时，
+  `aiStatus` 为 `outOfBalance`。
+- `AppSession.connectDeepSeek(apiKey:)` 先发连接测试，再读余额：可用的 Key 无论是否有余额都会保存并打开 AI 整理，返回
+  `connected` 或 `noBalance`；401/403 或格式不对（不以 `sk-` 开头）返回 `invalidKey`；其他错误返回 `failed`，不保存。
+  `clearDeepSeekKey()` 清空 Key 并关闭 AI 整理。`showsAIOffer`（没有 Key 且 `aiOfferDismissed == false`）驱动首页的开启卡片，
+  `isAIGuidePresented` 驱动主窗口的指引 sheet。
 - [`CloudPromptComposer`](../Sources/LerroCore/Services/CloudPromptComposer.swift) 构建提示词。Dictate 提示词把 transcript
   当作语音草稿：每个输出词都必须是符合句意的真实词，听错的词替换为发音相近的词，优先采用 `known_terms`。模型返回
   `{"fixes": [...], "text": ...}`，`dictateText(from:)` 取出 `text`，JSON 损坏时回退原始 transcript。系统提示词把 transcript、
@@ -121,11 +131,11 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
   条目、最多 40 个 `known_terms`、应用语气。transcript 始终包含。
 - [`PipelineIntelligenceService`](../Sources/LerroCore/Services/PipelineIntelligenceService.swift) 提供 `polish`、`translate`、
   词典学习分类，并为每次远程调用写入一条 `AIUsageRecord`（`ai-usage.json`，保留 90 天，带所属历史记录的 ID）。费用在本机按
-  `AIModelPriceTable` 估算，显示在设置的「用量」标签，调用记录可跳回对应历史。
+  内置人民币价格表 `AIModelPriceTable` 估算，显示在设置 › AI 整理 › 用量明细，调用记录可跳回对应历史。
 - 听写和翻译的远程调用以 `AICallTrace` 原样存进 `HistoryEntry.aiCall`：发送的 user 内容、模型回答、提示词版本、模型 ID、
   token 和延迟。历史详情的「AI 处理」从中解析出改词、发送的上下文和费用明细。
-- 三份系统提示词（听写润色、翻译、自动学词）以 [`AIPromptDocument`](../Sources/LerroCore/Services/AIPromptDocument.swift)
-  分段定义，`fullText` 就是发给模型的原文；设置 › 智能 › 提示词只读展示这些分段和示例。
+- 三份系统提示词（听写整理、翻译、自动学词）以 [`AIPromptDocument`](../Sources/LerroCore/Services/AIPromptDocument.swift)
+  分段定义，`fullText` 就是发给模型的原文；设置 › AI 整理 › 高级 › 提示词只读展示这些分段和示例。
 - 应用语气（`AppToneProfile`）按应用 Bundle ID 匹配；没有匹配时使用 `UserPreferences.defaultToneInstruction`。
 
 ## 词典与自动学习
@@ -151,11 +161,11 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 
 | 文件 | 内容 |
 | --- | --- |
-| `preferences.json`（`0600`） | 偏好、Provider 配置、API Key、价格覆盖 |
+| `preferences.json`（`0600`） | 偏好、API Key、上下文开关 |
 | `history.json` | 听写记录：raw/final 文本、路由、模型 ID、上下文类别、阶段耗时、交付状态、AI 调用原样记录（`aiCall`） |
 | `dictionary.json` | 词典，含每个词条的使用次数、最近使用时间，以及自动学会词条的听错写法和来源历史 ID |
 | `term-candidates.json`（`0600`） | 专有名词学习状态：候选词、曾被听成的写法、出现过的历史记录 ID，以及被用户删除而不再学习的词；随全部历史一起删除，`historyRetention == .never` 时不写入 |
-| `ai-usage.json` | 远程调用的时间、功能、Provider、模型 ID、token 数、延迟、成败、所属历史 ID |
+| `ai-usage.json` | 远程调用的时间、功能、模型 ID、token 数、延迟、成败、所属历史 ID |
 | `usage-days.json` | 首页统计的每日汇总：字数、次数、时长、各应用字数、各小时次数；不含文字，保留 400 天 |
 | `Audio/` | 可选录音（CAF），`saveAudio` 默认关闭 |
 
@@ -167,7 +177,7 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 - 原始音频默认关闭；`historyRetention == .never` 时不写入新历史和录音。
 - 日志不含 transcript、选中或焦点文本、提示词、模型回答、词典内容、API Key、Authorization header、邮箱和个人路径。
 - 历史不保存 focused value、元素指纹和词典学习的差异片段，这些只存在于进程内。
-- 网络只有三类：Apple 管理的 Speech 语言资源下载、用户配置的 AI endpoint、`updates.lerroapp.com` 的 Sparkle 更新检查。
+- 网络只有三类：Apple 管理的 Speech 语言资源下载、`api.deepseek.com`（AI 整理请求和 `/user/balance` 余额读取）、`updates.lerroapp.com` 的 Sparkle 更新检查。
   没有产品遥测。
 - 系统权限只有麦克风和辅助功能（`SpeechAnalyzer` 不需要 Speech Recognition 授权）。用户在系统设置中授权，签名身份变化会产生新的 TCC 条目。
 - 用户可读的说明见 [`PRIVACY.md`](../PRIVACY.md)。
@@ -182,8 +192,8 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 
 ## UI
 
-- 主窗口为 `NavigationSplitView`，侧栏为首页、历史、词典、应用语气；设置位于 `Settings` 场景（⌘,），标签为通用、快捷键、智能、
-  用量、隐私、关于。菜单栏面板单独呈现。决策见 [ADR 0014](decisions/0014-main-window-rebuild.md)。
+- 主窗口为 `NavigationSplitView`，侧栏为首页、历史、词典、应用语气；设置位于 `Settings` 场景（⌘,），标签为通用、听写、AI 整理、
+  隐私、关于；用量明细是 AI 整理页里的二级页面（`aiSettingsShowsUsage`）。`AppSession.openSettings(_:)` 选中标签并打开设置窗口。菜单栏面板单独呈现。决策见 [ADR 0014](decisions/0014-main-window-rebuild.md)。
 - HUD 是 40 pt 高的墨黑玻璃胶囊，宽度最大 480 pt，所有状态在同一胶囊内形变，由
   [`AppSession.currentHUDVisualState`](../Sources/Lerro/App/AppSession.swift) 与
   [`CaptureHUDModel.swift`](../Sources/Lerro/Features/HUD/CaptureHUDModel.swift) 决定，见

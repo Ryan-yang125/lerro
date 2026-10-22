@@ -9,7 +9,8 @@ struct UserPreferencesTests {
         let preferences = UserPreferences()
 
         #expect(preferences.recognitionLocaleIdentifier == "zh_CN")
-        #expect(preferences.translationLanguageIdentifiers == ["en_US"])
+        #expect(preferences.translationLanguageIdentifier == "en_US")
+        #expect(!preferences.aiOfferDismissed)
         #expect(preferences.appLanguage == .system)
         #expect(preferences.microphoneDeviceUID == nil)
         #expect(preferences.muteOtherAudio)
@@ -136,13 +137,20 @@ struct UserPreferencesTests {
         ))
     }
 
-    @Test("Translation language choices are limited to three")
-    func limitsTranslationLanguages() {
+    @Test("The translation language and the AI offer dismissal survive a round trip")
+    func roundTripsTranslationLanguageAndOfferDismissal() throws {
         let preferences = UserPreferences(
-            translationLanguageIdentifiers: ["en_US", "ja_JP", "fr_FR", "de_DE"]
+            translationLanguageIdentifier: "ja_JP",
+            aiOfferDismissed: true
+        )
+        let decoded = try JSONDecoder().decode(
+            UserPreferences.self,
+            from: JSONEncoder().encode(preferences)
         )
 
-        #expect(preferences.translationLanguageIdentifiers == ["en_US", "ja_JP", "fr_FR"])
+        #expect(decoded.translationLanguageIdentifier == "ja_JP")
+        #expect(decoded.aiOfferDismissed)
+        #expect(decoded == preferences)
     }
 
     @Test("Persists audio paths and onboarding progress fields")
@@ -159,9 +167,6 @@ struct UserPreferencesTests {
             appLanguage: .english,
             intelligenceMode: .remote,
             remoteProvider: RemoteProviderConfiguration(
-                provider: .custom,
-                baseURL: "https://models.example.test/v1",
-                modelIdentifier: "fast-model",
                 apiKey: "secret-test-key",
                 contextSharing: .minimal
             ),
@@ -216,11 +221,48 @@ struct UserPreferencesTests {
         #expect(decoded.intelligenceMode == .raw)
         #expect(decoded.remoteProvider == RemoteProviderConfiguration())
         #expect(decoded.hasCompletedOnboarding)
-        #expect(decoded.translationLanguageIdentifiers == ["en_US"])
+        #expect(decoded.translationLanguageIdentifier == "en_US")
         #expect(decoded.appLanguage == .system)
         #expect(decoded.automaticDictionaryLearningEnabled)
         #expect(!reencoded.contains("interactionSoundsEnabled"))
         #expect(!reencoded.contains("quickDictateEnabled"))
+    }
+
+    @Test("A saved DeepSeek key survives and a key from another provider is discarded")
+    func legacyProviderKeys() throws {
+        func decode(_ json: String) throws -> RemoteProviderConfiguration {
+            try JSONDecoder().decode(RemoteProviderConfiguration.self, from: Data(json.utf8))
+        }
+
+        let deepSeek = try decode(#"{"provider":"deepSeek","apiKey":"sk-deepseek","contextSharing":{"application":true,"windowTitle":false,"nearbyText":true,"selectedText":true,"dictionary":true,"tone":true}}"#)
+        #expect(deepSeek.apiKey == "sk-deepseek")
+        #expect(!deepSeek.contextSharing.windowTitle)
+
+        #expect(try decode(#"{"provider":"openAI","apiKey":"sk-openai"}"#).apiKey.isEmpty)
+        #expect(try decode(#"{"provider":"gemini","baseURL":"https://x.test","apiKey":"k"}"#).apiKey.isEmpty)
+        #expect(try decode(#"{"provider":"custom","apiKey":"k"}"#).apiKey.isEmpty)
+        #expect(try decode(#"{"provider":7,"apiKey":"k"}"#).apiKey.isEmpty)
+
+        let withoutProvider = try decode(#"{"apiKey":"sk-current"}"#)
+        #expect(withoutProvider.apiKey == "sk-current")
+        #expect(withoutProvider.contextSharing == .full)
+
+        let reencoded = String(
+            decoding: try JSONEncoder().encode(deepSeek),
+            as: UTF8.self
+        )
+        #expect(!reencoded.contains("provider"))
+        #expect(!reencoded.contains("baseURL"))
+        #expect(!reencoded.contains("modelIdentifier"))
+    }
+
+    @Test("Remote configuration is fixed to DeepSeek and ready only with a key")
+    func remoteConfigurationReadiness() {
+        #expect(RemoteProviderConfiguration.baseURL.absoluteString == "https://api.deepseek.com")
+        #expect(RemoteProviderConfiguration.modelIdentifier == "deepseek-flash")
+        #expect(!RemoteProviderConfiguration().isReadyForUse)
+        #expect(!RemoteProviderConfiguration(apiKey: "  \n").isReadyForUse)
+        #expect(RemoteProviderConfiguration(apiKey: " sk-test ").isReadyForUse)
     }
 
     @Test("A saved intelligence mode that no longer exists decodes as raw")
@@ -243,6 +285,11 @@ struct UserPreferencesTests {
 
         preferences.automaticDictionaryLearningEnabled = false
         #expect(!preferences.isAutomaticDictionaryLearningActive)
+    }
+
+    @Test("The insufficient balance error names DeepSeek")
+    func describesInsufficientBalance() {
+        #expect(LerroError.insufficientBalance.errorDescription == "DeepSeek 余额用完了")
     }
 
     @Test("Secure field errors explain the privacy boundary")

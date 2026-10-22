@@ -2,7 +2,6 @@ import Foundation
 import LerroCore
 
 struct OpenAICompatibleEndpoint: Sendable, Equatable {
-    let providerIdentifier: String
     let baseURL: URL
     let modelIdentifier: String
     let requestTimeout: TimeInterval
@@ -10,23 +9,17 @@ struct OpenAICompatibleEndpoint: Sendable, Equatable {
     let maximumResponseBytes: Int
 
     init(
-        providerIdentifier: String,
-        baseURL: URL,
-        modelIdentifier: String,
+        baseURL: URL = RemoteProviderConfiguration.baseURL,
+        modelIdentifier: String = RemoteProviderConfiguration.modelIdentifier,
         requestTimeout: TimeInterval = 60,
         resourceTimeout: TimeInterval = 120,
         maximumResponseBytes: Int = 2 * 1_024 * 1_024
     ) {
-        self.providerIdentifier = providerIdentifier
         self.baseURL = baseURL
         self.modelIdentifier = modelIdentifier
         self.requestTimeout = requestTimeout
         self.resourceTimeout = resourceTimeout
         self.maximumResponseBytes = maximumResponseBytes
-    }
-
-    var usesDeepSeekExtensions: Bool {
-        providerIdentifier.caseInsensitiveCompare("deepseek") == .orderedSame
     }
 }
 
@@ -54,12 +47,8 @@ struct OpenAICompatibleConnectionProbe: Sendable, Equatable {
 }
 
 enum OpenAICompatibleRuntimeError: LocalizedError, Sendable, Equatable {
-    case invalidEndpoint
-    case insecureEndpoint
     case missingCredential
     case invalidRequest
-    case authenticationFailed
-    case paymentRequired
     case modelUnavailable
     case rateLimited
     case serviceUnavailable
@@ -73,20 +62,12 @@ enum OpenAICompatibleRuntimeError: LocalizedError, Sendable, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .invalidEndpoint:
-            "模型服务地址无效"
-        case .insecureEndpoint:
-            "模型服务需要使用 HTTPS；本机 loopback 服务可以使用 HTTP"
         case .missingCredential:
             "API Key 为空"
         case .invalidRequest:
             "模型服务拒绝了请求参数"
-        case .authenticationFailed:
-            "API Key 无效或没有访问权限"
-        case .paymentRequired:
-            "模型账户余额或计费状态不可用"
         case .modelUnavailable:
-            "模型名称或服务地址不可用"
+            "模型名称不可用"
         case .rateLimited:
             "模型服务请求过于频繁，请稍后重试"
         case .serviceUnavailable:
@@ -132,8 +113,6 @@ actor OpenAICompatibleHTTPClient {
         ).isEmpty else {
             throw OpenAICompatibleRuntimeError.invalidRequest
         }
-        _ = try Self.completionsURL(from: endpoint.baseURL)
-
         let configuration = Self.ephemeralSessionConfiguration(
             requestTimeout: endpoint.requestTimeout,
             resourceTimeout: endpoint.resourceTimeout,
@@ -162,6 +141,20 @@ actor OpenAICompatibleHTTPClient {
         )
     }
 
+    func balance() async throws -> DeepSeekBalance {
+        let request = makeRequest(
+            url: endpoint.baseURL
+                .appending(path: "user", directoryHint: .isDirectory)
+                .appending(path: "balance", directoryHint: .notDirectory),
+            method: "GET"
+        )
+        let (data, _) = try await readResponse(for: request)
+        guard let balance = DeepSeekBalance.parse(data) else {
+            throw OpenAICompatibleRuntimeError.invalidResponse
+        }
+        return balance
+    }
+
     func testConnection() async throws -> OpenAICompatibleConnectionProbe {
         let clock = ContinuousClock()
         let startedAt = clock.now
@@ -185,6 +178,21 @@ actor OpenAICompatibleHTTPClient {
         session.invalidateAndCancel()
     }
 
+    private func makeRequest(url: URL, method: String) -> URLRequest {
+        var request = URLRequest(
+            url: url,
+            cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
+            timeoutInterval: endpoint.requestTimeout
+        )
+        request.httpMethod = method
+        request.httpShouldHandleCookies = false
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        return request
+    }
+
     private func makeRequest(
         messages: [OpenAICompatibleMessage],
         maxTokens: Int
@@ -193,18 +201,13 @@ actor OpenAICompatibleHTTPClient {
             throw OpenAICompatibleRuntimeError.invalidRequest
         }
 
-        var request = URLRequest(
-            url: try Self.completionsURL(from: endpoint.baseURL),
-            cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
-            timeoutInterval: endpoint.requestTimeout
+        var request = makeRequest(
+            url: endpoint.baseURL
+                .appending(path: "chat", directoryHint: .isDirectory)
+                .appending(path: "completions", directoryHint: .notDirectory),
+            method: "POST"
         )
-        request.httpMethod = "POST"
-        request.httpShouldHandleCookies = false
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
-        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
 
         let body = ChatCompletionRequestBody(
             model: endpoint.modelIdentifier,
@@ -216,9 +219,7 @@ actor OpenAICompatibleHTTPClient {
             },
             temperature: 0,
             maxTokens: maxTokens,
-            thinking: endpoint.usesDeepSeekExtensions
-                ? ChatCompletionRequestBody.Thinking(type: "disabled")
-                : nil
+            thinking: ChatCompletionRequestBody.Thinking(type: "disabled")
         )
         do {
             request.httpBody = try JSONEncoder().encode(body)
@@ -252,31 +253,11 @@ actor OpenAICompatibleHTTPClient {
                 data.append(byte)
             }
             return (data, response)
+        } catch let error as LerroError {
+            throw error
         } catch {
             throw Self.sanitized(error)
         }
-    }
-
-    nonisolated static func completionsURL(from baseURL: URL) throws -> URL {
-        switch RemoteProviderEndpointPolicy.validate(baseURL.absoluteString) {
-        case .valid:
-            break
-        case .insecure:
-            throw OpenAICompatibleRuntimeError.insecureEndpoint
-        case .invalid:
-            throw OpenAICompatibleRuntimeError.invalidEndpoint
-        }
-
-        let normalizedPath = baseURL.path
-            .split(separator: "/")
-            .map(String.init)
-        if normalizedPath.suffix(2).map({ $0.lowercased() }) == ["chat", "completions"] {
-            return baseURL
-        }
-
-        return baseURL
-            .appending(path: "chat", directoryHint: .isDirectory)
-            .appending(path: "completions", directoryHint: .notDirectory)
     }
 
     nonisolated static func sameOrigin(_ first: URL, _ second: URL) -> Bool {
@@ -334,9 +315,9 @@ actor OpenAICompatibleHTTPClient {
         case 400, 409, 422:
             throw OpenAICompatibleRuntimeError.invalidRequest
         case 401, 403:
-            throw OpenAICompatibleRuntimeError.authenticationFailed
+            throw LerroError.invalidAPIKey
         case 402:
-            throw OpenAICompatibleRuntimeError.paymentRequired
+            throw LerroError.insufficientBalance
         case 404:
             throw OpenAICompatibleRuntimeError.modelUnavailable
         case 408, 504:

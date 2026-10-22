@@ -114,14 +114,14 @@ enum HistoryPresentation {
         }
     }
 
-    /// "App · HH:mm" plus " · AI 润色" or " · 翻译" when they apply.
+    /// "App · HH:mm" plus " · AI 整理" or " · 翻译" when they apply.
     static func footnote(for entry: HistoryEntry, locale: Locale) -> String {
         var parts = [entry.applicationName, time(entry.createdAt, locale: locale)]
         switch entry.mode {
         case .translation: parts.append(localized("翻译", locale: locale))
         case .ask: parts.append(localized("指令", locale: locale))
         case .dictation:
-            if entry.wasEnhanced { parts.append(localized("AI 润色", locale: locale)) }
+            if entry.wasEnhanced { parts.append(localized("AI 整理", locale: locale)) }
         }
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }

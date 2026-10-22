@@ -6,18 +6,24 @@ import SwiftUI
 import LerroCore
 import LerroMac
 
-/// Sidebar status for the selected intelligence mode. Strings are already
-/// localized for the current interface language.
-struct IntelligenceStatus: Equatable {
-    var title: String
-    var detail: String
-    var isReady: Bool
+enum DeepSeekBalanceState: Equatable {
+    case unknown
+    case loading
+    case loaded(DeepSeekBalance)
+    case failed
 }
 
-enum OnboardingCorrectionResult: Equatable {
-    case learned
-    case noLearning
+enum DeepSeekConnectOutcome: Equatable {
+    case connected
+    case noBalance
+    case invalidKey
     case failed(String)
+}
+
+enum AIStatus: Equatable {
+    case off
+    case ready
+    case outOfBalance
 }
 
 @MainActor
@@ -84,6 +90,12 @@ final class AppSession {
     var visualFixtureIncreaseContrast = false
     var visualFixtureReduceTransparency = false
     var settingsTab: SettingsTab = .general
+    var isAIGuidePresented = false
+    var aiSettingsShowsUsage = false
+    private(set) var deepSeekBalance: DeepSeekBalanceState = .unknown
+    /// Set when the capsule shows a reason for a raw-text fallback. `nil` keeps
+    /// the default fallback notice.
+    private(set) var hudFallbackMessage: String?
     var isOnboardingPresented = false
     var historySearch = ""
     var historyModeFilter: CaptureMode?
@@ -99,10 +111,6 @@ final class AppSession {
         sourceLanguageIdentifier: "zh_CN",
         message: "正在检查语音资源"
     )
-    var onboardingMicrophoneLevel: Float = 0
-    var isOnboardingMicrophoneTestRunning = false
-    var onboardingMicrophoneTestPassed = false
-    var onboardingMicrophoneTestError: String?
 
     var activeCaptureApplicationName: String? {
         activeSession?.context.applicationName
@@ -122,11 +130,8 @@ final class AppSession {
     }
 
     var activeTranslationDirectionLabel: String? {
-        guard activeMode == .translation,
-              let target = activeSession?.targetLanguage
-                ?? preferences.translationLanguageIdentifiers.first else {
-            return nil
-        }
+        guard activeMode == .translation else { return nil }
+        let target = activeSession?.targetLanguage ?? preferences.translationLanguageIdentifier
         return "\(Self.shortLanguageLabel(preferences.recognitionLocaleIdentifier)) → \(Self.shortLanguageLabel(target))"
     }
 
@@ -211,12 +216,12 @@ final class AppSession {
     private(set) var isWaitingForSpeechResources = false
     private(set) var isCleaningCapture = false
     private var captureTimerTask: Task<Void, Never>?
-    private var microphoneTestTask: Task<Void, Never>?
     private var speechPreparationTask: Task<Void, Never>?
     private var speechPreparationRequestID: UUID?
     private var languageResourceRefreshRequestID = UUID()
-    private var microphoneTestGeneration: UUID?
-    private var microphoneTestSessionID: UUID?
+    private var balanceRequestID: UUID?
+    private var lastBalanceRefreshAt: Date?
+    private var remoteReportedInsufficientBalance = false
     private var preferenceSaveQueue = PreferenceSaveQueue(confirmed: UserPreferences())
     private var preferenceSaveTask: Task<Void, Never>?
     private var preferenceSaveWaiters: [CheckedContinuation<Void, Never>] = []
@@ -283,13 +288,29 @@ final class AppSession {
         !hasActiveCapture
     }
 
+    var hasDeepSeekKey: Bool {
+        preferences.remoteProvider.isReadyForUse
+    }
+
+    var showsAIOffer: Bool {
+        !hasDeepSeekKey && !preferences.aiOfferDismissed
+    }
+
     var selectedAIIsReady: Bool {
-        switch preferences.intelligenceMode {
-        case .raw:
-            false
-        case .remote:
-            preferences.remoteProvider.isReadyForUse
-        }
+        aiMode == .remote
+    }
+
+    /// The mode a new capture uses. AI 整理 needs a DeepSeek Key; without one
+    /// the capture is raw.
+    private var aiMode: IntelligenceMode {
+        preferences.intelligenceMode == .remote && hasDeepSeekKey ? .remote : .raw
+    }
+
+    var aiStatus: AIStatus {
+        guard aiMode == .remote else { return .off }
+        if remoteReportedInsufficientBalance { return .outOfBalance }
+        if case .loaded(let balance) = deepSeekBalance, balance.isEmpty { return .outOfBalance }
+        return .ready
     }
 
     var isCaptureCancellationAvailable: Bool {
@@ -300,25 +321,6 @@ final class AppSession {
             committedTextDeliverySessionID != activeSession?.id
         case .idle, .success, .failed, .cancelled:
             false
-        }
-    }
-
-    /// Localized sidebar status for the selected intelligence mode.
-    var intelligenceStatus: IntelligenceStatus {
-        switch preferences.intelligenceMode {
-        case .raw:
-            return IntelligenceStatus(
-                title: localized("原始听写"),
-                detail: localized("不使用 AI"),
-                isReady: true
-            )
-        case .remote:
-            let isReady = preferences.remoteProvider.isReadyForUse
-            return IntelligenceStatus(
-                title: preferences.remoteProvider.provider.lerroDisplayName,
-                detail: localized(isReady ? "AI 润色已开启" : "未配置 API"),
-                isReady: isReady
-            )
         }
     }
 
@@ -404,6 +406,9 @@ final class AppSession {
         configureApplicationPresentation()
         lastAppliedSystemPreferences = preferences
         isOnboardingPresented = !preferences.hasCompletedOnboarding
+        if hasDeepSeekKey {
+            Task { await refreshDeepSeekBalance() }
+        }
 
         updateHUD()
         configureDeliveryProbeIfRequested()
@@ -764,8 +769,6 @@ final class AppSession {
         }
         if microphonePermission {
             prewarmAudioInput()
-        } else {
-            stopOnboardingMicrophoneTest(resetResult: true)
         }
     }
 
@@ -775,112 +778,7 @@ final class AppSession {
             rebuildHomeStatistics()
         }
         await refreshPermissions(prompt: false)
-    }
-
-    func toggleOnboardingMicrophoneTest() {
-        if isOnboardingMicrophoneTestRunning {
-            stopOnboardingMicrophoneTest()
-        } else {
-            startOnboardingMicrophoneTest()
-        }
-    }
-
-    func startOnboardingMicrophoneTest() {
-        guard phase == .idle || phase == .success || phase == .failed || phase == .cancelled else {
-            onboardingMicrophoneTestError = "请先结束当前录音"
-            return
-        }
-        let generation = UUID()
-        let previousSessionID = microphoneTestSessionID
-        microphoneTestGeneration = generation
-        microphoneTestSessionID = nil
-        microphoneTestTask?.cancel()
-        onboardingMicrophoneLevel = 0
-        onboardingMicrophoneTestPassed = false
-        onboardingMicrophoneTestError = nil
-        isOnboardingMicrophoneTestRunning = true
-
-        microphoneTestTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            if let previousSessionID {
-                await dependencies.microphoneTest.stop(sessionID: previousSessionID)
-            }
-
-            microphonePermission = await dependencies.permissions.microphoneAuthorized()
-            guard microphonePermission else {
-                finishOnboardingMicrophoneTest(
-                    generation: generation,
-                    error: "请先开启麦克风权限"
-                )
-                return
-            }
-
-            do {
-                let test = try await dependencies.microphoneTest.start(
-                    microphoneDeviceUID: preferences.microphoneDeviceUID
-                )
-                guard microphoneTestGeneration == generation, !Task.isCancelled else {
-                    await dependencies.microphoneTest.stop(sessionID: test.id)
-                    return
-                }
-                microphoneTestSessionID = test.id
-
-                do {
-                    for try await rawLevel in test.levels {
-                        guard microphoneTestGeneration == generation, !Task.isCancelled else { break }
-                        let level = min(1, max(0, rawLevel))
-                        onboardingMicrophoneLevel = level
-                        if level >= 0.12 { onboardingMicrophoneTestPassed = true }
-                    }
-                } catch is CancellationError {
-                    // Expected when the user leaves the microphone-test page.
-                } catch {
-                    onboardingMicrophoneTestError = userFacingError(error, context: "麦克风测试错误")
-                }
-
-                await dependencies.microphoneTest.stop(sessionID: test.id)
-                if microphoneTestGeneration == generation {
-                    microphoneTestSessionID = nil
-                    isOnboardingMicrophoneTestRunning = false
-                }
-            } catch is CancellationError {
-                finishOnboardingMicrophoneTest(generation: generation)
-            } catch {
-                finishOnboardingMicrophoneTest(
-                    generation: generation,
-                    error: userFacingError(error, context: "麦克风测试错误")
-                )
-            }
-        }
-    }
-
-    func stopOnboardingMicrophoneTest(resetResult: Bool = false) {
-        let sessionID = microphoneTestSessionID
-        microphoneTestGeneration = nil
-        microphoneTestSessionID = nil
-        microphoneTestTask?.cancel()
-        microphoneTestTask = nil
-        isOnboardingMicrophoneTestRunning = false
-        onboardingMicrophoneLevel = 0
-        if resetResult {
-            onboardingMicrophoneTestPassed = false
-            onboardingMicrophoneTestError = nil
-        }
-        if let sessionID {
-            Task { [dependencies] in
-                await dependencies.microphoneTest.stop(sessionID: sessionID)
-            }
-        }
-    }
-
-    private func finishOnboardingMicrophoneTest(generation: UUID, error: String? = nil) {
-        guard microphoneTestGeneration == generation else { return }
-        microphoneTestGeneration = nil
-        microphoneTestSessionID = nil
-        microphoneTestTask = nil
-        isOnboardingMicrophoneTestRunning = false
-        onboardingMicrophoneLevel = 0
-        onboardingMicrophoneTestError = error
+        await refreshDeepSeekBalance(force: aiStatus == .outOfBalance)
     }
 
     func toggleCapture(_ mode: CaptureMode) {
@@ -902,61 +800,192 @@ final class AppSession {
         }
     }
 
-    func activateIntelligenceMode(_ mode: IntelligenceMode) {
+    func setAIEnabled(_ enabled: Bool) {
         guard !hasActiveCapture else {
-            currentError = "请在当前听写完成后切换智能处理方式"
+            currentError = "请在当前听写完成后切换 AI 整理"
             return
         }
-        preferences.intelligenceMode = mode
+        preferences.intelligenceMode = enabled ? .remote : .raw
+        savePreferences()
+        if enabled { Task { await refreshDeepSeekBalance() } }
+    }
+
+    func dismissAIOffer() {
+        guard !preferences.aiOfferDismissed else { return }
+        preferences.aiOfferDismissed = true
         savePreferences()
     }
 
-    func saveRemoteProvider(_ configuration: RemoteProviderConfiguration) async -> Bool {
-        guard !hasActiveCapture else {
-            currentError = "请在当前听写完成后保存 API 模型配置"
-            return false
+    func presentAIGuide() {
+        if hasDeepSeekKey {
+            openSettings(.ai)
+        } else {
+            isAIGuidePresented = true
         }
-        let normalized = normalizedRemoteProvider(configuration)
-        preferences.remoteProvider = normalized
+    }
+
+    /// Selects a settings tab and brings the Settings window forward.
+    func openSettings(_ tab: SettingsTab) {
+        settingsTab = tab
+        NSApp.activate()
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    }
+
+    func openURL(_ url: URL) {
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Tests the Key against DeepSeek, then reads the balance. A Key that
+    /// works is saved and turns AI 整理 on, with or without remaining balance.
+    func connectDeepSeek(apiKey: String) async -> DeepSeekConnectOutcome {
+        guard !hasActiveCapture else {
+            return .failed(localized("请在当前听写完成后连接 DeepSeek"))
+        }
+        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.looksLikeDeepSeekKey(key) else { return .invalidKey }
+        let configuration = RemoteProviderConfiguration(
+            apiKey: key,
+            contextSharing: preferences.remoteProvider.contextSharing
+        )
+
+        var reportedNoBalance = false
+        do {
+            let test = try await dependencies.intelligence.testRemoteConnection(
+                configuration: configuration
+            )
+            guard test.succeeded else { return .failed(test.message) }
+        } catch is CancellationError {
+            return .failed(localized("连接已取消"))
+        } catch LerroError.insufficientBalance {
+            reportedNoBalance = true
+        } catch LerroError.invalidAPIKey {
+            return .invalidKey
+        } catch {
+            return .failed(userFacingError(error, context: "连接 DeepSeek 失败"))
+        }
+
+        var balance: DeepSeekBalance?
+        do {
+            balance = try await dependencies.intelligence.remoteBalance(configuration: configuration)
+        } catch is CancellationError {
+            return .failed(localized("连接已取消"))
+        } catch LerroError.invalidAPIKey {
+            return .invalidKey
+        } catch {
+            // The Key works; the balance stays unknown.
+        }
+
+        preferences.remoteProvider.apiKey = key
         preferences.intelligenceMode = .remote
         savePreferences()
         await waitForPreferencePersistence()
-        return preferenceSaveQueue.confirmed.remoteProvider == normalized
-            && preferenceSaveQueue.confirmed.intelligenceMode == .remote
-            && preferences.remoteProvider == normalized
-            && preferences.intelligenceMode == .remote
+        guard preferenceSaveQueue.confirmed.remoteProvider.apiKey == key,
+              preferences.remoteProvider.apiKey == key,
+              preferences.intelligenceMode == .remote else {
+            return .failed(currentError ?? localized("设置保存失败"))
+        }
+
+        if let balance {
+            deepSeekBalance = .loaded(balance)
+        } else {
+            deepSeekBalance = .failed
+        }
+        lastBalanceRefreshAt = balance == nil ? nil : .now
+        let isEmpty = balance?.isEmpty ?? false
+        remoteReportedInsufficientBalance = reportedNoBalance && (balance == nil || isEmpty)
+        return reportedNoBalance || isEmpty ? .noBalance : .connected
     }
 
-    func clearRemoteProviderAPIKey() async -> Bool {
+    /// Reads the DeepSeek balance. Without `force`, a read within the last 60
+    /// seconds is reused.
+    func refreshDeepSeekBalance(force: Bool = false) async {
+        guard hasDeepSeekKey else {
+            deepSeekBalance = .unknown
+            lastBalanceRefreshAt = nil
+            return
+        }
+        if !force, let last = lastBalanceRefreshAt,
+           Date.now.timeIntervalSince(last) < Self.balanceRefreshInterval {
+            return
+        }
+        let configuration = preferences.remoteProvider
+        let requestID = UUID()
+        balanceRequestID = requestID
+        lastBalanceRefreshAt = .now
+        if force {
+            deepSeekBalance = .loading
+        } else if case .loaded = deepSeekBalance {
+            // The shown balance stays until the new one arrives.
+        } else {
+            deepSeekBalance = .loading
+        }
+        let state: DeepSeekBalanceState
+        do {
+            state = .loaded(try await dependencies.intelligence.remoteBalance(
+                configuration: configuration
+            ))
+        } catch is CancellationError {
+            if balanceRequestID == requestID {
+                balanceRequestID = nil
+                lastBalanceRefreshAt = nil
+                if deepSeekBalance == .loading { deepSeekBalance = .unknown }
+            }
+            return
+        } catch {
+            state = .failed
+        }
+        guard balanceRequestID == requestID,
+              preferences.remoteProvider.apiKey == configuration.apiKey else { return }
+        balanceRequestID = nil
+        deepSeekBalance = state
+        switch state {
+        case .loaded(let balance):
+            if !balance.isEmpty { remoteReportedInsufficientBalance = false }
+        default:
+            lastBalanceRefreshAt = nil
+        }
+    }
+
+    /// 「更换」: removes the saved Key and turns AI 整理 off.
+    func clearDeepSeekKey() async -> Bool {
         guard !hasActiveCapture else {
-            currentError = "请在当前听写完成后清除 API Key"
+            currentError = "请在当前听写完成后更换 API Key"
             return false
         }
         preferences.remoteProvider.apiKey = ""
-        if preferences.intelligenceMode == .remote {
-            preferences.intelligenceMode = .raw
-        }
+        preferences.intelligenceMode = .raw
         savePreferences()
+        deepSeekBalance = .unknown
+        balanceRequestID = nil
+        lastBalanceRefreshAt = nil
+        remoteReportedInsufficientBalance = false
         await waitForPreferencePersistence()
         return preferenceSaveQueue.confirmed.remoteProvider.apiKey.isEmpty
             && preferences.remoteProvider.apiKey.isEmpty
-            && preferences.intelligenceMode != .remote
+            && preferences.intelligenceMode == .raw
     }
 
-    func testRemoteProviderConnection(
-        _ configuration: RemoteProviderConfiguration
-    ) async -> RemoteConnectionTestOutcome {
-        guard !hasActiveCapture else {
-            return .failure("请在当前听写完成后测试 API 连接")
-        }
+    private static let balanceRefreshInterval: TimeInterval = 60
+
+    private static func looksLikeDeepSeekKey(_ key: String) -> Bool {
+        key.hasPrefix("sk-") && key.count >= 8
+            && !key.contains(where: { $0.isWhitespace || !$0.isASCII })
+    }
+
+    /// Records the outcome of one remote call for the balance state.
+    private func trackingRemoteBalance<Result>(
+        _ call: () async throws -> Result
+    ) async throws -> Result {
         do {
-            return try await dependencies.intelligence.testRemoteConnection(
-                configuration: normalizedRemoteProvider(configuration)
-            )
-        } catch is CancellationError {
-            return .failure("连接测试已取消")
+            let result = try await call()
+            remoteReportedInsufficientBalance = false
+            Task { await refreshDeepSeekBalance() }
+            return result
         } catch {
-            return .failure(userFacingError(error, context: "远程模型暂不可用"))
+            if case LerroError.insufficientBalance = error {
+                remoteReportedInsufficientBalance = true
+            }
+            throw error
         }
     }
 
@@ -1156,14 +1185,12 @@ final class AppSession {
     }
 
     func dismissOnboarding() {
-        stopOnboardingMicrophoneTest(resetResult: true)
         endShortcutConfiguration()
         if isCaptureCancellationAvailable { cancelCapture() }
         isOnboardingPresented = false
     }
 
     func restartOnboarding() {
-        stopOnboardingMicrophoneTest(resetResult: true)
         preferences.onboardingStepIndex = nil
         endShortcutConfiguration()
         isOnboardingPresented = true
@@ -1367,21 +1394,6 @@ final class AppSession {
         }
     }
 
-    func setModelPrice(_ price: AIModelPrice) {
-        if let index = preferences.modelPrices.firstIndex(where: { $0.id == price.id }) {
-            preferences.modelPrices[index] = price
-        } else {
-            preferences.modelPrices.append(price)
-        }
-        savePreferences()
-    }
-
-    func resetModelPrice(modelIdentifier: String) {
-        let key = modelIdentifier.lowercased()
-        preferences.modelPrices.removeAll { $0.id == key }
-        savePreferences()
-    }
-
     func setHistoryRetention(_ retention: HistoryRetention) {
         preferences.historyRetention = retention
         pendingRetentionApplication = retention
@@ -1397,17 +1409,11 @@ final class AppSession {
             currentError = "历史指令仅供查看"
             return
         }
-        guard preferences.intelligenceMode != .raw else {
-            currentError = "请先在“智能处理”中配置 API 模型"
+        guard authorizeIntelligenceIfNeeded(for: entry.mode, requiresAI: true) else {
             return
         }
-        guard authorizeIntelligenceIfNeeded(for: entry.mode) else {
-            return
-        }
-        let intelligenceMode = preferences.intelligenceMode
-        let remoteProvider = intelligenceMode == .remote
-            ? normalizedRemoteProvider(preferences.remoteProvider)
-            : nil
+        let intelligenceMode = aiMode
+        let remoteProvider: RemoteProviderConfiguration? = preferences.remoteProvider
         Task { [weak self] in
             guard let self else { return }
             let context = CapturedContext(
@@ -1428,7 +1434,9 @@ final class AppSession {
                 historyEntryID: entry.id
             )
             do {
-                let result = try await dependencies.intelligence.process(request)
+                let result = try await trackingRemoteBalance {
+                    try await dependencies.intelligence.process(request)
+                }
                 var updated = entry
                 updated.finalText = result.text
                 updated.aiCall = result.call
@@ -1440,7 +1448,7 @@ final class AppSession {
                     await recordDailyUsage(updated)
                 }
             } catch {
-                currentError = userFacingError(error, context: "智能处理失败")
+                currentError = userFacingError(error, context: "AI 整理失败")
             }
         }
     }
@@ -1732,7 +1740,7 @@ final class AppSession {
         guard !isCleaningCapture else { return }
         guard !hasActiveCapture else { return }
         guard mode != .ask else { return }
-        guard mode == .translation || authorizeIntelligenceIfNeeded(for: mode) else { return }
+        guard authorizeIntelligenceIfNeeded(for: mode) else { return }
         deliveredTextObservationTask?.cancel()
         Task { await dependencies.deliveredTextObserver.stopObserving() }
         recoveryDismissTask?.cancel()
@@ -1741,9 +1749,9 @@ final class AppSession {
         clearDeliveryFeedback()
         resetSilenceWarning()
         hudController.anchorScreenPoint = nil
-        let intelligenceMode = preferences.intelligenceMode
-        let remoteProvider = intelligenceMode == .remote
-            ? normalizedRemoteProvider(preferences.remoteProvider)
+        let intelligenceMode = aiMode
+        let remoteProvider: RemoteProviderConfiguration? = intelligenceMode == .remote
+            ? preferences.remoteProvider
             : nil
         let generation = UUID()
         captureGeneration = generation
@@ -1794,8 +1802,6 @@ final class AppSession {
         remoteProvider: RemoteProviderConfiguration?,
         startSound: Task<Void, Never>?
     ) async {
-        stopOnboardingMicrophoneTest()
-
         guard captureGeneration == generation, !Task.isCancelled else { return }
         guard await ensureCapturePermissions() else {
             if captureGeneration == generation {
@@ -1817,11 +1823,7 @@ final class AppSession {
             fail(LerroError.secureField)
             return
         }
-        let targetLanguage = mode == .translation ? preferences.translationLanguageIdentifiers.first : nil
-        if mode == .translation, targetLanguage == nil {
-            fail(LerroError.translationUnavailable("请先选择翻译目标语言"))
-            return
-        }
+        let targetLanguage = mode == .translation ? preferences.translationLanguageIdentifier : nil
 
         do {
             if let preparation = speechPreparationTask {
@@ -2020,16 +2022,22 @@ final class AppSession {
 
         let result: IntelligenceResult
         var usedRawFallback = false
+        var fallbackMessage: String?
         if session.intelligenceMode == .raw {
             result = try rawResult(for: request, task: task)
         } else {
             do {
-                result = try await dependencies.intelligence.process(request)
+                result = try await trackingRemoteBalance {
+                    try await dependencies.intelligence.process(request)
+                }
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
                 if session.mode == .dictation {
                     usedRawFallback = true
+                    if case LerroError.insufficientBalance = error {
+                        fallbackMessage = localized("DeepSeek 余额用完了，这次写的是原文")
+                    }
                     result = try rawResult(for: request, task: task)
                 } else {
                     throw error
@@ -2039,6 +2047,7 @@ final class AppSession {
         traceRecorder.setProcessingRoute(historyProcessingRoute(result: result), id: generation)
         markTrace(.processingFinished, generation: generation)
         let deliveryFeedback: HUDDeliveryFeedback = usedRawFallback ? .deliveredRawFallback : .delivered
+        let deliveryFallbackMessage = fallbackMessage
 
         guard activeSession?.id == session.id else { throw CancellationError() }
         var history = HistoryEntry(
@@ -2081,7 +2090,7 @@ final class AppSession {
                               self.activeSession?.id == session.id else { return }
                         self.markTrace(.deliveryCommitted, generation: generation)
                         self.committedTextDeliverySessionID = session.id
-                        self.presentDeliveryFeedback(deliveryFeedback)
+                        self.presentDeliveryFeedback(deliveryFeedback, fallbackMessage: deliveryFallbackMessage)
                     }
                 )
                 markTrace(.deliveryFinished, generation: generation)
@@ -2181,9 +2190,9 @@ final class AppSession {
         historyEntryID: UUID?
     ) {
         deliveredTextObservationTask?.cancel()
-        let mode = preferences.intelligenceMode
-        let remoteProvider = mode == .remote
-            ? normalizedRemoteProvider(preferences.remoteProvider)
+        let mode = aiMode
+        let remoteProvider: RemoteProviderConfiguration? = mode == .remote
+            ? preferences.remoteProvider
             : nil
         deliveredTextObservationTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -2196,19 +2205,21 @@ final class AppSession {
                 for try await edit in stream {
                     try Task.checkCancellation()
                     let classificationStartedAt = ContinuousClock.now
-                    let decision = try await dependencies.intelligence.classifyCorrection(
-                        DictionaryLearningRequest(
-                            mode: mode,
-                            remoteProvider: remoteProvider,
-                            originalSpan: edit.originalSpan,
-                            correctedSpan: edit.correctedSpan,
-                            contextBefore: edit.contextBefore,
-                            contextAfter: edit.contextAfter,
-                            applicationName: edit.applicationName,
-                            bundleIdentifier: edit.bundleIdentifier,
-                            historyEntryID: historyEntryID
+                    let decision = try await trackingRemoteBalance {
+                        try await dependencies.intelligence.classifyCorrection(
+                            DictionaryLearningRequest(
+                                mode: mode,
+                                remoteProvider: remoteProvider,
+                                originalSpan: edit.originalSpan,
+                                correctedSpan: edit.correctedSpan,
+                                contextBefore: edit.contextBefore,
+                                contextAfter: edit.contextAfter,
+                                applicationName: edit.applicationName,
+                                bundleIdentifier: edit.bundleIdentifier,
+                                historyEntryID: historyEntryID
+                            )
                         )
-                    )
+                    }
                     let classificationDuration = classificationStartedAt.duration(to: ContinuousClock.now).timeInterval
                     let savedCount = await persistLearningDecision(
                         decision,
@@ -2355,58 +2366,6 @@ final class AppSession {
         await refreshDictionaryAndUsage()
     }
 
-    func learnOnboardingCorrection(
-        originalText: String,
-        correctedText: String
-    ) async -> OnboardingCorrectionResult {
-        guard preferences.intelligenceMode != .raw else {
-            return .failed("请返回 AI 步骤，启用 AI 后重试。")
-        }
-        guard preferences.automaticDictionaryLearningEnabled else {
-            return .failed("自动词典学习已关闭，请在智能设置中开启后重试。")
-        }
-        let original = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let corrected = correctedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !original.isEmpty, !corrected.isEmpty, original != corrected else { return .noLearning }
-        do {
-            try Task.checkCancellation()
-            let decision = try await dependencies.intelligence.classifyCorrection(
-                DictionaryLearningRequest(
-                    mode: preferences.intelligenceMode,
-                    remoteProvider: preferences.intelligenceMode == .remote
-                        ? normalizedRemoteProvider(preferences.remoteProvider)
-                        : nil,
-                    originalSpan: original,
-                    correctedSpan: corrected,
-                    applicationName: "Lerro Onboarding",
-                    bundleIdentifier: nil
-                )
-            )
-            try Task.checkCancellation()
-            let candidates = decision.candidates.filter { $0.confidence >= 0.7 }
-            guard !candidates.isEmpty else { return .noLearning }
-            let alreadyLearned = candidates.allSatisfy { candidate in
-                dictionaryEntries.contains {
-                    $0.phrase.caseInsensitiveCompare(
-                        candidate.phrase.trimmingCharacters(in: .whitespacesAndNewlines)
-                    ) == .orderedSame
-                        && $0.replacement == candidate.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
-                        && $0.applicationBundleIdentifier == nil
-                }
-            }
-            if alreadyLearned { return .learned }
-            let saved = await persistLearningDecision(
-                decision,
-                applicationName: "Lerro Onboarding"
-            )
-            return saved > 0 ? .learned : .failed("词典保存失败，请重试。")
-        } catch is CancellationError {
-            return .failed("已取消")
-        } catch {
-            return .failed(userFacingError(error, context: "词典学习失败"))
-        }
-    }
-
     func previewAppTone(
         application: ApplicationDescriptor,
         instruction: String,
@@ -2417,12 +2376,10 @@ final class AppSession {
         let transcript = sample.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !transcript.isEmpty else { return nil }
         do {
-            return try await dependencies.intelligence.process(IntelligenceRequest(
+            let request = IntelligenceRequest(
                 task: .polish,
-                mode: preferences.intelligenceMode,
-                remoteProvider: preferences.intelligenceMode == .remote
-                    ? normalizedRemoteProvider(preferences.remoteProvider)
-                    : nil,
+                mode: .remote,
+                remoteProvider: preferences.remoteProvider,
                 transcript: transcript,
                 context: CapturedContext(
                     applicationName: application.name,
@@ -2431,7 +2388,10 @@ final class AppSession {
                 dictionary: dictionaryEntries,
                 toneInstruction: trimmed,
                 usageFeature: .tonePreview
-            )).text
+            )
+            return try await trackingRemoteBalance {
+                try await dependencies.intelligence.process(request)
+            }.text
         } catch {
             return nil
         }
@@ -2536,36 +2496,22 @@ final class AppSession {
         return true
     }
 
-    private func authorizeIntelligenceIfNeeded(for mode: CaptureMode) -> Bool {
-        switch preferences.intelligenceMode {
-        case .raw:
-            guard mode == .dictation else {
-                fail(LerroError.modelUnavailable("请在“智能处理”中配置 API 模型"))
-                return false
+    /// Dictation without AI 整理 writes the raw transcript. Translation and
+    /// history retries need AI 整理 and fail with a clear message otherwise.
+    private func authorizeIntelligenceIfNeeded(
+        for mode: CaptureMode,
+        requiresAI: Bool = false
+    ) -> Bool {
+        guard mode != .dictation || requiresAI else { return true }
+        guard aiMode == .remote else {
+            if requiresAI {
+                currentError = "请先在“设置 › AI 整理”中开启并连接 DeepSeek"
+            } else {
+                fail(LerroError.modelUnavailable("请先在“设置 › AI 整理”中开启并连接 DeepSeek"))
             }
-            return true
-        case .remote:
-            let configuration = normalizedRemoteProvider(preferences.remoteProvider)
-            guard !configuration.baseURL.isEmpty,
-                  !configuration.modelIdentifier.isEmpty,
-                  !configuration.apiKey.isEmpty else {
-                fail(LerroError.remoteUnavailable("请先在“智能处理”中填写完整的 API 配置"))
-                return false
-            }
-            return true
+            return false
         }
-    }
-
-    private func normalizedRemoteProvider(
-        _ configuration: RemoteProviderConfiguration
-    ) -> RemoteProviderConfiguration {
-        var normalized = configuration
-        normalized.baseURL = configuration.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        normalized.modelIdentifier = configuration.modelIdentifier.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
-        normalized.apiKey = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        return normalized
+        return true
     }
 
     private func intelligenceTask(mode: CaptureMode, transcript: String, context: CapturedContext) -> IntelligenceTask {
@@ -2781,12 +2727,13 @@ final class AppSession {
         switch presentation {
         case "settings-general":
             settingsTab = .general
-        case "settings-shortcuts":
-            settingsTab = .shortcuts
-        case "settings-intelligence":
-            settingsTab = .intelligence
-        case "settings-usage":
-            settingsTab = .usage
+        case "settings-dictation":
+            settingsTab = .dictation
+        case "settings-ai":
+            settingsTab = .ai
+        case "settings-ai-usage":
+            settingsTab = .ai
+            aiSettingsShowsUsage = true
         case "settings-privacy":
             settingsTab = .privacy
         case "settings-about":
@@ -2855,6 +2802,10 @@ final class AppSession {
             partialTranscriptIsStable = true
         case "hud-delivered-fallback":
             activeSession = visualFixtureSession()
+            hudDeliveryFeedback = .deliveredRawFallback
+        case "hud-delivered-fallback-balance":
+            activeSession = visualFixtureSession()
+            hudFallbackMessage = localized("DeepSeek 余额用完了，这次写的是原文")
             hudDeliveryFeedback = .deliveredRawFallback
         case "hud-error":
             phase = .failed
@@ -3058,10 +3009,14 @@ final class AppSession {
         NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
     }
 
-    private func presentDeliveryFeedback(_ feedback: HUDDeliveryFeedback) {
+    private func presentDeliveryFeedback(
+        _ feedback: HUDDeliveryFeedback,
+        fallbackMessage: String? = nil
+    ) {
         hudDeliveryFeedbackTask?.cancel()
         let token = UUID()
         hudDeliveryFeedbackToken = token
+        hudFallbackMessage = fallbackMessage
         hudDeliveryFeedback = feedback
         updateHUD()
         guard let displayDuration = feedback.displayDuration else {
@@ -3072,6 +3027,7 @@ final class AppSession {
             try? await Task.sleep(for: displayDuration)
             guard let self, !Task.isCancelled, self.hudDeliveryFeedbackToken == token else { return }
             self.hudDeliveryFeedback = nil
+            self.hudFallbackMessage = nil
             self.hudDeliveryFeedbackToken = nil
             self.hudDeliveryFeedbackTask = nil
             self.updateHUD()
@@ -3083,6 +3039,7 @@ final class AppSession {
         hudDeliveryFeedbackTask = nil
         hudDeliveryFeedbackToken = nil
         hudDeliveryFeedback = nil
+        hudFallbackMessage = nil
     }
 
     private func presentRecovery(_ presentation: RecoveryPresentation) {

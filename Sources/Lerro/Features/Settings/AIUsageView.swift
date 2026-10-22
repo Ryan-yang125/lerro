@@ -3,9 +3,9 @@ import Charts
 import SwiftUI
 import LerroCore
 
-/// AI usage statistics: tokens, estimated cost, per-feature and per-model
-/// breakdowns, and editable model prices.
-struct UsageSettingsTab: View {
+/// AI usage statistics from local records: tokens, estimated cost, per-feature
+/// and per-model breakdowns. Second level of Settings > AI 整理.
+struct AIUsageView: View {
     @Bindable var session: AppSession
     @Environment(\.locale) private var locale
     @Environment(\.openWindow) private var openWindow
@@ -13,7 +13,6 @@ struct UsageSettingsTab: View {
     @State private var records: [AIUsageRecord] = []
     @State private var linkedEntries: [UUID: HistoryEntry] = [:]
     @State private var hasLoaded = false
-    @State private var priceTarget: PriceTarget?
     @State private var showClearConfirmation = false
 
     private static let loadedDays = 30
@@ -22,52 +21,52 @@ struct UsageSettingsTab: View {
     var body: some View {
         let report = AIUsageStatistics.report(
             records: records,
-            prices: AIModelPriceTable(overrides: session.preferences.modelPrices),
             days: range.days,
             now: .now
         )
         let format = UsageFormat(locale: locale)
         let calls = visibleCalls()
 
-        Form {
-            Section {
-                Picker("范围", selection: $range) {
-                    ForEach(UsageRange.allCases) { option in
-                        Text(LocalizedStringKey(option.title)).tag(option)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
+        VStack(spacing: 0) {
+            backBar
 
-            if hasLoaded && report.totals.requests == 0 {
+            Form {
                 Section {
-                    LerroEmptyState(title: "还没有 AI 用量")
-                        .frame(height: 220)
-                }
-            } else if hasLoaded {
-                summarySection(report.totals, format: format)
-                if range != .day {
-                    chartSection(report.daily, format: format)
-                }
-                callSection(calls, format: format)
-                featureSection(report.byFeature, format: format)
-                modelSection(report.byModel, format: format)
-                Section {
-                    Button("清除用量记录…", role: .destructive) {
-                        showClearConfirmation = true
+                    Picker("范围", selection: $range) {
+                        ForEach(UsageRange.allCases) { option in
+                            Text(LocalizedStringKey(option.title)).tag(option)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(LerroTheme.danger)
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+
+                if hasLoaded && report.totals.requests == 0 {
+                    Section {
+                        LerroEmptyState(title: "还没有 AI 用量")
+                            .frame(height: 220)
+                    }
+                } else if hasLoaded {
+                    summarySection(report.totals, format: format)
+                    if range != .day {
+                        chartSection(report.daily, format: format)
+                    }
+                    callSection(calls, format: format)
+                    featureSection(report.byFeature, format: format)
+                    modelSection(report.byModel, format: format)
+                    Section {
+                        Button("清除用量记录…", role: .destructive) {
+                            showClearConfirmation = true
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(LerroTheme.danger)
+                    }
                 }
             }
+            .formStyle(.grouped)
         }
-        .formStyle(.grouped)
         .task(id: range) { await reload() }
         .task(id: calls.map(\.id)) { await loadLinkedEntries(for: calls) }
-        .sheet(item: $priceTarget) { target in
-            ModelPriceEditor(session: session, modelIdentifier: target.modelIdentifier)
-        }
         .confirmationDialog(
             "清除用量记录？",
             isPresented: $showClearConfirmation,
@@ -83,6 +82,28 @@ struct UsageSettingsTab: View {
         } message: {
             Text("这台 Mac 上的 AI 用量记录会被删除，无法恢复。")
         }
+    }
+
+    private var backBar: some View {
+        HStack {
+            Button {
+                session.aiSettingsShowsUsage = false
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .semibold))
+                        .accessibilityHidden(true)
+                    Text("AI 整理")
+                }
+                .foregroundStyle(LerroTheme.accentText)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 14)
+        .padding(.bottom, 2)
     }
 
     private func reload() async {
@@ -185,10 +206,9 @@ struct UsageSettingsTab: View {
     }
 
     private func callSection(_ calls: [AIUsageRecord], format: UsageFormat) -> some View {
-        let table = AIModelPriceTable(overrides: session.preferences.modelPrices)
-        return Section("调用记录") {
+        Section("调用记录") {
             ForEach(calls) { record in
-                callRow(record, table: table, format: format)
+                callRow(record, format: format)
             }
         }
     }
@@ -196,7 +216,6 @@ struct UsageSettingsTab: View {
     @ViewBuilder
     private func callRow(
         _ record: AIUsageRecord,
-        table: AIModelPriceTable,
         format: UsageFormat
     ) -> some View {
         let entry = record.historyEntryID.flatMap { linkedEntries[$0] }
@@ -206,18 +225,17 @@ struct UsageSettingsTab: View {
                 NSApp.activate(ignoringOtherApps: true)
                 session.showHistoryEntry(entry.id)
             } label: {
-                callRowContent(record, entry: entry, table: table, format: format)
+                callRowContent(record, entry: entry, format: format)
             }
             .buttonStyle(.plain)
         } else {
-            callRowContent(record, entry: nil, table: table, format: format)
+            callRowContent(record, entry: nil, format: format)
         }
     }
 
     private func callRowContent(
         _ record: AIUsageRecord,
         entry: HistoryEntry?,
-        table: AIModelPriceTable,
         format: UsageFormat
     ) -> some View {
         let text = entry.map { firstLine(of: $0.finalText) } ?? ""
@@ -228,7 +246,7 @@ struct UsageSettingsTab: View {
             .compactMap { $0 }
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
-        let costText = callCost(record, table: table, format: format)
+        let costText = callCost(record, format: format)
 
         return HStack(alignment: .top, spacing: 10) {
             Text(verbatim: format.time(record.date, includesDate: range != .day))
@@ -283,11 +301,10 @@ struct UsageSettingsTab: View {
 
     private func callCost(
         _ record: AIUsageRecord,
-        table: AIModelPriceTable,
         format: UsageFormat
     ) -> String? {
         guard let tokens = record.tokens else { return nil }
-        guard let price = table.price(for: record.modelIdentifier) else { return "—" }
+        guard let price = AIModelPrice.price(for: record.modelIdentifier) else { return "—" }
         return format.cost([price.currency: price.cost(of: tokens, at: record.date)])
     }
 
@@ -321,17 +338,11 @@ struct UsageSettingsTab: View {
         Section("按模型") {
             ForEach(models) { entry in
                 LabeledContent {
-                    HStack(spacing: 10) {
-                        Text(verbatim: format.summary(
-                            entry.totals,
-                            unpricedLabel: LerroInterfaceLocalization.string("未设价格", locale: locale)
-                        ))
-                        .foregroundStyle(LerroTheme.secondaryText)
-                        Button("价格…") {
-                            priceTarget = PriceTarget(modelIdentifier: entry.modelIdentifier)
-                        }
-                        .buttonStyle(LerroButtonStyle(.secondary))
-                    }
+                    Text(verbatim: format.summary(
+                        entry.totals,
+                        unpricedLabel: LerroInterfaceLocalization.string("未设价格", locale: locale)
+                    ))
+                    .foregroundStyle(LerroTheme.secondaryText)
                 } label: {
                     Text(verbatim: entry.modelIdentifier)
                 }
@@ -366,15 +377,10 @@ private enum UsageRange: String, CaseIterable, Identifiable {
     }
 }
 
-private struct PriceTarget: Identifiable {
-    let modelIdentifier: String
-    var id: String { modelIdentifier.lowercased() }
-}
-
 private extension AIUsageFeature {
     var usageTitle: String {
         switch self {
-        case .dictate: "润色"
+        case .dictate: "听写整理"
         case .translate: "翻译"
         case .dictionaryLearning: "自动学词"
         case .tonePreview: "语气预览"
@@ -457,105 +463,5 @@ struct UsageFormat {
             costText = cost(totals.costs)
         }
         return tokens(totals.totalTokens) + " · " + costText
-    }
-}
-
-// MARK: - Price editor
-
-private struct ModelPriceEditor: View {
-    @Bindable var session: AppSession
-    let modelIdentifier: String
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var currency: AIUsageCurrency = .cny
-    @State private var input = 0.0
-    @State private var cachedInput = 0.0
-    @State private var output = 0.0
-    @State private var offPeakFactor: Double?
-
-    private var table: AIModelPriceTable {
-        AIModelPriceTable(overrides: session.preferences.modelPrices)
-    }
-
-    private var hasOverride: Bool {
-        let key = modelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return session.preferences.modelPrices.contains { $0.id == key }
-    }
-
-    private var canReset: Bool {
-        hasOverride && table.builtInPrice(for: modelIdentifier) != nil
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                Section {
-                    Picker("币种", selection: $currency) {
-                        Text("¥ 人民币").tag(AIUsageCurrency.cny)
-                        Text("$ 美元").tag(AIUsageCurrency.usd)
-                    }
-                }
-                Section("每百万 Token") {
-                    priceField("输入", value: $input)
-                    priceField("缓存命中输入", value: $cachedInput)
-                    priceField("输出", value: $output)
-                }
-            }
-            .formStyle(.grouped)
-
-            HStack(spacing: 8) {
-                if canReset {
-                    Button("恢复默认") {
-                        session.resetModelPrice(modelIdentifier: modelIdentifier)
-                        dismiss()
-                    }
-                    .buttonStyle(LerroButtonStyle(.secondary))
-                }
-                Spacer()
-                Button("取消") { dismiss() }
-                    .buttonStyle(LerroButtonStyle(.secondary))
-                    .keyboardShortcut(.cancelAction)
-                Button("保存") {
-                    session.setModelPrice(AIModelPrice(
-                        modelIdentifier: modelIdentifier,
-                        currency: currency,
-                        inputPerMillion: input,
-                        cachedInputPerMillion: cachedInput,
-                        outputPerMillion: output,
-                        offPeakFactor: offPeakFactor
-                    ))
-                    dismiss()
-                }
-                .buttonStyle(LerroButtonStyle(.primary))
-                .keyboardShortcut(.defaultAction)
-            }
-            .padding(16)
-        }
-        .frame(width: 420)
-        .onAppear(perform: load)
-    }
-
-    private func priceField(_ title: String, value: Binding<Double>) -> some View {
-        LabeledContent {
-            TextField(
-                "",
-                value: value,
-                format: .number.precision(.fractionLength(0...4))
-            )
-            .multilineTextAlignment(.trailing)
-            .labelsHidden()
-            .frame(width: 100)
-        } label: {
-            Text(LocalizedStringKey(title))
-        }
-    }
-
-    private func load() {
-        let initial = table.price(for: modelIdentifier)
-        currency = initial?.currency ?? .cny
-        input = initial?.inputPerMillion ?? 0
-        cachedInput = initial?.cachedInputPerMillion ?? 0
-        output = initial?.outputPerMillion ?? 0
-        offPeakFactor = initial?.offPeakFactor
     }
 }

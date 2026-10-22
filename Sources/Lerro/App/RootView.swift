@@ -59,6 +59,9 @@ struct RootView: View {
                 NSApp.activate()
             }
         }
+        .sheet(isPresented: $session.isAIGuidePresented) {
+            AIGuideSheet(session: session)
+        }
         .alert("Lerro", isPresented: Binding(
             get: { session.currentError != nil },
             set: { if !$0 { session.currentError = nil } }

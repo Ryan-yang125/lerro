@@ -123,12 +123,11 @@ struct PipelineIntelligenceServiceTests {
         #expect(await remote.recordedEvents().isEmpty)
     }
 
-    @Test("Remote mode routes only to the configured provider with the exact transcript")
-    func remoteModeRoutesToConfiguredProvider() async throws {
+    @Test("Remote mode routes only to the remote runtime with the exact transcript")
+    func remoteModeRoutesToRemoteRuntime() async throws {
         let remote = FakeRemoteLanguageModelRuntime(output: "Remote result")
         let service = PipelineIntelligenceService(remoteRuntime: remote)
         let configuration = RemoteProviderConfiguration(
-            provider: .deepSeek,
             apiKey: "test-key",
             contextSharing: .balanced
         )
@@ -218,6 +217,27 @@ struct PipelineIntelligenceServiceTests {
 
         #expect(try await service.testRemoteConnection(configuration: configuration) == outcome)
         #expect(await remote.recordedEvents() == [.testConnection(configuration)])
+    }
+
+    @Test("Balance lookup delegates to the remote runtime and records no usage")
+    func delegatesBalanceLookup() async throws {
+        let usage = InMemoryAIUsageRepository()
+        let balance = DeepSeekBalance(isAvailable: true, total: 3, currencyCode: "CNY")
+        let remote = FakeRemoteLanguageModelRuntime(output: "unused", balanceResult: balance)
+        let service = makeRemoteService(remote: remote, usage: usage)
+        let configuration = RemoteProviderConfiguration(apiKey: "test-key")
+
+        #expect(try await service.remoteBalance(configuration: configuration) == balance)
+        #expect(await remote.recordedEvents() == [.balance(configuration)])
+        #expect(try await usage.records(since: .distantPast).isEmpty)
+    }
+
+    @Test("Balance lookup without a runtime fails as unavailable")
+    func balanceWithoutRuntimeFails() async {
+        let service = PipelineIntelligenceService()
+        await #expect(throws: LerroError.self) {
+            try await service.remoteBalance(configuration: RemoteProviderConfiguration(apiKey: "test-key"))
+        }
     }
 
     @Test("Remote AI classifies a bounded correction into a dictionary candidate")
@@ -348,11 +368,11 @@ struct PipelineIntelligenceServiceTests {
         }
     }
 
-    @Test("Remote dictate records tokens, feature, provider and model")
+    @Test("Remote dictate records tokens, feature and model")
     func remoteDictateRecordsUsage() async throws {
         let usage = InMemoryAIUsageRepository()
         let tokens = AITokenUsage(inputTokens: 120, outputTokens: 30, cachedInputTokens: 40)
-        let configuration = RemoteProviderConfiguration(provider: .deepSeek, apiKey: "test-key")
+        let configuration = RemoteProviderConfiguration(apiKey: "test-key")
         let service = makeRemoteService(
             remote: FakeRemoteLanguageModelRuntime(output: "Remote result", tokens: tokens),
             usage: usage
@@ -364,8 +384,7 @@ struct PipelineIntelligenceServiceTests {
         let record = try #require(records.first)
         #expect(records.count == 1)
         #expect(record.feature == .dictate)
-        #expect(record.provider == .deepSeek)
-        #expect(record.modelIdentifier == configuration.modelIdentifier)
+        #expect(record.modelIdentifier == RemoteProviderConfiguration.modelIdentifier)
         #expect(record.tokens == tokens)
         #expect(record.succeeded)
     }
@@ -557,24 +576,28 @@ private actor FakeRemoteLanguageModelRuntime: RemoteLanguageModelRuntime {
     enum Event: Equatable, Sendable {
         case generate(RemoteProviderConfiguration, String, String, Int)
         case testConnection(RemoteProviderConfiguration)
+        case balance(RemoteProviderConfiguration)
     }
 
     private let output: String
     private let tokens: AITokenUsage?
     private let generationError: (any Error)?
     private let connectionOutcome: RemoteConnectionTestOutcome
+    private let balanceResult: DeepSeekBalance
     private var events: [Event] = []
 
     init(
         output: String,
         tokens: AITokenUsage? = nil,
         generationError: (any Error)? = nil,
-        connectionOutcome: RemoteConnectionTestOutcome = .success()
+        connectionOutcome: RemoteConnectionTestOutcome = .success(),
+        balanceResult: DeepSeekBalance = DeepSeekBalance(isAvailable: true, total: 8, currencyCode: "CNY")
     ) {
         self.output = output
         self.tokens = tokens
         self.generationError = generationError
         self.connectionOutcome = connectionOutcome
+        self.balanceResult = balanceResult
     }
 
     func generate(
@@ -589,7 +612,7 @@ private actor FakeRemoteLanguageModelRuntime: RemoteLanguageModelRuntime {
         }
         return RemoteGeneration(
             text: output,
-            modelIdentifier: configuration.modelIdentifier,
+            modelIdentifier: RemoteProviderConfiguration.modelIdentifier,
             tokens: tokens
         )
     }
@@ -602,6 +625,16 @@ private actor FakeRemoteLanguageModelRuntime: RemoteLanguageModelRuntime {
             throw generationError
         }
         return connectionOutcome
+    }
+
+    func balance(
+        configuration: RemoteProviderConfiguration
+    ) throws -> DeepSeekBalance {
+        events.append(.balance(configuration))
+        if let generationError {
+            throw generationError
+        }
+        return balanceResult
     }
 
     func recordedEvents() -> [Event] {

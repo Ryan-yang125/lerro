@@ -482,7 +482,7 @@ private struct AppToneEditor: View {
                         .font(LerroFont.body)
                         .foregroundStyle(LerroTheme.secondaryText)
                     Button("启用 AI") {
-                        session.settingsTab = .intelligence
+                        session.settingsTab = .ai
                         openSettings()
                     }
                     .buttonStyle(LerroButtonStyle(.secondary))

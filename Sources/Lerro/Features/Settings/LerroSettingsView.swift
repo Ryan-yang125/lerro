@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import LerroCore
 
-/// Root of the `Settings` scene. Six tabs, each a grouped `Form`.
+/// Root of the `Settings` scene. Five tabs, each a grouped `Form`.
 struct LerroSettingsView: View {
     @Bindable var session: AppSession
 
@@ -12,19 +12,13 @@ struct LerroSettingsView: View {
                 .tabItem { Label("通用", systemImage: "gearshape") }
                 .tag(SettingsTab.general)
 
-            ShortcutsSettingsTab(session: session)
-                .tabItem { Label("快捷键", systemImage: "keyboard") }
-                .tag(SettingsTab.shortcuts)
+            DictationSettingsTab(session: session)
+                .tabItem { Label("听写", systemImage: "mic") }
+                .tag(SettingsTab.dictation)
 
-            IntelligenceSettingsPage(session: session)
-                .frame(width: SettingsLayout.width, height: SettingsLayout.tallHeight)
-                .tabItem { Label("智能", systemImage: "sparkles") }
-                .tag(SettingsTab.intelligence)
-
-            UsageSettingsTab(session: session)
-                .frame(width: SettingsLayout.width, height: SettingsLayout.tallHeight)
-                .tabItem { Label("用量", systemImage: "chart.bar.xaxis") }
-                .tag(SettingsTab.usage)
+            AISettingsTab(session: session)
+                .tabItem { Label("AI 整理", systemImage: "sparkles") }
+                .tag(SettingsTab.ai)
 
             PrivacySettingsTab(session: session)
                 .tabItem { Label("隐私", systemImage: "hand.raised") }
@@ -39,7 +33,13 @@ struct LerroSettingsView: View {
         .onChange(of: session.preferences) { previous, updated in
             session.savePreferences(from: previous, to: updated)
         }
-        .task { await session.refreshPermissions(prompt: false) }
+        .task {
+            await session.refreshPermissions(prompt: false)
+            await session.refreshLanguageResources()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await session.refreshPermissions(prompt: false) }
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 # 0006：BYOK OpenAI-compatible Provider 与 JSON 凭据
 
-- 状态：accepted
+- 状态：superseded（服务商范围由 [ADR 0016](0016-deepseek-only.md) 替代；模式、JSON 凭据和上下文部分仍然有效）
 - 日期：2026-08-01
 - 决策人：Lerro maintainer
 

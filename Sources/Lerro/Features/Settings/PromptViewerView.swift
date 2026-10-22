@@ -6,7 +6,7 @@ extension AIPromptKind {
     /// Chinese UI key of the prompt name.
     var lerroTitle: String {
         switch self {
-        case .dictate: "听写润色"
+        case .dictate: "听写整理"
         case .translate: "翻译"
         case .dictionaryLearning: "自动学词"
         }

@@ -2,93 +2,73 @@
   <img src="site/public/lerro-logo.svg" width="160" alt="Lerro">
 </p>
 
-<h1 align="center">Speak it. It's written.</h1>
+<h1 align="center">说出来，就写好了</h1>
 
 <p align="center">
-  English · <a href="README.zh-CN.md">简体中文</a>
+  <a href="README.en.md">English</a> · 简体中文
 </p>
 
 <p align="center">
-  Press a shortcut and talk, press it again, and the text lands at your cursor.<br>
-  Mix Chinese and English freely, and proper nouns come out right.
+  按一下快捷键说话，再按一下，文字写进光标所在的地方。<br>
+  中英文混着说，专有名词也能写对。
 </p>
 
 <p align="center">
-  <a href="https://updates.lerroapp.com/download/macos/latest"><strong>Download for macOS</strong></a>
-  · <a href="https://lerroapp.com/en">Website</a>
-  · <a href="https://lerroapp.com/en/changelog">Changelog</a>
+  <a href="https://updates.lerroapp.com/download/macos/latest"><strong>下载 macOS 版</strong></a>
+  · <a href="https://lerroapp.com">官网</a>
+  · <a href="https://lerroapp.com/changelog">更新日志</a>
 </p>
 
 <p align="center">
-  Free and open source · macOS 26 · Apple silicon
+  免费开源 · macOS 26 · Apple 芯片
 </p>
 
-![Lerro dictating into a chat window](site/public/readme/en-demo.png)
+![Lerro 正在往聊天窗口里听写](site/public/readme/zh-demo.png)
 
-## How it works
+## 怎么用
 
-1. Press your shortcut (Fn by default) and speak. A small capsule at the bottom
-   of the screen shows the live transcript.
-2. Press the shortcut again. Lerro writes the text into the field you were
-   typing in.
-3. If you switched away before it finished, Lerro stops, keeps the text on the
-   clipboard, and offers to paste it.
+1. 按下快捷键（默认 Fn）开始说话，屏幕下方的小胶囊会实时显示识别的文字。
+2. 再按一下快捷键，Lerro 把文字写进你刚才所在的输入框。
+3. 如果写入前你切走了，Lerro 会停下来，把结果留在剪贴板里，提示你粘贴。
 
-Apple's on-device speech recognition does the listening. With AI polish turned
-on, your own AI provider fixes misheard words using your dictionary, removes
-fillers, and adds punctuation.
+语音由苹果在本机识别。打开 AI 整理后，DeepSeek 会按词典改掉认错的词，去掉“嗯”“呃”，补好标点。
 
-![Raw recognition compared with what Lerro wrote](site/public/readme/en-accuracy.png)
+![识别原文和 Lerro 写进去的文字对比](site/public/readme/zh-accuracy.png)
 
-## A dictionary that learns
+## 词典会学
 
-Names of people, companies, and projects are hard to recognize the first time.
-When you correct a word Lerro wrote, the AI decides whether it was a
-recognition error and adds it to the dictionary. Lerro can also scan your
-history and list the words it keeps getting wrong, so you can add them with one
-click.
+人名、公司名、项目名，苹果识别很难一次认对。你改掉 Lerro 写错的词，AI 判断是认错了，就会加进词典。
 
-![Auto-learned dictionary](site/public/readme/en-dictionary.png)
+![自动学习的词典](site/public/readme/zh-dictionary.png)
 
-Each app can also have its own tone, for example casual in chat and complete
-sentences in email.
+每个 App 还可以设置自己的语气，比如聊天里口语一些，邮件里用完整句子。
 
-## AI polish with your own DeepSeek key
+## 用你自己的 DeepSeek 账号做 AI 整理
 
-Lerro has no subscription. AI polish uses your own
-[DeepSeek](https://platform.deepseek.com) account and costs about ¥1 per 1,000
-dictations. Create an API key, then paste it in **Settings › Smart** and click
-**Test Connection**. Settings › Usage shows what each request cost.
+Lerro 不收订阅费，AI 整理只支持 [DeepSeek](https://platform.deepseek.com)，走你自己的账号。App 里有三步指引：打开网站、充值、创建 Key 并粘贴，连上后会直接显示账户余额。每天说一百多次，一个月 2 块钱左右。
 
-Without a key, Lerro still works: Apple recognition runs on your Mac for free
-and the transcript is written as is.
+不开 AI 整理也能用：苹果本机识别，免费，识别结果直接写入。
 
-## Privacy
+## 隐私
 
-- No account and no telemetry.
-- Speech is recognized on your Mac. With AI polish on, only the recognized text
-  goes to the provider you configured.
-- Recordings are not saved unless you turn it on.
+- 不用注册账号，没有数据上报。
+- 语音在本机识别。打开 AI 整理时，只有识别出的文字会发给 DeepSeek。
+- 录音默认不保存，需要你在设置里打开。
 
-Details are in the [Privacy Policy](PRIVACY.md).
+完整说明见[隐私政策](PRIVACY.md)。
 
-## Install
+## 安装
 
-1. [Download the latest signed and notarized build](https://updates.lerroapp.com/download/macos/latest).
-2. Move **Lerro.app** to Applications and open it.
-3. Follow the setup to grant Microphone and Accessibility.
+1. [下载最新的已签名、已公证版本](https://updates.lerroapp.com/download/macos/latest)。
+2. 把 **Lerro.app** 拖到“应用程序”并打开。
+3. 按引导授权麦克风和辅助功能。
 
-Requires an Apple silicon Mac with macOS 26 or later. Lerro updates itself
-from inside the app.
+需要 Apple 芯片的 Mac 和 macOS 26 或更新版本。之后的版本在 app 里就能更新。
 
-## Build from source
+## 从源码构建
 
-See [Development](docs/development.md) for building, testing and releasing,
-[Architecture](docs/architecture.md) for how the app is put together, and
-[Contributing](CONTRIBUTING.md).
+构建、测试和发版见[开发指南](docs/development.md)，代码结构见[架构说明](docs/architecture.md)，参与贡献见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-## License
+## 许可
 
-Lerro is open source under [Apache-2.0](LICENSE). First-party documentation and
-images use [CC BY 4.0](LICENSES/CC-BY-4.0.txt). See [TRADEMARKS.md](TRADEMARKS.md),
-[NOTICE](NOTICE), and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Lerro 以 [Apache-2.0](LICENSE) 开源。第一方文档和图片采用 [CC BY 4.0](LICENSES/CC-BY-4.0.txt)。另见 [TRADEMARKS.md](TRADEMARKS.md)、[NOTICE](NOTICE) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

@@ -5,7 +5,7 @@ import LerroCore
 
 @Suite("OpenAI-compatible HTTP client", .serialized)
 struct OpenAICompatibleHTTPClientTests {
-    @Test("Completion uses normalized endpoint, bearer auth, and standard body")
+    @Test("Completion uses the fixed DeepSeek endpoint, bearer auth, and disables thinking")
     func completionRequestContract() async throws {
         let recorder = RequestRecorder()
         MockURLProtocol.install { request in
@@ -13,19 +13,14 @@ struct OpenAICompatibleHTTPClientTests {
             return .json(
                 statusCode: 200,
                 object: [
-                    "model": "gpt-test",
+                    "model": "deepseek-flash",
                     "choices": [["message": ["content": "Polished text"]]]
                 ]
             )
         }
         defer { MockURLProtocol.reset() }
 
-        let client = try makeClient(
-            providerIdentifier: "openai",
-            baseURL: "https://api.example.test/v1",
-            modelIdentifier: "gpt-test",
-            apiKey: "test-only-key"
-        )
+        let client = try makeClient(apiKey: "test-only-key")
         let result = try await client.complete(
             messages: [
                 .init(role: .system, content: "System instructions"),
@@ -35,9 +30,9 @@ struct OpenAICompatibleHTTPClientTests {
         )
 
         #expect(result.text == "Polished text")
-        #expect(result.modelIdentifier == "gpt-test")
+        #expect(result.modelIdentifier == "deepseek-flash")
         let request = try #require(recorder.request)
-        #expect(request.url?.absoluteString == "https://api.example.test/v1/chat/completions")
+        #expect(request.url?.absoluteString == "https://api.deepseek.com/chat/completions")
         #expect(request.httpMethod == "POST")
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-only-key")
         #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
@@ -45,47 +40,110 @@ struct OpenAICompatibleHTTPClientTests {
         #expect(request.httpShouldHandleCookies == false)
 
         let body = try JSONBody(request)
-        #expect(body["model"] as? String == "gpt-test")
+        #expect(body["model"] as? String == "deepseek-flash")
         #expect(body["temperature"] as? Double == 0)
         #expect(body["max_tokens"] as? Int == 321)
         #expect(body["stream"] == nil)
-        #expect(body["thinking"] == nil)
+        let thinking = try #require(body["thinking"] as? [String: Any])
+        #expect(thinking["type"] as? String == "disabled")
         let messages = try #require(body["messages"] as? [[String: Any]])
         #expect(messages.count == 2)
         #expect(messages[0]["role"] as? String == "system")
         #expect(messages[1]["content"] as? String == "Synthetic input")
     }
 
-    @Test("DeepSeek requests explicitly disable thinking")
-    func deepSeekThinkingIsDisabled() async throws {
+    @Test("Balance request is an authenticated GET to the user balance path")
+    func balanceRequestContract() async throws {
         let recorder = RequestRecorder()
         MockURLProtocol.install { request in
             recorder.record(request)
             return .json(
                 statusCode: 200,
                 object: [
-                    "model": "deepseek-v4-flash",
-                    "choices": [["message": ["content": "完成"]]]
+                    "is_available": true,
+                    "balance_infos": [[
+                        "currency": "CNY",
+                        "total_balance": "8.42",
+                        "granted_balance": "0.00",
+                        "topped_up_balance": "8.42"
+                    ]]
                 ]
             )
         }
         defer { MockURLProtocol.reset() }
 
-        let client = try makeClient(
-            providerIdentifier: "deepseek",
-            baseURL: "https://api.deepseek.com",
-            modelIdentifier: "deepseek-v4-flash"
-        )
-        _ = try await client.complete(
-            messages: [.init(role: .user, content: "合成测试")],
-            maxTokens: 128
-        )
+        let balance = try await makeClient(apiKey: "test-only-key").balance()
 
+        #expect(balance == DeepSeekBalance(
+            isAvailable: true,
+            total: Decimal(string: "8.42")!,
+            currencyCode: "CNY"
+        ))
         let request = try #require(recorder.request)
-        #expect(request.url?.absoluteString == "https://api.deepseek.com/chat/completions")
-        let body = try JSONBody(request)
-        let thinking = try #require(body["thinking"] as? [String: Any])
-        #expect(thinking["type"] as? String == "disabled")
+        #expect(request.url?.absoluteString == "https://api.deepseek.com/user/balance")
+        #expect(request.httpMethod == "GET")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-only-key")
+        #expect(request.httpBody == nil)
+        #expect(request.httpShouldHandleCookies == false)
+    }
+
+    @Test("Balance responses that cannot be parsed are rejected")
+    func balanceInvalidResponse() async throws {
+        MockURLProtocol.install { _ in
+            .json(statusCode: 200, object: ["unexpected": true])
+        }
+        defer { MockURLProtocol.reset() }
+
+        let client = try makeClient()
+        await #expect(throws: OpenAICompatibleRuntimeError.invalidResponse) {
+            try await client.balance()
+        }
+    }
+
+    @Test("Balance and completion failures map 402 to insufficient balance and 401 to an invalid key")
+    func accountErrorMapping() async throws {
+        for (statusCode, isBalanceError) in [(402, true), (401, false), (403, false)] {
+            MockURLProtocol.install { _ in
+                .init(
+                    statusCode: statusCode,
+                    headers: ["Content-Type": "application/json"],
+                    data: Data(#"{"error":"test-only-key"}"#.utf8)
+                )
+            }
+            defer { MockURLProtocol.reset() }
+
+            let client = try makeClient(apiKey: "test-only-key")
+            func check(_ error: any Error) {
+                guard let error = error as? LerroError else {
+                    Issue.record("Expected LerroError for \(statusCode), got \(error)")
+                    return
+                }
+                switch error {
+                case .insufficientBalance:
+                    #expect(isBalanceError)
+                case .invalidAPIKey:
+                    #expect(!isBalanceError)
+                default:
+                    Issue.record("Unexpected LerroError for \(statusCode)")
+                }
+                #expect(!(error.errorDescription ?? "").contains("test-only-key"))
+            }
+            do {
+                _ = try await client.complete(
+                    messages: [.init(role: .user, content: "Synthetic")],
+                    maxTokens: 32
+                )
+                Issue.record("Expected a completion error for \(statusCode)")
+            } catch {
+                check(error)
+            }
+            do {
+                _ = try await client.balance()
+                Issue.record("Expected a balance error for \(statusCode)")
+            } catch {
+                check(error)
+            }
+        }
     }
 
     @Test("Connection test sends one fixed synthetic message")
@@ -141,7 +199,7 @@ struct OpenAICompatibleHTTPClientTests {
         }
         defer { MockURLProtocol.reset() }
 
-        let client = try makeClient(providerIdentifier: "custom")
+        let client = try makeClient()
         let result = try await client.complete(
             messages: [.init(role: .user, content: "Synthetic")],
             maxTokens: 32
@@ -245,10 +303,7 @@ struct OpenAICompatibleHTTPClientTests {
         let runtime = OpenAICompatibleRemoteLanguageModelRuntime(
             protocolClasses: [MockURLProtocol.self]
         )
-        let configuration = RemoteProviderConfiguration(
-            provider: .deepSeek,
-            apiKey: "test-only-key"
-        )
+        let configuration = RemoteProviderConfiguration(apiKey: "test-only-key")
         let expected = AITokenUsage(inputTokens: 50, outputTokens: 5, cachedInputTokens: 40)
 
         let generation = try await runtime.generate(
@@ -283,10 +338,7 @@ struct OpenAICompatibleHTTPClientTests {
             OpenAICompatibleRemoteLanguageModelRuntime(
                 protocolClasses: [MockURLProtocol.self]
             )
-        let configuration = RemoteProviderConfiguration(
-            provider: .deepSeek,
-            apiKey: "test-only-key"
-        )
+        let configuration = RemoteProviderConfiguration(apiKey: "test-only-key")
         let output = try await runtime.generate(
             configuration: configuration,
             systemPrompt: "System instructions",
@@ -308,7 +360,7 @@ struct OpenAICompatibleHTTPClientTests {
     @Test("Connection tests do not cancel an in-flight generation")
     func concurrentConfigurationsStayIndependent() async throws {
         MockURLProtocol.install { request in
-            if request.url?.host == "generation.example.test" {
+            if request.value(forHTTPHeaderField: "Authorization") == "Bearer generation-test-key" {
                 return .json(
                     statusCode: 200,
                     object: [
@@ -331,18 +383,8 @@ struct OpenAICompatibleHTTPClientTests {
         let runtime = OpenAICompatibleRemoteLanguageModelRuntime(
             protocolClasses: [MockURLProtocol.self]
         )
-        let generationConfiguration = RemoteProviderConfiguration(
-            provider: .custom,
-            baseURL: "https://generation.example.test/v1",
-            modelIdentifier: "generation-model",
-            apiKey: "generation-test-key"
-        )
-        let probeConfiguration = RemoteProviderConfiguration(
-            provider: .custom,
-            baseURL: "https://probe.example.test/v1",
-            modelIdentifier: "probe-model",
-            apiKey: "probe-test-key"
-        )
+        let generationConfiguration = RemoteProviderConfiguration(apiKey: "generation-test-key")
+        let probeConfiguration = RemoteProviderConfiguration(apiKey: "probe-test-key")
 
         let generation = Task {
             try await runtime.generate(
@@ -359,12 +401,33 @@ struct OpenAICompatibleHTTPClientTests {
         #expect(try await generation.value.text == "Primary result")
     }
 
+    @Test("Remote runtime returns the account balance")
+    func runtimeBalance() async throws {
+        MockURLProtocol.install { _ in
+            .json(
+                statusCode: 200,
+                object: [
+                    "is_available": false,
+                    "balance_infos": [["currency": "CNY", "total_balance": "0.00"]]
+                ]
+            )
+        }
+        defer { MockURLProtocol.reset() }
+
+        let runtime: any RemoteLanguageModelRuntime =
+            OpenAICompatibleRemoteLanguageModelRuntime(protocolClasses: [MockURLProtocol.self])
+        let balance = try await runtime.balance(
+            configuration: RemoteProviderConfiguration(apiKey: "test-only-key")
+        )
+
+        #expect(balance.isEmpty)
+        #expect(balance.currencyCode == "CNY")
+    }
+
     @Test(
         "HTTP status codes map to stable safe errors",
         arguments: [
             (302, OpenAICompatibleRuntimeError.redirectBlocked),
-            (401, OpenAICompatibleRuntimeError.authenticationFailed),
-            (402, OpenAICompatibleRuntimeError.paymentRequired),
             (404, OpenAICompatibleRuntimeError.modelUnavailable),
             (429, OpenAICompatibleRuntimeError.rateLimited),
             (503, OpenAICompatibleRuntimeError.serviceUnavailable)
@@ -480,41 +543,6 @@ struct OpenAICompatibleHTTPClientTests {
         }
     }
 
-    @Test("Endpoint policy accepts HTTPS and loopback HTTP")
-    func endpointPolicy() throws {
-        #expect(try OpenAICompatibleHTTPClient.completionsURL(
-            from: URL(string: "https://api.example.test/v1")!
-        ).absoluteString == "https://api.example.test/v1/chat/completions")
-        #expect(try OpenAICompatibleHTTPClient.completionsURL(
-            from: URL(string: "https://api.example.test/v1/chat/completions")!
-        ).absoluteString == "https://api.example.test/v1/chat/completions")
-        #expect(try OpenAICompatibleHTTPClient.completionsURL(
-            from: URL(string: "http://localhost:11434/v1")!
-        ).absoluteString == "http://localhost:11434/v1/chat/completions")
-        #expect(try OpenAICompatibleHTTPClient.completionsURL(
-            from: URL(string: "http://127.0.0.2:1234")!
-        ).absoluteString == "http://127.0.0.2:1234/chat/completions")
-        #expect(try OpenAICompatibleHTTPClient.completionsURL(
-            from: URL(string: "http://[::1]:1234/v1")!
-        ).absoluteString == "http://[::1]:1234/v1/chat/completions")
-
-        #expect(throws: OpenAICompatibleRuntimeError.insecureEndpoint) {
-            try OpenAICompatibleHTTPClient.completionsURL(
-                from: URL(string: "http://api.example.test/v1")!
-            )
-        }
-        #expect(throws: OpenAICompatibleRuntimeError.invalidEndpoint) {
-            try OpenAICompatibleHTTPClient.completionsURL(
-                from: URL(string: "https://key@api.example.test/v1")!
-            )
-        }
-        #expect(throws: OpenAICompatibleRuntimeError.invalidEndpoint) {
-            try OpenAICompatibleHTTPClient.completionsURL(
-                from: URL(string: "https://api.example.test/v1?token=secret")!
-            )
-        }
-    }
-
     @Test("Redirect policy allows only the same scheme, host, and port")
     func redirectOriginPolicy() {
         let source = URL(string: "https://api.example.test/v1/chat/completions")!
@@ -536,13 +564,11 @@ struct OpenAICompatibleHTTPClientTests {
         ))
     }
 
-    @Test("Provider defaults tolerate production generation latency")
+    @Test("Endpoint defaults tolerate production generation latency")
     func productionTimeoutDefaults() {
-        let endpoint = OpenAICompatibleEndpoint(
-            providerIdentifier: "deepseek",
-            baseURL: URL(string: "https://api.deepseek.com")!,
-            modelIdentifier: "deepseek-v4-flash"
-        )
+        let endpoint = OpenAICompatibleEndpoint()
+        #expect(endpoint.baseURL.absoluteString == "https://api.deepseek.com")
+        #expect(endpoint.modelIdentifier == "deepseek-flash")
         #expect(endpoint.requestTimeout == 60)
         #expect(endpoint.resourceTimeout == 120)
     }
@@ -585,7 +611,6 @@ struct OpenAICompatibleHTTPClientTests {
     func liveDeepSeekSmoke() async throws {
         let apiKey = try #require(ProcessInfo.processInfo.environment["DEEPSEEK_API_KEY"])
         let configuration = RemoteProviderConfiguration(
-            provider: .deepSeek,
             apiKey: apiKey
         )
         let runtime = OpenAICompatibleRemoteLanguageModelRuntime()
@@ -601,7 +626,7 @@ struct OpenAICompatibleHTTPClientTests {
         print("LERRO_LIVE_REMOTE_LATENCY_MS=\(outcome.latencyMilliseconds ?? -1)")
         print("LERRO_LIVE_REMOTE_GENERATION=passed")
         #expect(outcome.succeeded)
-        #expect(outcome.modelIdentifier == RemoteProviderKind.deepSeek.defaultModelIdentifier)
+        #expect(outcome.modelIdentifier == RemoteProviderConfiguration.modelIdentifier)
         #expect(!output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         #expect(output.localizedCaseInsensitiveContains("Wednesday"))
         #expect(!output.localizedCaseInsensitiveContains("Tuesday"))
@@ -614,7 +639,6 @@ struct OpenAICompatibleHTTPClientTests {
     func liveDeepSeekProductPromptSmoke() async throws {
         let apiKey = try #require(ProcessInfo.processInfo.environment["DEEPSEEK_API_KEY"])
         let configuration = RemoteProviderConfiguration(
-            provider: .deepSeek,
             apiKey: apiKey
         )
         let request = IntelligenceRequest(
@@ -649,17 +673,11 @@ struct OpenAICompatibleHTTPClientTests {
     }
 
     private func makeClient(
-        providerIdentifier: String = "deepseek",
-        baseURL: String = "https://api.deepseek.com",
-        modelIdentifier: String = "deepseek-v4-flash",
         apiKey: String = "test-only-key",
         maximumResponseBytes: Int = 2 * 1_024 * 1_024
     ) throws -> OpenAICompatibleHTTPClient {
         try OpenAICompatibleHTTPClient(
             endpoint: OpenAICompatibleEndpoint(
-                providerIdentifier: providerIdentifier,
-                baseURL: URL(string: baseURL)!,
-                modelIdentifier: modelIdentifier,
                 maximumResponseBytes: maximumResponseBytes
             ),
             apiKey: apiKey,

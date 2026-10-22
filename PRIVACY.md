@@ -1,14 +1,15 @@
 # Privacy
 
-Lerro is a local-first macOS voice-writing application with optional bring-your-own-key
-(BYOK) AI text processing. This document describes official source builds and
+Lerro is a local-first macOS voice-writing application with optional AI cleanup
+(AI 整理) that uses your own DeepSeek API key. DeepSeek is the only supported AI
+service. This document describes official source builds and
 release artifacts.
 
 ## Data stored on the Mac
 
 Lerro stores preferences, history, personal dictionary entries, per-app tone
 profiles, optional audio, and AI usage records below its Application Support
-directory. Provider settings and user-supplied API keys are plaintext fields in
+directory. The DeepSeek API key you enter is a plaintext field in
 `preferences.json`. The directory uses mode `0700`; the preferences file uses
 mode `0600`. Software running as the same macOS user can read this file.
 
@@ -16,7 +17,7 @@ Raw-audio retention starts disabled. Selecting “never save” for history prev
 new history and recording files from being persisted. History can contain the
 raw transcript, final text, processing route, context-category presence, remote
 sharing category names, timings, delivery outcome, and an audio reference when
-audio saving is enabled. When a dictation or translation used the API model, the
+audio saving is enabled. When a dictation or translation used AI cleanup, the
 entry also keeps that call exactly as sent and received: the request content
 (transcript and whichever context the sharing switches allowed, such as window
 title, nearby text, selected text, dictionary terms and tone), the model's reply,
@@ -39,11 +40,12 @@ deleted together with all history, and nothing is written while history is set t
 never save or automatic dictionary learning is off.
 
 AI usage records in `ai-usage.json` describe each remote model call: time,
-feature, provider, model ID, input, output and cached token counts reported by
-the provider, latency, success, and the ID of the history entry the call belongs
-to. They contain no transcript, prompt, model output, context text, or API key. Records older than 90 days are removed, and
-Settings → 用量 can clear them. Cost estimates are calculated on the Mac from the
-built-in or user-edited price table; nothing about usage is sent anywhere.
+feature, model ID, input, output and cached token counts reported by DeepSeek,
+latency, success, and the ID of the history entry the call belongs to. They
+contain no transcript, prompt, model output, context text, or API key. Records
+older than 90 days are removed, and Settings › AI 整理 › usage details can clear
+them. Cost estimates are calculated on the Mac from a built-in price table;
+nothing about usage is sent anywhere.
 
 Daily usage totals in `usage-days.json` power the Home page: for each day, the
 number of characters, dictations and seconds, characters per app (name and
@@ -81,7 +83,7 @@ original delivered text has a unique location. Leaving the app or field, secure
 input, unavailable Accessibility data, unsupported editors, oversized values,
 new capture, timeout, or disabled AI ends observation quietly.
 
-The configured AI provider receives the original and corrected spans, up
+DeepSeek receives the original and corrected spans, up
 to 80 UTF-16 units before the change, up to 40 after it, the application name,
 and optional bundle identifier. It returns zero to three structured candidates.
 Only small lexical corrections with confidence at least 0.7 are stored.
@@ -101,11 +103,11 @@ Lerro automatically prepares the selected Speech language resources at launch,
 when the recognition language changes, and before capture as needed. macOS
 downloads missing resources through Apple-managed services.
 
-## BYOK remote providers
+## AI cleanup (DeepSeek)
 
-When API processing is selected, Lerro sends Chat Completions requests directly
-to the configured DeepSeek, OpenAI, Gemini, or compatible endpoint using the
-user's API key. A connection test sends a fixed synthetic message.
+When AI cleanup is on, Lerro sends Chat Completions requests directly to
+`api.deepseek.com` using your DeepSeek API key. No other AI service is
+supported. A connection test sends a fixed synthetic message.
 
 Depending on enabled context categories and the action, a request can include
 the raw transcript, application name and type, window title, up to 80 UTF-16
@@ -115,12 +117,24 @@ terms (shared names and vocabulary, each at most 40 characters) even when they d
 not appear in the transcript. Dictionary entries and terms are sent only while the
 dictionary context category is enabled; application-scoped terms also require the
 application category. Correction learning
-uses the smaller span-only payload described above. The provider receives this
+uses the smaller span-only payload described above. DeepSeek receives this
 content plus normal connection and billing metadata under its terms.
 
-AI is required for refinement, translation, automatic correction learning, and
-per-app tone. Without it, Lerro still provides raw transcription, manual dictionary
-management, preview, strict delivery, and recovery.
+Lerro also reads your account balance with a `GET` request to
+`api.deepseek.com/user/balance`, authenticated with your API key. The request
+carries no text. Lerro keeps the total amount, its currency, and whether the
+account is available, and shows them in Settings and in the sidebar. The balance
+is read at launch, after a successful AI call (at most once a minute), when the
+AI cleanup settings page opens, and when you return to Lerro after the balance
+ran out.
+
+AI cleanup is required for refinement, translation, automatic correction
+learning, and per-app tone. Without it, Lerro still provides raw transcription,
+manual dictionary management, preview, strict delivery, and recovery.
+
+Earlier versions allowed OpenAI, Gemini, and custom endpoints. A saved API key
+from any of those is discarded when preferences load and is never sent to
+DeepSeek.
 
 ## Updates
 
@@ -131,7 +145,7 @@ platform. Private R2 and D1 storage contains release archives and public release
 metadata only.
 
 The update service does not receive audio, transcripts, focused text, changed
-spans, dictionary entries, prompts, model output, or provider API keys. Sparkle
+spans, dictionary entries, prompts, model output, or API keys. Sparkle
 verifies each update archive with the embedded Ed25519 public key.
 
 ## Backups and removal
@@ -139,8 +153,9 @@ verifies each update archive with the embedded Ed25519 public key.
 macOS backup software can include Application Support data, including plaintext
 API keys in `preferences.json`. Removing the app bundle leaves local data in
 place. For complete local removal, remove Lerro's Application Support directory
-after preserving desired exports. “Clear saved key” removes the API key and
-returns Lerro to Apple-only (raw) Dictate.
+after preserving desired exports. “Replace” next to the API key in Settings › AI
+整理 removes the saved key and turns AI cleanup off, which returns Dictate to
+Apple-only (raw) text.
 
 Material changes to data collection, networking, permissions, or retention must
 update this file, `PrivacyInfo.xcprivacy`, usage descriptions, entitlements,

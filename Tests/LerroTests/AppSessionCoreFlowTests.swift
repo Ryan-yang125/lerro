@@ -297,11 +297,7 @@ struct AppSessionCoreFlowTests {
     func aiCorrectionLearning() async {
         var preferences = basePreferences()
         preferences.intelligenceMode = .remote
-        preferences.remoteProvider = RemoteProviderConfiguration(
-            baseURL: "https://api.example.com/v1",
-            modelIdentifier: "test-model",
-            apiKey: "test-key"
-        )
+        preferences.remoteProvider = RemoteProviderConfiguration(apiKey: "sk-test-key")
         let decision = try! DictionaryLearningDecision(validating: [
             DictionaryLearningCandidate(phrase: "乐若", replacement: "Lerro", confidence: 0.98)
         ])
@@ -335,82 +331,12 @@ struct AppSessionCoreFlowTests {
         #expect(harness.session.dictionaryLearningToast == nil)
     }
 
-    @Test("Onboarding accepts an already learned correction without creating a duplicate")
-    @MainActor
-    func onboardingCorrectionCanBeRepeated() async throws {
-        var preferences = basePreferences()
-        preferences.intelligenceMode = .remote
-        let decision = try DictionaryLearningDecision(validating: [
-            DictionaryLearningCandidate(phrase: "乐若", replacement: "Lerro", confidence: 0.98)
-        ])
-        let harness = makeHarness(text: "", preferences: preferences, learningDecision: decision)
-        await harness.session.start()
-        for _ in 0..<2 {
-            let result = await harness.session.learnOnboardingCorrection(
-                originalText: "我正在使用乐若完成语音写作。",
-                correctedText: "我正在使用Lerro完成语音写作。"
-            )
-            #expect(result == .learned)
-        }
-        #expect(await harness.dictionary.entries().count == 1)
-    }
-
-    @Test("Onboarding distinguishes no learning from a failed AI request")
-    @MainActor
-    func onboardingCorrectionReportsOutcome() async {
-        var preferences = basePreferences()
-        preferences.intelligenceMode = .remote
-        let harness = makeHarness(text: "", preferences: preferences)
-        await harness.session.start()
-        let rejected = await harness.session.learnOnboardingCorrection(
-            originalText: "明天开会", correctedText: "昨天开会"
-        )
-        #expect(rejected == .noLearning)
-        let failed = makeHarness(text: "", preferences: preferences, intelligenceFails: true)
-        await failed.session.start()
-        let failure = await failed.session.learnOnboardingCorrection(
-            originalText: "乐若", correctedText: "Lerro"
-        )
-        guard case .failed(let message) = failure else {
-            Issue.record("Expected a visible failure result")
-            return
-        }
-        #expect(!message.isEmpty)
-        #expect(await failed.dictionary.entries().isEmpty)
-    }
-
-    @Test("Cancelling onboarding discards a late AI correction before persistence")
-    @MainActor
-    func onboardingCorrectionCancellation() async throws {
-        var preferences = basePreferences()
-        preferences.intelligenceMode = .remote
-        let decision = try DictionaryLearningDecision(validating: [
-            DictionaryLearningCandidate(phrase: "乐若", replacement: "Lerro", confidence: 0.98)
-        ])
-        let harness = makeHarness(
-            text: "", preferences: preferences, learningDecision: decision,
-            classificationDelay: .seconds(30)
-        )
-        await harness.session.start()
-        let task = Task { await harness.session.learnOnboardingCorrection(
-            originalText: "乐若", correctedText: "Lerro"
-        ) }
-        #expect(await waitUntil { await harness.intelligence.classificationCount() == 1 })
-        task.cancel()
-        _ = await task.value
-        #expect(await harness.dictionary.entries().isEmpty)
-    }
-
     @Test("Translation requires AI and uses the selected runtime")
     @MainActor
     func translationUsesAI() async {
         var preferences = basePreferences()
         preferences.intelligenceMode = .remote
-        preferences.remoteProvider = RemoteProviderConfiguration(
-            baseURL: "https://api.example.com/v1",
-            modelIdentifier: "test-model",
-            apiKey: "test-key"
-        )
+        preferences.remoteProvider = RemoteProviderConfiguration(apiKey: "sk-test-key")
         let harness = makeHarness(
             text: "你好",
             preferences: preferences,
@@ -431,11 +357,7 @@ struct AppSessionCoreFlowTests {
     func remoteDictationStoresAICall() async {
         var preferences = basePreferences()
         preferences.intelligenceMode = .remote
-        preferences.remoteProvider = RemoteProviderConfiguration(
-            baseURL: "https://api.example.com/v1",
-            modelIdentifier: "test-model",
-            apiKey: "test-key"
-        )
+        preferences.remoteProvider = RemoteProviderConfiguration(apiKey: "sk-test-key")
         let harness = makeHarness(
             text: "嗯你好",
             preferences: preferences,
@@ -459,11 +381,7 @@ struct AppSessionCoreFlowTests {
     private func termLearningPreferences() -> UserPreferences {
         var preferences = basePreferences()
         preferences.intelligenceMode = .remote
-        preferences.remoteProvider = RemoteProviderConfiguration(
-            baseURL: "https://api.example.com/v1",
-            modelIdentifier: "test-model",
-            apiKey: "test-key"
-        )
+        preferences.remoteProvider = RemoteProviderConfiguration(apiKey: "sk-test-key")
         return preferences
     }
 
@@ -648,11 +566,7 @@ struct AppSessionCoreFlowTests {
     func aiFailureDeliversRawFallback() async {
         var preferences = basePreferences()
         preferences.intelligenceMode = .remote
-        preferences.remoteProvider = RemoteProviderConfiguration(
-            baseURL: "https://api.example.com/v1",
-            modelIdentifier: "test-model",
-            apiKey: "test-key"
-        )
+        preferences.remoteProvider = RemoteProviderConfiguration(apiKey: "sk-test-key")
         let harness = makeHarness(
             text: "raw transcript",
             preferences: preferences,
@@ -692,13 +606,9 @@ struct AppSessionCoreFlowTests {
     func translationDirectionLabel() async {
         var preferences = basePreferences()
         preferences.intelligenceMode = .remote
-        preferences.remoteProvider = RemoteProviderConfiguration(
-            baseURL: "https://api.example.com/v1",
-            modelIdentifier: "test-model",
-            apiKey: "test-key"
-        )
+        preferences.remoteProvider = RemoteProviderConfiguration(apiKey: "sk-test-key")
         preferences.recognitionLocaleIdentifier = "zh_CN"
-        preferences.translationLanguageIdentifiers = ["en"]
+        preferences.translationLanguageIdentifier = "en"
         let harness = makeHarness(
             text: "你好",
             preferences: preferences,
@@ -750,8 +660,8 @@ struct AppSessionCoreFlowTests {
         #expect(await waitUntil { harness.session.availableApplications == applications })
 
         #expect(harness.session.settingsTab == .general)
-        harness.session.settingsTab = .intelligence
-        #expect(harness.session.settingsTab == .intelligence)
+        harness.session.settingsTab = .ai
+        #expect(harness.session.settingsTab == .ai)
         #expect(!harness.session.isOnboardingPresented)
     }
 
@@ -771,11 +681,7 @@ struct AppSessionCoreFlowTests {
     func tonePreviewUsageFeature() async {
         var preferences = basePreferences()
         preferences.intelligenceMode = .remote
-        preferences.remoteProvider = RemoteProviderConfiguration(
-            baseURL: "https://api.example.com/v1",
-            modelIdentifier: "test-model",
-            apiKey: "test-key"
-        )
+        preferences.remoteProvider = RemoteProviderConfiguration(apiKey: "sk-test-key")
         let harness = makeHarness(text: "unused", preferences: preferences)
         await harness.session.start()
         let output = await harness.session.previewAppTone(
@@ -792,7 +698,6 @@ struct AppSessionCoreFlowTests {
         let record = AIUsageRecord(
             date: .now,
             feature: .dictate,
-            provider: .deepSeek,
             modelIdentifier: "deepseek-v4-flash",
             tokens: AITokenUsage(inputTokens: 100, outputTokens: 10),
             latencyMilliseconds: 500,
@@ -806,40 +711,6 @@ struct AppSessionCoreFlowTests {
         #expect(try await harness.aiUsage.records(since: .distantPast).isEmpty)
     }
 
-    @Test("Model price overrides replace case-insensitively and reset removes them")
-    @MainActor
-    func modelPriceOverrides() {
-        let harness = makeHarness(text: "unused")
-        let session = harness.session
-        session.setModelPrice(AIModelPrice(
-            modelIdentifier: "DeepSeek-V4-Flash",
-            currency: .cny,
-            inputPerMillion: 1,
-            cachedInputPerMillion: 0.1,
-            outputPerMillion: 4
-        ))
-        session.setModelPrice(AIModelPrice(
-            modelIdentifier: "deepseek-v4-flash",
-            currency: .usd,
-            inputPerMillion: 2,
-            cachedInputPerMillion: 0.2,
-            outputPerMillion: 8
-        ))
-        session.setModelPrice(AIModelPrice(
-            modelIdentifier: "other-model",
-            currency: .usd,
-            inputPerMillion: 3,
-            cachedInputPerMillion: 0.3,
-            outputPerMillion: 9
-        ))
-        #expect(session.preferences.modelPrices.count == 2)
-        #expect(session.preferences.modelPrices.first?.currency == .usd)
-        #expect(session.preferences.modelPrices.first?.inputPerMillion == 2)
-
-        session.resetModelPrice(modelIdentifier: "DEEPSEEK-V4-FLASH")
-        #expect(session.preferences.modelPrices.map(\.id) == ["other-model"])
-    }
-
     @Test("Tone resolves to the enabled app profile, then the default instruction, then none")
     @MainActor
     func toneInstructionResolution() async {
@@ -849,11 +720,7 @@ struct AppSessionCoreFlowTests {
         ) async -> String? {
             var preferences = basePreferences()
             preferences.intelligenceMode = .remote
-            preferences.remoteProvider = RemoteProviderConfiguration(
-                baseURL: "https://api.example.com/v1",
-                modelIdentifier: "test-model",
-                apiKey: "test-key"
-            )
+            preferences.remoteProvider = RemoteProviderConfiguration(apiKey: "sk-test-key")
             preferences.appToneProfiles = profiles
             preferences.defaultToneInstruction = defaultInstruction
             let harness = makeHarness(text: "hello", preferences: preferences)
@@ -901,29 +768,305 @@ struct AppSessionCoreFlowTests {
         #expect(harness.session.recordingURL(for: entries[0]) == nil)
     }
 
-    @Test("Microphone selection persists and the sidebar status follows the intelligence mode")
+    @Test("Microphone selection persists")
     @MainActor
-    func microphoneAndIntelligenceStatus() async {
-        var preferences = basePreferences()
-        preferences.appLanguage = .simplifiedChinese
-        let harness = makeHarness(text: "unused", preferences: preferences)
+    func microphoneSelectionPersists() async {
+        let harness = makeHarness(text: "unused")
         await harness.session.start()
 
         harness.session.selectMicrophone(uid: "mic-1")
         #expect(harness.session.preferences.microphoneDeviceUID == "mic-1")
         harness.session.selectMicrophone(uid: nil)
         #expect(harness.session.preferences.microphoneDeviceUID == nil)
+    }
 
-        #expect(harness.session.intelligenceStatus
-            == IntelligenceStatus(title: "原始听写", detail: "不使用 AI", isReady: true))
+    @Test("AI status is off without a Key or in raw mode, ready with a Key and balance")
+    @MainActor
+    func aiStatusFollowsKeyAndMode() async {
+        let harness = makeHarness(text: "unused")
+        await harness.session.start()
+        #expect(harness.session.aiStatus == .off)
+        #expect(!harness.session.hasDeepSeekKey)
 
-        harness.session.preferences.intelligenceMode = .remote
-        #expect(harness.session.intelligenceStatus
-            == IntelligenceStatus(title: "DeepSeek", detail: "未配置 API", isReady: false))
+        harness.session.setAIEnabled(true)
+        #expect(harness.session.aiStatus == .off)
 
-        harness.session.preferences.remoteProvider = .preset(.deepSeek, apiKey: "test-key")
-        #expect(harness.session.intelligenceStatus
-            == IntelligenceStatus(title: "DeepSeek", detail: "AI 润色已开启", isReady: true))
+        let keyed = makeHarness(text: "unused", preferences: remotePreferences())
+        await keyed.session.start()
+        #expect(keyed.session.hasDeepSeekKey)
+        #expect(keyed.session.aiStatus == .ready)
+        #expect(await waitUntil { keyed.session.deepSeekBalance == .loaded(Self.balance("8.42")) })
+
+        keyed.session.setAIEnabled(false)
+        #expect(keyed.session.aiStatus == .off)
+        keyed.session.setAIEnabled(true)
+        #expect(keyed.session.aiStatus == .ready)
+    }
+
+    @Test("A loaded empty balance marks AI as out of balance and a refill clears it")
+    @MainActor
+    func emptyBalanceMarksOutOfBalance() async {
+        let harness = makeHarness(
+            text: "unused",
+            preferences: remotePreferences(),
+            balance: Self.balance("0", isAvailable: false)
+        )
+        await harness.session.start()
+        #expect(await waitUntil { harness.session.aiStatus == .outOfBalance })
+
+        await harness.intelligence.setBalance(Self.balance("20"))
+        await harness.session.refreshDeepSeekBalance(force: true)
+        #expect(harness.session.deepSeekBalance == .loaded(Self.balance("20")))
+        #expect(harness.session.aiStatus == .ready)
+    }
+
+    @Test("Balance reads within 60 seconds are reused unless forced, and a failure shows as failed")
+    @MainActor
+    func balanceRefreshThrottle() async {
+        let harness = makeHarness(text: "unused", preferences: remotePreferences())
+        await harness.session.start()
+        #expect(await waitUntil { harness.session.deepSeekBalance == .loaded(Self.balance("8.42")) })
+        #expect(await harness.intelligence.balanceRequestCount() == 1)
+
+        await harness.session.refreshDeepSeekBalance()
+        #expect(await harness.intelligence.balanceRequestCount() == 1)
+        await harness.session.refreshDeepSeekBalance(force: true)
+        #expect(await harness.intelligence.balanceRequestCount() == 2)
+
+        await harness.intelligence.setBalance(nil)
+        await harness.session.refreshDeepSeekBalance(force: true)
+        #expect(harness.session.deepSeekBalance == .failed)
+        #expect(harness.session.aiStatus == .ready)
+    }
+
+    @Test("Without a Key the balance is never requested")
+    @MainActor
+    func noKeyNoBalanceRequest() async {
+        let harness = makeHarness(text: "unused")
+        await harness.session.start()
+        await harness.session.refreshDeepSeekBalance(force: true)
+        #expect(harness.session.deepSeekBalance == .unknown)
+        #expect(await harness.intelligence.balanceRequestCount() == 0)
+    }
+
+    @Test("Connecting a working Key saves it and turns AI on")
+    @MainActor
+    func connectDeepSeekSavesKey() async {
+        let harness = makeHarness(text: "unused")
+        await harness.session.start()
+
+        let outcome = await harness.session.connectDeepSeek(apiKey: "  sk-0123456789abcdef  ")
+        #expect(outcome == .connected)
+        #expect(harness.session.preferences.remoteProvider.apiKey == "sk-0123456789abcdef")
+        #expect(harness.session.preferences.intelligenceMode == .remote)
+        #expect(harness.session.deepSeekBalance == .loaded(Self.balance("8.42")))
+        #expect(harness.session.aiStatus == .ready)
+        #expect((try? await harness.preferences.load())?.remoteProvider.apiKey == "sk-0123456789abcdef")
+    }
+
+    @Test("Connecting rejects a Key that is not shaped like a DeepSeek Key without any request")
+    @MainActor
+    func connectDeepSeekRejectsBadFormat() async {
+        let harness = makeHarness(text: "unused")
+        await harness.session.start()
+
+        for key in ["", "abc", "sk-", "pk-0123456789abcdef", "sk-0123 456789"] {
+            #expect(await harness.session.connectDeepSeek(apiKey: key) == .invalidKey)
+        }
+        #expect(await harness.intelligence.connectionTestCount() == 0)
+        #expect(!harness.session.hasDeepSeekKey)
+    }
+
+    @Test("A Key the server rejects is invalid and is not saved")
+    @MainActor
+    func connectDeepSeekInvalidKey() async {
+        let harness = makeHarness(text: "unused", connectionError: LerroError.invalidAPIKey)
+        await harness.session.start()
+
+        #expect(await harness.session.connectDeepSeek(apiKey: "sk-0123456789abcdef") == .invalidKey)
+        #expect(!harness.session.hasDeepSeekKey)
+        #expect(harness.session.preferences.intelligenceMode == .raw)
+    }
+
+    @Test("A Key with no balance is saved and reported as no balance")
+    @MainActor
+    func connectDeepSeekNoBalance() async {
+        let emptyAccount = makeHarness(
+            text: "unused",
+            balance: Self.balance("0", isAvailable: false)
+        )
+        await emptyAccount.session.start()
+        #expect(await emptyAccount.session.connectDeepSeek(apiKey: "sk-0123456789abcdef") == .noBalance)
+        #expect(emptyAccount.session.hasDeepSeekKey)
+        #expect(emptyAccount.session.preferences.intelligenceMode == .remote)
+        #expect(emptyAccount.session.aiStatus == .outOfBalance)
+
+        let rejectedWithPaymentRequired = makeHarness(
+            text: "unused",
+            connectionError: LerroError.insufficientBalance,
+            balance: nil
+        )
+        await rejectedWithPaymentRequired.session.start()
+        #expect(await rejectedWithPaymentRequired.session.connectDeepSeek(
+            apiKey: "sk-0123456789abcdef"
+        ) == .noBalance)
+        #expect(rejectedWithPaymentRequired.session.hasDeepSeekKey)
+        #expect(rejectedWithPaymentRequired.session.aiStatus == .outOfBalance)
+    }
+
+    @Test("Other connection errors are reported and nothing is saved")
+    @MainActor
+    func connectDeepSeekFailure() async {
+        let harness = makeHarness(
+            text: "unused",
+            connectionError: LerroError.remoteUnavailable("网络不可用")
+        )
+        await harness.session.start()
+
+        let outcome = await harness.session.connectDeepSeek(apiKey: "sk-0123456789abcdef")
+        guard case .failed(let message) = outcome else {
+            Issue.record("Expected a failed outcome, got \(outcome)")
+            return
+        }
+        #expect(!message.isEmpty)
+        #expect(!harness.session.hasDeepSeekKey)
+    }
+
+    @Test("Replacing the Key clears it, turns AI off, and forgets the balance")
+    @MainActor
+    func clearDeepSeekKeyTurnsAIOff() async {
+        let harness = makeHarness(text: "unused", preferences: remotePreferences())
+        await harness.session.start()
+        #expect(await waitUntil { harness.session.deepSeekBalance == .loaded(Self.balance("8.42")) })
+
+        #expect(await harness.session.clearDeepSeekKey())
+        #expect(!harness.session.hasDeepSeekKey)
+        #expect(harness.session.preferences.intelligenceMode == .raw)
+        #expect(harness.session.deepSeekBalance == .unknown)
+        #expect(harness.session.aiStatus == .off)
+        #expect((try? await harness.preferences.load())?.remoteProvider.apiKey == "")
+    }
+
+    @Test("The AI offer shows until a Key exists or the offer is dismissed, and the guide follows the Key")
+    @MainActor
+    func aiOfferAndGuide() async {
+        let harness = makeHarness(text: "unused")
+        await harness.session.start()
+        #expect(harness.session.showsAIOffer)
+
+        harness.session.presentAIGuide()
+        #expect(harness.session.isAIGuidePresented)
+
+        harness.session.dismissAIOffer()
+        #expect(!harness.session.showsAIOffer)
+        #expect(harness.session.preferences.aiOfferDismissed)
+        #expect(await waitUntil { (try? await harness.preferences.load())?.aiOfferDismissed == true })
+
+        let keyed = makeHarness(text: "unused", preferences: remotePreferences())
+        await keyed.session.start()
+        #expect(!keyed.session.showsAIOffer)
+        keyed.session.presentAIGuide()
+        #expect(!keyed.session.isAIGuidePresented)
+        #expect(keyed.session.settingsTab == .ai)
+    }
+
+    @Test("A successful AI call refreshes the balance without forcing")
+    @MainActor
+    func successfulCallRefreshesBalance() async {
+        let harness = makeHarness(
+            text: "嗯你好",
+            preferences: remotePreferences(),
+            intelligenceText: "你好"
+        )
+        await harness.session.start()
+        #expect(await waitUntil { await harness.intelligence.balanceRequestCount() == 1 })
+        await dictate(harness.session)
+        // The read at launch is under 60 seconds old.
+        #expect(await harness.intelligence.balanceRequestCount() == 1)
+        #expect(harness.session.aiStatus == .ready)
+    }
+
+    @Test("Dictation falls back to raw text when the balance is used up and says why")
+    @MainActor
+    func insufficientBalanceFallsBackToRaw() async {
+        let harness = makeHarness(
+            text: "raw transcript",
+            preferences: remotePreferences(),
+            intelligenceError: LerroError.insufficientBalance
+        )
+        await harness.session.start()
+        #expect(harness.session.aiStatus == .ready)
+
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.hudDeliveryFeedback != nil })
+
+        #expect(await harness.delivery.values() == ["raw transcript"])
+        #expect(harness.session.hudDeliveryFeedback == .deliveredRawFallback)
+        #expect(harness.session.hudFallbackMessage == "DeepSeek 余额用完了，这次写的是原文")
+        #expect(harness.session.aiStatus == .outOfBalance)
+    }
+
+    @Test("Other AI failures fall back to raw text without a balance message")
+    @MainActor
+    func otherFailureHasNoBalanceMessage() async {
+        let harness = makeHarness(
+            text: "raw transcript",
+            preferences: remotePreferences(),
+            intelligenceFails: true
+        )
+        await harness.session.start()
+
+        await dictate(harness.session)
+        #expect(await waitUntil { harness.trace.finishedTraces().count == 1 })
+        #expect(harness.session.hudFallbackMessage == nil)
+        #expect(harness.session.aiStatus == .ready)
+    }
+
+    @Test("Translation fails when the balance is used up")
+    @MainActor
+    func translationFailsWithoutBalance() async {
+        let harness = makeHarness(
+            text: "你好",
+            preferences: remotePreferences(),
+            intelligenceError: LerroError.insufficientBalance
+        )
+        await harness.session.start()
+
+        harness.session.toggleCapture(.translation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.translation)
+        #expect(await waitUntil { harness.session.phase == .failed })
+        #expect(harness.session.captureError == "DeepSeek 余额用完了")
+        #expect(await harness.delivery.values().isEmpty)
+        #expect(harness.session.aiStatus == .outOfBalance)
+    }
+
+    @Test("Translation without a Key fails before recording")
+    @MainActor
+    func translationNeedsKey() async {
+        var preferences = basePreferences()
+        preferences.intelligenceMode = .remote
+        let harness = makeHarness(text: "你好", preferences: preferences)
+        await harness.session.start()
+
+        harness.session.toggleCapture(.translation)
+        #expect(await waitUntil { harness.session.phase == .failed })
+        #expect(await harness.speech.startCount() == 0)
+    }
+
+    @Test("Dictation with AI on but no Key writes the raw transcript without a request")
+    @MainActor
+    func dictationWithoutKeyIsRaw() async {
+        var preferences = basePreferences()
+        preferences.intelligenceMode = .remote
+        let harness = makeHarness(text: "raw words", preferences: preferences)
+        await harness.session.start()
+
+        await dictate(harness.session)
+        #expect(await harness.delivery.values() == ["raw words"])
+        #expect(await harness.intelligence.requests().isEmpty)
     }
 
     @Test("Completed raw dictation records the startup and finish chains")
@@ -988,11 +1131,7 @@ struct AppSessionCoreFlowTests {
     func rawFallbackRecordsTraceOutcome() async throws {
         var preferences = basePreferences()
         preferences.intelligenceMode = .remote
-        preferences.remoteProvider = RemoteProviderConfiguration(
-            baseURL: "https://api.example.com/v1",
-            modelIdentifier: "test-model",
-            apiKey: "test-key"
-        )
+        preferences.remoteProvider = RemoteProviderConfiguration(apiKey: "sk-test-key")
         let harness = makeHarness(
             text: "raw transcript",
             preferences: preferences,
@@ -1079,7 +1218,14 @@ struct AppSessionCoreFlowTests {
         classificationDelay: Duration? = nil,
         resourcesReady: Bool = true,
         aiUsageRecords: [AIUsageRecord] = [],
-        holdStartSound: Bool = false
+        holdStartSound: Bool = false,
+        intelligenceError: (any Error)? = nil,
+        connectionError: (any Error)? = nil,
+        balance: DeepSeekBalance? = DeepSeekBalance(
+            isAvailable: true,
+            total: Decimal(string: "8.42") ?? 8.42,
+            currencyCode: "CNY"
+        )
     ) -> Harness {
         _ = NSApplication.shared
         let events = EventLog()
@@ -1093,7 +1239,10 @@ struct AppSessionCoreFlowTests {
             responseText: intelligenceResponse,
             learningDecision: learningDecision,
             fails: intelligenceFails,
-            classificationDelay: classificationDelay
+            classificationDelay: classificationDelay,
+            processError: intelligenceError,
+            connectionError: connectionError,
+            balance: balance
         )
         let trace = RecordingTraceObserver()
         let history = InMemoryHistoryRepository(entries: historyEntries)
@@ -1101,6 +1250,7 @@ struct AppSessionCoreFlowTests {
         let termLearning = InMemoryTermLearningRepository()
         let aiUsage = InMemoryAIUsageRepository(records: aiUsageRecords)
         let preferences = preferences ?? basePreferences()
+        let preferencesRepository = InMemoryPreferencesRepository(value: preferences)
         let dependencies = AppDependencies(
             applicationPaths: nil,
             startupStorageError: nil,
@@ -1117,7 +1267,7 @@ struct AppSessionCoreFlowTests {
             loginItem: StubLoginItem(),
             history: history,
             dictionary: dictionary,
-            preferences: InMemoryPreferencesRepository(value: preferences),
+            preferences: preferencesRepository,
             aiUsage: aiUsage,
             dailyUsage: InMemoryDailyUsageRepository(),
             termLearning: termLearning,
@@ -1137,7 +1287,23 @@ struct AppSessionCoreFlowTests {
             dictionary: dictionary,
             termLearning: termLearning,
             aiUsage: aiUsage,
+            preferences: preferencesRepository,
             trace: trace
+        )
+    }
+
+    private func remotePreferences() -> UserPreferences {
+        var preferences = basePreferences()
+        preferences.intelligenceMode = .remote
+        preferences.remoteProvider = RemoteProviderConfiguration(apiKey: "sk-test-key")
+        return preferences
+    }
+
+    private static func balance(_ total: String, isAvailable: Bool = true) -> DeepSeekBalance {
+        DeepSeekBalance(
+            isAvailable: isAvailable,
+            total: Decimal(string: total) ?? 0,
+            currencyCode: "CNY"
         )
     }
 
@@ -1178,6 +1344,7 @@ private struct Harness {
     let dictionary: InMemoryDictionaryRepository
     let termLearning: InMemoryTermLearningRepository
     let aiUsage: InMemoryAIUsageRepository
+    let preferences: InMemoryPreferencesRepository
     let trace: RecordingTraceObserver
 }
 
@@ -1400,14 +1567,25 @@ private actor StubIntelligence: IntelligenceProcessing {
     private let learningDecision: DictionaryLearningDecision
     private let fails: Bool
     private let classificationDelay: Duration?
+    private let processError: (any Error)?
+    private let connectionError: (any Error)?
+    private var balance: DeepSeekBalance?
     private var recordedRequests: [IntelligenceRequest] = []
     private var classifications = 0
+    private var balanceRequests = 0
+    private var connectionTests = 0
 
     init(
         resultText: String, responseText: String? = nil,
         learningDecision: DictionaryLearningDecision,
-        fails: Bool = false, classificationDelay: Duration? = nil
+        fails: Bool = false, classificationDelay: Duration? = nil,
+        processError: (any Error)? = nil,
+        connectionError: (any Error)? = nil,
+        balance: DeepSeekBalance? = nil
     ) {
+        self.processError = processError
+        self.connectionError = connectionError
+        self.balance = balance
         self.resultText = resultText
         self.responseText = responseText
         self.learningDecision = learningDecision
@@ -1417,6 +1595,7 @@ private actor StubIntelligence: IntelligenceProcessing {
 
     func process(_ request: IntelligenceRequest) async throws -> IntelligenceResult {
         recordedRequests.append(request)
+        if let processError { throw processError }
         if fails { throw TestFailure.intelligence }
         return IntelligenceResult(
             text: resultText,
@@ -1427,7 +1606,6 @@ private actor StubIntelligence: IntelligenceProcessing {
                 ? AICallTrace(
                     prompt: request.task == .translate ? .translate : .dictate,
                     promptVersion: "test_v1",
-                    provider: .custom,
                     modelIdentifier: "test-model",
                     userPrompt: "{\"raw_data\":{\"transcript\":\"\(request.transcript)\"}}",
                     response: responseText ?? resultText,
@@ -1447,6 +1625,23 @@ private actor StubIntelligence: IntelligenceProcessing {
         if let classificationDelay { try? await Task.sleep(for: classificationDelay) }
         return learningDecision
     }
+    func testRemoteConnection(
+        configuration: RemoteProviderConfiguration
+    ) async throws -> RemoteConnectionTestOutcome {
+        connectionTests += 1
+        if let connectionError { throw connectionError }
+        return .success()
+    }
+    func remoteBalance(
+        configuration: RemoteProviderConfiguration
+    ) async throws -> DeepSeekBalance {
+        balanceRequests += 1
+        guard let balance else { throw TestFailure.intelligence }
+        return balance
+    }
+    func setBalance(_ balance: DeepSeekBalance?) { self.balance = balance }
+    func balanceRequestCount() -> Int { balanceRequests }
+    func connectionTestCount() -> Int { connectionTests }
     func requests() -> [IntelligenceRequest] { recordedRequests }
     func classificationCount() -> Int { classifications }
 }

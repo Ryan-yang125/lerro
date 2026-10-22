@@ -85,9 +85,10 @@ open -F -n --env LERRO_FIXTURE_MODE=1 --env LERRO_FIXTURE_PRESENTATION=hud-recov
 | --- | --- |
 | `LERRO_FIXTURE_MODE` | `1` enables fixture mode (required for the rest) |
 | `LERRO_FIXTURE_DESTINATION` | `home`, `history`, `dictionary`, `appTones` |
-| `LERRO_FIXTURE_PRESENTATION` | `settings-general`, `settings-shortcuts`, `settings-intelligence`, `settings-usage`, `settings-privacy`, `settings-about`, `prompt-dictate`, `prompt-translate`, `prompt-dictionaryLearning`, `menubar-panel`, `menubar-panel-listening`, `menubar-panel-permission`, and `hud-` states (`waiting`, `preparing-speech`, `recording`, `timer`, `hands-free`, `silent`, `dictating`, `translating`, `processing`, `processing-translation`, `delivered-fallback`, `error`, `recovery`, `dictionary-learned`) |
+| `LERRO_FIXTURE_PRESENTATION` | `settings-general`, `settings-dictation`, `settings-ai`, `settings-ai-usage`, `settings-privacy`, `settings-about`, `prompt-dictate`, `prompt-translate`, `prompt-dictionaryLearning`, `menubar-panel`, `menubar-panel-listening`, `menubar-panel-permission`, and `hud-` states (`waiting`, `preparing-speech`, `recording`, `timer`, `hands-free`, `silent`, `dictating`, `translating`, `processing`, `processing-translation`, `delivered-fallback`, `delivered-fallback-balance`, `error`, `recovery`, `dictionary-learned`) |
 | `LERRO_FIXTURE_PANEL_ONLY` | `1` shows only the panel (HUD and menu bar presentations) |
-| `LERRO_FIXTURE_ONBOARDING`, `LERRO_FIXTURE_ONBOARDING_STEP` | `1`; step `privacy`, `speech`, `ai`, `shortcut`, `dictation`, `recovery`, `dictionary`, `tone` |
+| `LERRO_FIXTURE_ONBOARDING`, `LERRO_FIXTURE_ONBOARDING_STEP` | `1`; step `welcome`, `practice`, `ai`, `start` |
+| `LERRO_FIXTURE_AI` | `connected` (Key saved, balance 8.42 CNY), `no-balance` (Key saved, balance 0, account unavailable), `off` (no Key, AI cleanup off, Home shows the enable card). Default `connected`, or `off` when `LERRO_FIXTURE_ONBOARDING=1`. The fixture accepts any Key that starts with `sk-` and has at least 20 characters |
 | `LERRO_FIXTURE_UPDATE_AVAILABLE` | `1` shows the update indicator with version 1.9.1 without Sparkle |
 | `LERRO_FIXTURE_APPEARANCE` | `light`, `dark` |
 | `LERRO_FIXTURE_LANGUAGE` | `en`, `zh-Hans` |
@@ -267,10 +268,10 @@ stopped because the frontmost application, focused element, value, selection, or
 secure-input state changed after capture, or Accessibility could not read the
 target. This is the designed fallback. The HUD recovery card offers Copy again.
 
-**Remote AI test fails.** Check Provider, Base URL, Model ID, and key under
-Settings > Intelligence. Public endpoints need HTTPS; HTTP is accepted only for
-loopback. Dictate falls back to the Apple transcript when the call fails, and
-Translate reports the error.
+**AI cleanup fails.** Open Settings > AI 整理 and check the key status and the
+balance. A rejected key shows "这个 Key 用不了"; an empty account shows
+"DeepSeek 余额用完了". Dictate falls back to the Apple transcript when the call
+fails, and Translate reports the error.
 
 **A JSON data file is corrupt.** Back up the specific file. Lerro reports the error
 and keeps the original file. Do not delete the Application Support folder.

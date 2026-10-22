@@ -244,7 +244,7 @@ const zh: HomeCopy = {
     items: [
       "语音由苹果在本机识别，录音默认不保存。",
       "不用注册账号，Lerro 没有服务器收你的数据。",
-      "开了 AI 整理，只有文字会发给你自己选的 AI，每次发了什么都能在历史里看到。",
+      "开了 AI 整理，只有文字会发给你自己的 DeepSeek 账号，每次发了什么都能在历史里看到。",
       "代码开源，任何人都可以检查。",
     ],
     orbs: ["语音 · 本机识别", "历史 · 本机", "词典 · 本机", "Key · 本机"],
@@ -252,12 +252,12 @@ const zh: HomeCopy = {
   faq: {
     h2: "常见问题",
     items: [
-      { q: "需要会编程吗？", a: "不需要。下载、拖进「应用程序」、打开，就能用。开 AI 整理要去 DeepSeek 官网注册并复制一串密钥，Lerro 的引导会一步步带你填好。" },
-      { q: "真的免费吗？", a: "Lerro 本身免费，没有会员和订阅。只有开 AI 整理时，DeepSeek 会按用量收费，一千次大约 1 块钱，每次花了多少在 Lerro 里都看得到。" },
+      { q: "需要会编程吗？", a: "不需要。下载、拖进「应用程序」、打开，就能用。想开 AI 整理，App 里有三步指引：打开 DeepSeek 官网、充值、创建并粘贴一串密钥，照着点就行。" },
+      { q: "真的免费吗？", a: "Lerro 本身免费，没有会员和订阅。只有开 AI 整理时，DeepSeek 会按用量收费，每天说一百多次，一个月 2 块钱左右，余额和花费在 Lerro 里都看得到。" },
       { q: "能在哪些软件里用？", a: "基本所有能打字的地方：微信、飞书、钉钉、企业微信、邮件、备忘录、Word、浏览器、ChatGPT……光标在哪儿，字就写到哪儿。" },
       { q: "说话有口音、中英文夹杂，能识别吗？", a: "普通话带点口音没问题，中英文混着说也能写对。常说的专有名词写错了，AI 改对两次以后，Lerro 会自己记住。" },
       { q: "有 Windows 版或手机版吗？", a: "目前只有 Mac 版，需要 macOS 26 和 Apple 芯片（M1 及以后的 Mac）。" },
-      { q: "说的话会被上传吗？", a: "语音只在你的 Mac 上识别。开了 AI 整理时，只有识别出来的文字会发给你自己的 AI 账号；不开就完全不联网处理。" },
+      { q: "说的话会被上传吗？", a: "语音只在你的 Mac 上识别。开了 AI 整理时，只有识别出来的文字会发给你自己的 DeepSeek 账号；不开就完全不联网处理。" },
     ],
   },
   final: {
@@ -364,7 +364,7 @@ const en: HomeCopy = {
     items: [
       "Apple recognizes your speech on this Mac, and recordings are not saved by default.",
       "No account needed. Lerro has no server collecting your data.",
-      "With AI cleanup on, only text is sent, and only to the AI service you chose. You can see what was sent in History.",
+      "With AI cleanup on, only text is sent, and only to your own DeepSeek account. You can see what was sent in History.",
       "The code is open source, so anyone can inspect it.",
     ],
     orbs: ["Speech · on this Mac", "History · local", "Dictionary · local", "Key · local"],
@@ -372,12 +372,12 @@ const en: HomeCopy = {
   faq: {
     h2: "FAQ",
     items: [
-      { q: "Do I need to know programming?", a: "No. Download it, drag it to Applications, open it, and it works. Turning on AI cleanup means signing up on the DeepSeek site and copying a key. Lerro's guide walks you through it step by step." },
-      { q: "Is it really free?", a: "Lerro itself is free, with no membership or subscription. Only when AI cleanup is on does DeepSeek charge by usage: about ¥1 per thousand uses, and you can see the cost of each use in Lerro." },
+      { q: "Do I need to know programming?", a: "No. Download it, drag it to Applications, open it, and it works. To turn on AI cleanup, the app has a three-step guide: open the DeepSeek site, top up, then create a key and paste it. Just follow the buttons." },
+      { q: "Is it really free?", a: "Lerro itself is free, with no membership or subscription. Only when AI cleanup is on does DeepSeek charge by usage: at a hundred or so dictations a day, that comes to about ¥2 a month, and you can see your balance and spending in Lerro." },
       { q: "Which apps does it work in?", a: "Almost anywhere you can type: WeChat, Feishu, DingTalk, WeCom, Mail, Notes, Word, your browser, ChatGPT and more. Wherever your cursor is, the text goes there." },
       { q: "Does it handle accents and mixed Chinese and English?", a: "Mandarin with a light accent is fine, and mixing Chinese and English works too. If a name or term you use often comes out wrong, Lerro remembers it after the AI corrects it twice." },
       { q: "Is there a Windows or phone version?", a: "Only Mac for now. It needs macOS 26 and Apple silicon (an M1 or later Mac)." },
-      { q: "Is what I say uploaded?", a: "Speech is recognized only on your Mac. With AI cleanup on, only the recognized text is sent to your own AI account. With it off, nothing is processed over the network." },
+      { q: "Is what I say uploaded?", a: "Speech is recognized only on your Mac. With AI cleanup on, only the recognized text is sent to your own DeepSeek account. With it off, nothing is processed over the network." },
     ],
   },
   final: {

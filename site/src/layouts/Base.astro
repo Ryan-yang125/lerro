@@ -41,8 +41,9 @@ const ogImage = `${siteUrl}/og.png`;
     <meta name="twitter:image" content={ogImage} />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="color-scheme" content="light" />
-    <meta name="theme-color" content="#F6F4EF" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#F6F4EF" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0E0F12" media="(prefers-color-scheme: dark)" />
   </head>
   <body>
     <Nav lang={lang} />

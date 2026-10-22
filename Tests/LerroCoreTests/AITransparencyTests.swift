@@ -258,8 +258,7 @@ struct AITransparencyTests {
         let call = try #require(result.call)
         #expect(call.prompt == .dictate)
         #expect(call.promptVersion == CloudPromptComposer.dictatePromptVersion)
-        #expect(call.provider == configuration.provider)
-        #expect(call.modelIdentifier == configuration.modelIdentifier)
+        #expect(call.modelIdentifier == RemoteProviderConfiguration.modelIdentifier)
         #expect(call.userPrompt == expectedUser)
         #expect(call.response == output)
         #expect(call.tokens == tokens)
@@ -370,7 +369,6 @@ struct AITransparencyTests {
         let record = AIUsageRecord(
             date: Date(timeIntervalSince1970: 1_800_000_000),
             feature: .dictate,
-            provider: .deepSeek,
             modelIdentifier: "deepseek-flash",
             tokens: nil,
             latencyMilliseconds: 10,
@@ -399,7 +397,6 @@ struct AITransparencyTests {
         AICallTrace(
             prompt: prompt,
             promptVersion: "v",
-            provider: .deepSeek,
             modelIdentifier: "deepseek-flash",
             userPrompt: "{}",
             response: response,
@@ -427,12 +424,18 @@ private struct StubRuntime: RemoteLanguageModelRuntime {
         userPrompt: String,
         maxTokens: Int
     ) async throws -> RemoteGeneration {
-        RemoteGeneration(text: output, modelIdentifier: configuration.modelIdentifier, tokens: tokens)
+        RemoteGeneration(text: output, modelIdentifier: RemoteProviderConfiguration.modelIdentifier, tokens: tokens)
     }
 
     func testConnection(
         configuration: RemoteProviderConfiguration
     ) async throws -> RemoteConnectionTestOutcome {
         .success()
+    }
+
+    func balance(
+        configuration: RemoteProviderConfiguration
+    ) async throws -> DeepSeekBalance {
+        DeepSeekBalance(isAvailable: true, total: 1, currencyCode: "CNY")
     }
 }

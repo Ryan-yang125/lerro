@@ -23,7 +23,7 @@ V1.6 主窗口使用自绘 sidebar、卡片、pill 与窗口内设置浮层。�
 ## 方案
 
 - 主窗口使用 `NavigationSplitView`。侧栏含 wordmark、首页 / 历史 / 词典 / 应用语气（带数量 badge），
-  底部为 AI 状态行（`AppSession.intelligenceStatus`）、设置齿轮与版本号。
+  底部为 AI 状态行（`AppSession.aiStatus`）、设置齿轮与版本号。
   `SidebarDestination` 为 `home`、`history`、`dictionary`、`appTones`；个性化更名为应用语气。
 - 首页：今天 / 近 7 天 / 全部三档统计（`UsageStatistics`）、7 天柱状图、快捷键键帽、麦克风菜单、
   最近 6 条记录、最近学到的词、空状态。
@@ -32,7 +32,7 @@ V1.6 主窗口使用自绘 sidebar、卡片、pill 与窗口内设置浮层。�
 - 词典：原生 `Table`，7 天内学到的词带「新」标记；CSV 导入导出使用 `phrase,replacement` 两列。
 - 应用语气：卡片只用于应用语气对象。新增 `UserPreferences.defaultToneInstruction`，没有匹配到已启用的
   应用语气时使用；编辑器可用自定义示例句运行 AI 预览。
-- 设置：标准 `Settings` 场景窗口（⌘,），标签为通用 / 快捷键 / 智能 / 用量 / 隐私 / 关于（`SettingsTab`）。
+- 设置：标准 `Settings` 场景窗口（⌘,），标签为通用 / 听写 / AI 整理 / 隐私 / 关于（`SettingsTab`），用量明细是 AI 整理页的二级页面。
   打开方式固定为设置 `session.settingsTab` 后调用 `openSettings()`。删除 `SettingsDestination`、
   `SettingsEntryPoint`、`isSettingsPresented`、`presentSettings(_:)`、`dismissSettings()`。
 - 强调色：`LerroTheme.accent`（浅 `#2F5BFF`、深 `#4A6BFF`）、`accentButton`（深色 `#3557F0`）、
@@ -45,7 +45,7 @@ V1.6 主窗口使用自绘 sidebar、卡片、pill 与窗口内设置浮层。�
   `LerroButtonStyle`、`LerroIconButton`、`LerroShortcutKeys`/`LerroKeycap`、`LerroAppIcon`、
   `LerroStatusDot`、`LerroChip`、`LerroEmptyState`、`LerroSectionHeader`。旧的卡片、pill 与自绘导航组件已删除。
 - Fixture：`LERRO_FIXTURE_DESTINATION=home|history|dictionary|appTones` 选择主窗口页面；
-  `LERRO_FIXTURE_PRESENTATION=settings-general|settings-shortcuts|settings-intelligence|settings-usage|settings-privacy|settings-about`
+  `LERRO_FIXTURE_PRESENTATION=settings-general|settings-dictation|settings-ai|settings-ai-usage|settings-privacy|settings-about`
   打开设置窗口对应标签。HUD fixture 不变。
 
 ## 备选方案

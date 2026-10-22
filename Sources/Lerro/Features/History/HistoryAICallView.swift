@@ -260,7 +260,7 @@ struct HistoryAICallView: View {
                         label: "没有发送",
                         link: "设置",
                         action: {
-                            session.settingsTab = .intelligence
+                            session.settingsTab = .ai
                             openSettings()
                         }
                     ) {
@@ -350,7 +350,7 @@ struct HistoryAICallView: View {
     private var promptName: String {
         let key: String
         switch call.prompt {
-        case .dictate: key = "听写润色"
+        case .dictate: key = "听写整理"
         case .translate: key = "翻译"
         case .dictionaryLearning: key = "自动学词"
         }
@@ -360,9 +360,9 @@ struct HistoryAICallView: View {
     // MARK: Cost
 
     private var cost: AICallCost? {
+        let modelKey = call.modelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard let tokens = call.tokens,
-              let price = AIModelPriceTable(overrides: session.preferences.modelPrices)
-                .price(for: call.modelIdentifier)
+              let price = AIModelPrice.builtIn.first(where: { $0.id == modelKey })
         else { return nil }
         return price.breakdown(of: tokens, at: call.startedAt)
     }
@@ -409,10 +409,10 @@ struct HistoryAICallView: View {
 
     private var costSentence: String {
         guard call.tokens != nil else {
-            return HistoryPresentation.localized("服务商没有返回用量", locale: locale)
+            return HistoryPresentation.localized("DeepSeek 没有返回用量", locale: locale)
         }
         guard let cost else {
-            return HistoryPresentation.localized("这个模型没有设置价格，无法估算费用", locale: locale)
+            return HistoryPresentation.localized("这个模型没有价格记录，无法估算费用", locale: locale)
         }
         let amount = Self.amount(cost.total, currency: cost.currency)
         guard cost.total > 0 else {
@@ -421,8 +421,12 @@ struct HistoryAICallView: View {
         let uses = (1 / cost.total).formatted(
             .number.locale(locale).precision(.significantDigits(1...2))
         )
-        let key = cost.currency == .cny ? "约 %@，1 块钱大约能用 %@ 次。" : "约 %@，1 美元大约能用 %@ 次。"
-        return LerroInterfaceLocalization.format(key, locale: locale, arguments: amount, uses)
+        return LerroInterfaceLocalization.format(
+            "约 %@，1 块钱大约能用 %@ 次。",
+            locale: locale,
+            arguments: amount,
+            uses
+        )
     }
 
     private func costTable(_ cost: AICallCost) -> some View {

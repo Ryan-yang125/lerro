@@ -226,6 +226,8 @@ public enum LerroError: LocalizedError, Sendable {
     case remoteUnavailable(String)
     case translationUnavailable(String)
     case selectionTooLong(Int)
+    case insufficientBalance
+    case invalidAPIKey
     case cancelled
 
     public var errorDescription: String? {
@@ -250,6 +252,10 @@ public enum LerroError: LocalizedError, Sendable {
             "设备端翻译暂不可用：\(message)"
         case .selectionTooLong(let maximumCharacters):
             "选中文字最多支持 \(maximumCharacters) 字符，请缩小选区后重试"
+        case .insufficientBalance:
+            "DeepSeek 余额用完了"
+        case .invalidAPIKey:
+            "API Key 无效或没有访问权限"
         case .cancelled:
             "已取消"
         }

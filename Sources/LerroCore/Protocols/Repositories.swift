@@ -69,6 +69,9 @@ public protocol IntelligenceProcessing: Sendable {
     func testRemoteConnection(
         configuration: RemoteProviderConfiguration
     ) async throws -> RemoteConnectionTestOutcome
+    func remoteBalance(
+        configuration: RemoteProviderConfiguration
+    ) async throws -> DeepSeekBalance
 }
 
 public protocol RemoteLanguageModelRuntime: Sendable {
@@ -81,6 +84,9 @@ public protocol RemoteLanguageModelRuntime: Sendable {
     func testConnection(
         configuration: RemoteProviderConfiguration
     ) async throws -> RemoteConnectionTestOutcome
+    func balance(
+        configuration: RemoteProviderConfiguration
+    ) async throws -> DeepSeekBalance
 }
 
 public extension IntelligenceProcessing {
@@ -95,5 +101,12 @@ public extension IntelligenceProcessing {
         configuration: RemoteProviderConfiguration
     ) async throws -> RemoteConnectionTestOutcome {
         throw LerroError.remoteUnavailable("当前智能服务没有配置远程模型运行时")
+    }
+
+    func remoteBalance(
+        configuration: RemoteProviderConfiguration
+    ) async throws -> DeepSeekBalance {
+        _ = configuration
+        throw LerroError.modelUnavailable("当前智能服务不支持查询余额")
     }
 }

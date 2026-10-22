@@ -442,7 +442,7 @@ struct FileRepositoriesTests {
 
         let preferences = UserPreferences(
             recognitionLocaleIdentifier: "en_US",
-            translationLanguageIdentifiers: ["zh_CN", "ja_JP"],
+            translationLanguageIdentifier: "ja_JP",
             appearance: .dark,
             historyRetention: .oneWeek,
             hasCompletedOnboarding: true

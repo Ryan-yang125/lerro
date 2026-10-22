@@ -7,93 +7,6 @@ public enum IntelligenceMode: String, CaseIterable, Codable, Hashable, Sendable,
     public var id: String { rawValue }
 }
 
-public enum RemoteProviderKind: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
-    case deepSeek
-    case openAI
-    case gemini
-    case custom
-
-    public var id: String { rawValue }
-
-    public var defaultBaseURL: String {
-        switch self {
-        case .deepSeek:
-            "https://api.deepseek.com"
-        case .openAI:
-            "https://api.openai.com/v1"
-        case .gemini:
-            "https://generativelanguage.googleapis.com/v1beta/openai"
-        case .custom:
-            ""
-        }
-    }
-
-    public var defaultModelIdentifier: String {
-        switch self {
-        case .deepSeek:
-            "deepseek-flash"
-        case .openAI, .gemini, .custom:
-            ""
-        }
-    }
-}
-
-public enum RemoteProviderEndpointValidation: Sendable, Equatable {
-    case valid
-    case invalid
-    case insecure
-}
-
-public enum RemoteProviderEndpointPolicy {
-    public static func validate(_ value: String) -> RemoteProviderEndpointValidation {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed),
-              url.user == nil,
-              url.password == nil,
-              url.query == nil,
-              url.fragment == nil,
-              let scheme = url.scheme?.lowercased(),
-              let host = url.host?.lowercased(),
-              !host.isEmpty else {
-            return .invalid
-        }
-
-        switch scheme {
-        case "https":
-            return .valid
-        case "http" where isLoopback(host: host):
-            return .valid
-        case "http":
-            return .insecure
-        default:
-            return .invalid
-        }
-    }
-
-    public static func credentialOrigin(_ value: String) -> String? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard validate(trimmed) == .valid,
-              let url = URL(string: trimmed),
-              let scheme = url.scheme?.lowercased(),
-              let host = url.host?.lowercased() else { return nil }
-        let port = url.port ?? (scheme == "https" ? 443 : 80)
-        return "\(scheme)://\(host):\(port)"
-    }
-
-    private static func isLoopback(host: String) -> Bool {
-        let normalized = host.lowercased()
-        if normalized == "localhost" || normalized == "::1" {
-            return true
-        }
-        let octets = normalized.split(separator: ".", omittingEmptySubsequences: false)
-        guard octets.count == 4,
-              octets.allSatisfy({ UInt8($0) != nil }) else {
-            return false
-        }
-        return octets[0] == "127"
-    }
-}
-
 public struct RemoteContextSharing: Codable, Hashable, Sendable {
     public var application: Bool
     public var windowTitle: Bool
@@ -131,42 +44,55 @@ public struct RemoteContextSharing: Codable, Hashable, Sendable {
 }
 
 public struct RemoteProviderConfiguration: Codable, Hashable, Sendable {
-    public var provider: RemoteProviderKind
-    public var baseURL: String
-    public var modelIdentifier: String
     public var apiKey: String
     public var contextSharing: RemoteContextSharing
 
     public init(
-        provider: RemoteProviderKind = .deepSeek,
-        baseURL: String? = nil,
-        modelIdentifier: String? = nil,
         apiKey: String = "",
         contextSharing: RemoteContextSharing = .full
     ) {
-        self.provider = provider
-        self.baseURL = baseURL ?? provider.defaultBaseURL
-        self.modelIdentifier = modelIdentifier ?? provider.defaultModelIdentifier
         self.apiKey = apiKey
         self.contextSharing = contextSharing
     }
 
-    public static func preset(
-        _ provider: RemoteProviderKind,
-        apiKey: String = "",
-        contextSharing: RemoteContextSharing = .full
-    ) -> RemoteProviderConfiguration {
-        RemoteProviderConfiguration(
-            provider: provider,
+    /// The only endpoint Lerro talks to.
+    public static let baseURL = URL(string: "https://api.deepseek.com")!
+    public static let modelIdentifier = "deepseek-flash"
+
+    public var isReadyForUse: Bool {
+        !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case apiKey
+        case contextSharing
+        /// Present only in files saved before Lerro supported DeepSeek alone.
+        case provider
+    }
+
+    /// A saved key is kept only when it was a DeepSeek key, so that a key issued
+    /// by another provider is never sent to DeepSeek.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        var apiKey = ""
+        let isDeepSeekKey = !container.contains(.provider)
+            || (try? container.decode(String.self, forKey: .provider)) == "deepSeek"
+        if isDeepSeekKey {
+            apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
+        }
+        self.init(
             apiKey: apiKey,
-            contextSharing: contextSharing
+            contextSharing: try container.decodeIfPresent(
+                RemoteContextSharing.self,
+                forKey: .contextSharing
+            ) ?? .full
         )
     }
 
-    public var isReadyForUse: Bool {
-        !modelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && RemoteProviderEndpointPolicy.validate(baseURL) == .valid
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(apiKey, forKey: .apiKey)
+        try container.encode(contextSharing, forKey: .contextSharing)
     }
 }
 

@@ -144,7 +144,7 @@ struct CaptureHUDView: View {
             HStack(spacing: LerroTheme.hudContentSpacing) {
                 HUDApplicationIconView(bundleIdentifier: session.activeCaptureBundleIdentifier)
                 HUDShimmerText(
-                    text: localized(session.activeMode == .translation ? "翻译中…" : "AI 润色中…"),
+                    text: localized(session.activeMode == .translation ? "翻译中…" : "AI 整理中…"),
                     reduceMotion: reduceMotion
                 )
                 if session.isCaptureCancellationAvailable {
@@ -158,7 +158,7 @@ struct CaptureHUDView: View {
         case .deliveredRawFallback:
             HStack(spacing: LerroTheme.hudContentSpacing) {
                 HUDDot(color: LerroTheme.hudWarning)
-                Text(localized("已写入原文 · AI 未响应"))
+                Text(session.hudFallbackMessage ?? localized("已写入原文 · AI 未响应"))
                     .font(LerroTheme.font(13))
                     .foregroundStyle(secondaryText)
                     .lineLimit(1)
@@ -413,7 +413,7 @@ struct CaptureHUDView: View {
             case .translation: "正在翻译"
             case .ask: "正在处理"
             }
-        case .deliveredRawFallback: "AI 未响应，已写入原文"
+        case .deliveredRawFallback: session.hudFallbackMessage ?? "AI 未响应，已写入原文"
         case .error: session.captureError ?? "听写失败，可以重试"
         case .recovery: "写入失败，内容已复制到剪贴板"
         case .dictionaryLearned: "已将修正加入词典"

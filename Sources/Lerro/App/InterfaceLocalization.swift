@@ -69,7 +69,8 @@ enum LerroInterfaceLocalization {
             ("麦克风测试错误：", "麦克风测试错误：%@"),
             ("音频导出失败：", "音频导出失败：%@"),
             ("快捷键服务启动失败：", "快捷键服务启动失败：%@"),
-            ("智能处理失败：", "智能处理失败：%@"),
+            ("AI 整理失败：", "AI 整理失败：%@"),
+            ("连接 DeepSeek 失败：", "连接 DeepSeek 失败：%@"),
             ("语音输入失败：", "语音输入失败：%@")
         ] where message.hasPrefix(prefix) {
             let detail = String(message.dropFirst(prefix.count))

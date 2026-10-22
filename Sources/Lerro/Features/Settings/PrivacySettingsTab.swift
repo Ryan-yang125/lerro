@@ -10,6 +10,8 @@ struct PrivacySettingsTab: View {
 
     var body: some View {
         Form {
+            SettingsPermissionBanner(session: session)
+
             Section {
                 Picker("保存历史", selection: retentionSelection) {
                     Text("永久").tag(HistoryRetention.forever)
@@ -43,7 +45,7 @@ struct PrivacySettingsTab: View {
                 .foregroundStyle(LerroTheme.danger)
             }
         }
-        .settingsForm(height: 320)
+        .settingsForm(height: 360)
         .confirmationDialog(
             "更改保存时长",
             isPresented: $showRetentionConfirmation,

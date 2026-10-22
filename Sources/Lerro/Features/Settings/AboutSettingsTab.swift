@@ -7,9 +7,13 @@ struct AboutSettingsTab: View {
     @Environment(\.openWindow) private var openWindow
 
     private static let releaseNotesURL = URL(string: "https://lerroapp.com/changelog")
+    private static let websiteURL = URL(string: "https://lerroapp.com")
+    private static let sourceURL = URL(string: "https://github.com/Ryan-yang125/lerro")
 
     var body: some View {
         Form {
+            SettingsPermissionBanner(session: session)
+
             Section {
                 VStack(spacing: 6) {
                     Image(nsImage: NSApp.applicationIconImage)
@@ -45,6 +49,21 @@ struct AboutSettingsTab: View {
             .listRowBackground(Color.clear)
 
             Section {
+                LabeledContent("官网") {
+                    if let url = Self.websiteURL {
+                        Link("lerroapp.com", destination: url)
+                            .foregroundStyle(LerroTheme.accentText)
+                    }
+                }
+                LabeledContent("源代码") {
+                    if let url = Self.sourceURL {
+                        Link("GitHub", destination: url)
+                            .foregroundStyle(LerroTheme.accentText)
+                    }
+                }
+            }
+
+            Section {
                 SettingsLinkRow(title: "重新查看引导") {
                     session.restartOnboarding()
                     openWindow(id: "main")
@@ -55,7 +74,7 @@ struct AboutSettingsTab: View {
                 SettingsLinkRow(title: "开源许可", trailing: "Apache-2.0") { openLicenses() }
             }
         }
-        .settingsForm(height: 500)
+        .settingsForm(height: 560)
     }
 
     private func openBundledDocument(_ resource: String) {

@@ -73,25 +73,25 @@ struct AppDependencies: Sendable {
         let dictionary = fixtureDictionary()
         let onboardingRequested = ProcessInfo.processInfo.environment["LERRO_FIXTURE_ONBOARDING"] == "1"
         let onboardingStepIndex: Int? = switch ProcessInfo.processInfo.environment["LERRO_FIXTURE_ONBOARDING_STEP"] {
-        case "privacy": 0
-        case "speech": 1
+        case "welcome": 0
+        case "practice": 1
         case "ai": 2
-        case "shortcut": 3
-        case "dictation": 4
-        case "recovery": 5
-        case "dictionary": 6
-        case "tone": 7
+        case "start": 3
         default: nil
         }
+        let aiFixture = FixtureAIState(
+            rawValue: ProcessInfo.processInfo.environment["LERRO_FIXTURE_AI"]
+                ?? (onboardingRequested ? "off" : "connected")
+        ) ?? .connected
         var preferences = UserPreferences(
             appToneProfiles: fixtureAppToneProfiles(),
             defaultToneInstruction: "自然、简洁，保留我的原意",
             hasCompletedOnboarding: !onboardingRequested,
             onboardingStepIndex: onboardingRequested ? onboardingStepIndex : nil
         )
-        if !onboardingRequested {
+        if aiFixture != .off {
             preferences.intelligenceMode = .remote
-            preferences.remoteProvider = .preset(.deepSeek, apiKey: "fixture-not-a-real-key")
+            preferences.remoteProvider = RemoteProviderConfiguration(apiKey: "sk-fixture-not-a-real-key-0000")
         }
 
         return AppDependencies(
@@ -114,7 +114,7 @@ struct AppDependencies: Sendable {
             aiUsage: InMemoryAIUsageRepository(records: fixtureAIUsageRecords(history: history)),
             dailyUsage: InMemoryDailyUsageRepository(days: fixtureDailyUsage()),
             termLearning: InMemoryTermLearningRepository(state: fixtureTermLearningState()),
-            intelligence: FixtureIntelligence(),
+            intelligence: FixtureIntelligence(hasBalance: aiFixture != .noBalance),
             captureTrace: DiscardingCaptureTraceObserver()
         )
     }
@@ -217,7 +217,6 @@ struct AppDependencies: Sendable {
                 promptVersion: mode == .translation
                     ? CloudPromptComposer.translatePromptVersion
                     : CloudPromptComposer.dictatePromptVersion,
-                provider: .deepSeek,
                 modelIdentifier: "deepseek-flash",
                 userPrompt: userPrompt,
                 response: response,
@@ -446,7 +445,6 @@ struct AppDependencies: Sendable {
                 records.append(AIUsageRecord(
                     date: date,
                     feature: .dictate,
-                    provider: .deepSeek,
                     modelIdentifier: "deepseek-flash",
                     tokens: AITokenUsage(
                         inputTokens: input,
@@ -463,7 +461,6 @@ struct AppDependencies: Sendable {
                     records.append(AIUsageRecord(
                         date: date,
                         feature: .translate,
-                        provider: .deepSeek,
                         modelIdentifier: "deepseek-flash",
                         tokens: AITokenUsage(inputTokens: 1_620, outputTokens: 95, cachedInputTokens: 1_400),
                         latencyMilliseconds: 950,
@@ -477,7 +474,6 @@ struct AppDependencies: Sendable {
                     records.append(AIUsageRecord(
                         date: date,
                         feature: .dictionaryLearning,
-                        provider: .deepSeek,
                         modelIdentifier: "deepseek-flash",
                         tokens: AITokenUsage(inputTokens: 1_850, outputTokens: 60, cachedInputTokens: 1_700),
                         latencyMilliseconds: 820,
@@ -492,7 +488,6 @@ struct AppDependencies: Sendable {
             records.append(AIUsageRecord(
                 date: min(call.startedAt.addingTimeInterval(2), .now),
                 feature: entry.mode == .translation ? .translate : .dictate,
-                provider: call.provider,
                 modelIdentifier: call.modelIdentifier,
                 tokens: call.tokens,
                 latencyMilliseconds: call.latencyMilliseconds,
@@ -505,7 +500,6 @@ struct AppDependencies: Sendable {
             records.append(AIUsageRecord(
                 date: min(learnedFrom[3].createdAt.addingTimeInterval(45), .now),
                 feature: .dictionaryLearning,
-                provider: .deepSeek,
                 modelIdentifier: "deepseek-flash",
                 tokens: AITokenUsage(inputTokens: 1_850, outputTokens: 60, cachedInputTokens: 1_700),
                 latencyMilliseconds: 820,
@@ -517,7 +511,6 @@ struct AppDependencies: Sendable {
         records.append(AIUsageRecord(
             date: calendar.date(byAdding: .hour, value: -2, to: .now) ?? .now,
             feature: .tonePreview,
-            provider: .deepSeek,
             modelIdentifier: "deepseek-flash",
             tokens: AITokenUsage(inputTokens: 1_540, outputTokens: 48, cachedInputTokens: 1_300),
             latencyMilliseconds: 880,
@@ -526,7 +519,6 @@ struct AppDependencies: Sendable {
         records.append(AIUsageRecord(
             date: fallbackEntry?.createdAt ?? calendar.date(byAdding: .hour, value: -1, to: .now) ?? .now,
             feature: .dictate,
-            provider: .deepSeek,
             modelIdentifier: "deepseek-flash",
             tokens: nil,
             latencyMilliseconds: 10_000,
@@ -794,7 +786,15 @@ private struct FixtureLoginItemManager: LoginItemManaging {
     func setEnabled(_ enabled: Bool) throws {}
 }
 
+private enum FixtureAIState: String {
+    case connected
+    case noBalance = "no-balance"
+    case off
+}
+
 private struct FixtureIntelligence: IntelligenceProcessing {
+    var hasBalance: Bool
+
     func process(_ request: IntelligenceRequest) async throws -> IntelligenceResult {
         guard !request.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw LerroError.emptyTranscription
@@ -808,5 +808,22 @@ private struct FixtureIntelligence: IntelligenceProcessing {
             modelIdentifier: "fixture",
             source: .raw
         )
+    }
+
+    /// Accepts Keys that start with `sk-` and have at least 20 characters.
+    func testRemoteConnection(
+        configuration: RemoteProviderConfiguration
+    ) async throws -> RemoteConnectionTestOutcome {
+        let key = configuration.apiKey
+        guard key.hasPrefix("sk-"), key.count >= 20 else { throw LerroError.invalidAPIKey }
+        return .success()
+    }
+
+    func remoteBalance(
+        configuration: RemoteProviderConfiguration
+    ) async throws -> DeepSeekBalance {
+        hasBalance
+            ? DeepSeekBalance(isAvailable: true, total: Decimal(string: "8.42") ?? 8.42, currencyCode: "CNY")
+            : DeepSeekBalance(isAvailable: false, total: 0, currencyCode: "CNY")
     }
 }

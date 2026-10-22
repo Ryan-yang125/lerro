@@ -41,6 +41,12 @@ struct HomeView: View {
             .padding(.top, 6)
             .padding(.bottom, 8)
             HomeStatCards(statistics: statistics)
+            if session.showsAIOffer {
+                HomeAIOfferCard(
+                    startGuide: { session.presentAIGuide() },
+                    dismiss: { session.dismissAIOffer() }
+                )
+            }
             if !session.dictionaryWeekSummary.learnedTerms.isEmpty || session.dictionaryWeekSummary.corrections > 0 {
                 HomeLearningCard(summary: session.dictionaryWeekSummary) {
                     session.destination = .dictionary

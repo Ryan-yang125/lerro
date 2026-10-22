@@ -32,7 +32,6 @@ struct AIUsageTests {
         AIUsageRecord(
             date: date,
             feature: feature,
-            provider: .deepSeek,
             modelIdentifier: model,
             tokens: tokens,
             latencyMilliseconds: 500,
@@ -76,8 +75,8 @@ struct AIUsageTests {
     @Test("Flat prices ignore the time of day")
     func flatPriceIgnoresPeak() {
         let price = AIModelPrice(
-            modelIdentifier: "gpt-test",
-            currency: .usd,
+            modelIdentifier: "flat-test",
+            currency: .cny,
             inputPerMillion: 1,
             cachedInputPerMillion: 0.5,
             outputPerMillion: 2
@@ -88,22 +87,12 @@ struct AIUsageTests {
         #expect(price.cost(of: tokens, at: Self.shanghaiDate(day: 17, hour: 3)) == 3)
     }
 
-    @Test("User overrides beat built-in prices and matching ignores case")
-    func overridesTakePrecedence() throws {
-        let override = AIModelPrice(
-            modelIdentifier: "DeepSeek-V4-Flash",
-            currency: .usd,
-            inputPerMillion: 1,
-            cachedInputPerMillion: 0.1,
-            outputPerMillion: 3
-        )
-        let table = AIModelPriceTable(overrides: [override])
-
-        #expect(table.price(for: "deepseek-v4-flash") == override)
-        #expect(table.price(for: "  DEEPSEEK-V4-FLASH ") == override)
-        #expect(try #require(table.builtInPrice(for: "DeepSeek-V4-Flash")).currency == .cny)
-        #expect(try #require(table.price(for: "deepseek-v4-pro")).currency == .cny)
-        #expect(table.price(for: "unknown-model") == nil)
+    @Test("Built-in price lookup ignores case and surrounding whitespace")
+    func priceLookup() throws {
+        #expect(AIModelPrice.price(for: "deepseek-v4-flash") == AIModelPrice.builtIn[1])
+        #expect(AIModelPrice.price(for: "  DEEPSEEK-V4-FLASH ") == AIModelPrice.builtIn[1])
+        #expect(try #require(AIModelPrice.price(for: "deepseek-v4-pro")).currency == .cny)
+        #expect(AIModelPrice.price(for: "unknown-model") == nil)
     }
 
     @Test("Unknown models are counted as unpriced and add no cost")
@@ -114,7 +103,6 @@ struct AIUsageTests {
                 Self.record(date: Self.shanghaiDate(day: 14, hour: 10), model: "mystery-model"),
                 Self.record(date: Self.shanghaiDate(day: 14, hour: 11), model: "mystery-model", tokens: nil, succeeded: false)
             ],
-            prices: AIModelPriceTable(overrides: []),
             days: 7,
             now: now,
             calendar: Self.shanghai
@@ -148,7 +136,6 @@ struct AIUsageTests {
 
         let report = AIUsageStatistics.report(
             records: records,
-            prices: AIModelPriceTable(overrides: []),
             days: 3,
             now: now,
             calendar: Self.shanghai
@@ -232,29 +219,6 @@ struct AIUsageTests {
         try await repository.deleteAll()
 
         #expect(try await repository.records(since: .distantPast).isEmpty)
-    }
-
-    @Test("Preferences without modelPrices decode to an empty list and overrides round-trip")
-    func preferencesModelPrices() throws {
-        let legacy = try JSONDecoder().decode(UserPreferences.self, from: Data("{}".utf8))
-        #expect(legacy.modelPrices.isEmpty)
-
-        let override = AIModelPrice(
-            modelIdentifier: "custom-model",
-            currency: .usd,
-            inputPerMillion: 1.5,
-            cachedInputPerMillion: 0.15,
-            outputPerMillion: 6,
-            offPeakFactor: 0.5
-        )
-        let preferences = UserPreferences(modelPrices: [override])
-        let decoded = try JSONDecoder().decode(
-            UserPreferences.self,
-            from: JSONEncoder().encode(preferences)
-        )
-
-        #expect(decoded.modelPrices == [override])
-        #expect(decoded == preferences)
     }
 
     private func makeTemporaryDirectory() throws -> URL {

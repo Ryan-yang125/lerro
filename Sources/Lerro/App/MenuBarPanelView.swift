@@ -3,7 +3,7 @@ import SwiftUI
 import LerroCore
 
 /// Menu bar window: status, capture tiles, last result, today's usage, input
-/// and intelligence pickers, and app shortcuts.
+/// the microphone picker, the AI cleanup switch, and app shortcuts.
 struct MenuBarPanelView: View {
     let session: AppSession
     /// Draws the panel material itself. The real menu bar window supplies its
@@ -338,15 +338,12 @@ struct MenuBarPanelView: View {
                     Text(verbatim: localized("麦克风"))
                 }
             }
-            pickerRow(systemImage: "sparkles", title: "智能处理") {
-                Picker(selection: intelligenceSelection) {
-                    Text(verbatim: localized("纯苹果听写")).tag(IntelligenceMode.raw)
-                    Text(verbatim: session.preferences.remoteProvider.provider.lerroDisplayName)
-                        .disabled(!session.preferences.remoteProvider.isReadyForUse)
-                        .tag(IntelligenceMode.remote)
-                } label: {
-                    Text(verbatim: localized("智能处理"))
+            pickerRow(systemImage: "sparkles", title: "AI 整理") {
+                Toggle(isOn: aiEnabledSelection) {
+                    Text(verbatim: localized("AI 整理"))
                 }
+                .toggleStyle(.switch)
+                .controlSize(.small)
             }
         }
         .padding(.top, 8)
@@ -391,10 +388,19 @@ struct MenuBarPanelView: View {
         )
     }
 
-    private var intelligenceSelection: Binding<IntelligenceMode> {
+    /// Turning AI cleanup on without a DeepSeek Key opens the setup guide in
+    /// the main window.
+    private var aiEnabledSelection: Binding<Bool> {
         Binding(
-            get: { session.preferences.intelligenceMode },
-            set: { session.activateIntelligenceMode($0) }
+            get: { session.aiStatus != .off },
+            set: { isOn in
+                if isOn, !session.hasDeepSeekKey {
+                    openMainWindow()
+                    session.presentAIGuide()
+                } else {
+                    session.setAIEnabled(isOn)
+                }
+            }
         )
     }
 
@@ -490,7 +496,6 @@ struct MenuBarPanelView: View {
         let records = await session.aiUsageRecords(since: Calendar.current.startOfDay(for: now))
         let report = AIUsageStatistics.report(
             records: records,
-            prices: AIModelPriceTable(overrides: session.preferences.modelPrices),
             days: 1,
             now: now
         )

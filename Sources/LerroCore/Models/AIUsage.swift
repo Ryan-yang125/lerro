@@ -34,7 +34,6 @@ public struct AIUsageRecord: Codable, Hashable, Sendable, Identifiable {
     public var id: UUID
     public var date: Date
     public var feature: AIUsageFeature
-    public var provider: RemoteProviderKind
     public var modelIdentifier: String
     /// Nil when the call failed or the provider returned no `usage`.
     public var tokens: AITokenUsage?
@@ -47,7 +46,6 @@ public struct AIUsageRecord: Codable, Hashable, Sendable, Identifiable {
         id: UUID = UUID(),
         date: Date,
         feature: AIUsageFeature,
-        provider: RemoteProviderKind,
         modelIdentifier: String,
         tokens: AITokenUsage?,
         latencyMilliseconds: Int,
@@ -57,7 +55,6 @@ public struct AIUsageRecord: Codable, Hashable, Sendable, Identifiable {
         self.id = id
         self.date = date
         self.feature = feature
-        self.provider = provider
         self.modelIdentifier = modelIdentifier
         self.tokens = tokens
         self.latencyMilliseconds = max(0, latencyMilliseconds)
@@ -76,17 +73,15 @@ public protocol AIUsageRepository: Sendable {
 
 public enum AIUsageCurrency: String, Codable, CaseIterable, Hashable, Sendable {
     case cny
-    case usd
 
     public var symbol: String {
         switch self {
         case .cny: "¥"
-        case .usd: "$"
         }
     }
 }
 
-/// Price of one model per one million tokens.
+/// Built-in price of one model per one million tokens.
 public struct AIModelPrice: Codable, Hashable, Sendable, Identifiable {
     public var modelIdentifier: String
     public var currency: AIUsageCurrency
@@ -114,6 +109,12 @@ public struct AIModelPrice: Codable, Hashable, Sendable, Identifiable {
 
     public var id: String { modelIdentifier.lowercased() }
 
+    /// Matching ignores case and surrounding whitespace.
+    public static func price(for modelIdentifier: String) -> AIModelPrice? {
+        let key = modelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return builtIn.first { $0.id == key }
+    }
+
     /// DeepSeek list prices at peak hours, CNY, checked 2026-10-17 at
     /// https://api-docs.deepseek.com/zh-cn/quick_start/pricing. Off-peak is half.
     public static let builtIn: [AIModelPrice] = [
@@ -125,7 +126,7 @@ public struct AIModelPrice: Codable, Hashable, Sendable, Identifiable {
             outputPerMillion: 8,
             offPeakFactor: 0.5
         ),
-        // Retired ID that DeepSeek routes to deepseek-flash; older saved configs still use it.
+        // Retired ID that DeepSeek routes to deepseek-flash; older history records still use it.
         AIModelPrice(
             modelIdentifier: "deepseek-v4-flash",
             currency: .cny,
@@ -207,25 +208,6 @@ public struct AICallCost: Hashable, Sendable {
     public var total: Double
 }
 
-/// User overrides take precedence over built-in prices. Matching ignores case.
-public struct AIModelPriceTable: Sendable {
-    public let overrides: [AIModelPrice]
-
-    public init(overrides: [AIModelPrice]) {
-        self.overrides = overrides
-    }
-
-    public func price(for modelIdentifier: String) -> AIModelPrice? {
-        let key = modelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return overrides.first { $0.id == key } ?? AIModelPrice.builtIn.first { $0.id == key }
-    }
-
-    public func builtInPrice(for modelIdentifier: String) -> AIModelPrice? {
-        let key = modelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return AIModelPrice.builtIn.first { $0.id == key }
-    }
-}
-
 public struct AIUsageTotals: Hashable, Sendable {
     public var requests = 0
     public var failedRequests = 0
@@ -269,7 +251,6 @@ public struct AIUsageFeatureBreakdown: Hashable, Sendable, Identifiable {
 
 public struct AIUsageModelBreakdown: Hashable, Sendable, Identifiable {
     public var modelIdentifier: String
-    public var provider: RemoteProviderKind
     public var totals: AIUsageTotals
     public var id: String { modelIdentifier.lowercased() }
 }
@@ -293,7 +274,6 @@ public enum AIUsageStatistics {
 
     public static func report(
         records: [AIUsageRecord],
-        prices: AIModelPriceTable,
         days: Int,
         now: Date,
         calendar: Calendar = .current
@@ -304,15 +284,15 @@ public enum AIUsageStatistics {
         var totals = AIUsageTotals()
         var byDay: [Date: AIUsageTotals] = [:]
         var byFeature: [AIUsageFeature: AIUsageTotals] = [:]
-        var byModel: [String: (identifier: String, provider: RemoteProviderKind, totals: AIUsageTotals)] = [:]
+        var byModel: [String: (identifier: String, totals: AIUsageTotals)] = [:]
 
         for record in inRange {
-            let price = prices.price(for: record.modelIdentifier)
+            let price = AIModelPrice.price(for: record.modelIdentifier)
             totals.add(record, price: price)
             byDay[calendar.startOfDay(for: record.date), default: AIUsageTotals()].add(record, price: price)
             byFeature[record.feature, default: AIUsageTotals()].add(record, price: price)
             let key = record.modelIdentifier.lowercased()
-            var model = byModel[key] ?? (record.modelIdentifier, record.provider, AIUsageTotals())
+            var model = byModel[key] ?? (record.modelIdentifier, AIUsageTotals())
             model.totals.add(record, price: price)
             byModel[key] = model
         }
@@ -329,7 +309,7 @@ public enum AIUsageStatistics {
                 .map { AIUsageFeatureBreakdown(feature: $0.key, totals: $0.value) }
                 .sorted { ($0.totals.totalTokens, $1.feature.rawValue) > ($1.totals.totalTokens, $0.feature.rawValue) },
             byModel: byModel.values
-                .map { AIUsageModelBreakdown(modelIdentifier: $0.identifier, provider: $0.provider, totals: $0.totals) }
+                .map { AIUsageModelBreakdown(modelIdentifier: $0.identifier, totals: $0.totals) }
                 .sorted { ($0.totals.totalTokens, $1.modelIdentifier) > ($1.totals.totalTokens, $0.modelIdentifier) }
         )
     }

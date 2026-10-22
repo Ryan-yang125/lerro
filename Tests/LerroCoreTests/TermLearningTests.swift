@@ -351,7 +351,6 @@ struct TermLearningTests {
             aiCall: AICallTrace(
                 prompt: .dictate,
                 promptVersion: "v",
-                provider: .deepSeek,
                 modelIdentifier: "deepseek-flash",
                 userPrompt: "{}",
                 response: response,

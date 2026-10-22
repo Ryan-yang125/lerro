@@ -6,6 +6,36 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+### Added
+
+- AI cleanup (AI 整理) shows your DeepSeek balance in the sidebar and in
+  Settings. When the balance runs out, Dictate writes the raw transcript and the
+  capsule says why; Translate reports that the balance ran out.
+- A three-step guide for getting a DeepSeek key (open the site, top up, create a
+  key) in onboarding, in a sheet opened from Home, and in Settings. Pasting a
+  key connects it automatically.
+- A Home card that offers to turn on AI cleanup while no key is saved.
+
+### Changed
+
+- AI cleanup supports DeepSeek only. The model is fixed to `deepseek-flash` and
+  the address to `https://api.deepseek.com`; the provider, model, address and
+  price settings are gone. Saved OpenAI, Gemini and custom provider settings are
+  not migrated, and their keys are dropped. A saved DeepSeek key is kept.
+- Settings has five tabs: General, Dictation, AI 整理, Privacy, About. Usage
+  details moved into the AI 整理 tab and show costs from the built-in CNY prices.
+- Onboarding has four steps: welcome and permissions, try it once, AI cleanup,
+  start. All user-facing names for the AI features now read "AI 整理".
+- Translation has one target language instead of an ordered list.
+- Fixtures: `LERRO_FIXTURE_ONBOARDING_STEP` takes `welcome`, `practice`, `ai`,
+  `start`; settings presentations are `settings-general`, `settings-dictation`,
+  `settings-ai`, `settings-ai-usage`, `settings-privacy`, `settings-about`; the
+  new `LERRO_FIXTURE_AI` takes `connected`, `no-balance`, `off`.
+
+### Removed
+
+- The microphone level test and the correction-learning exercise in onboarding.
+
 ## [1.9.3] - 2026-10-22
 
 ### Added

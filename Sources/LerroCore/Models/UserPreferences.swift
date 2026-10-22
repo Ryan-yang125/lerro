@@ -46,7 +46,7 @@ public enum HistoryRetention: String, CaseIterable, Codable, Sendable {
 
 public struct UserPreferences: Codable, Equatable, Sendable {
     public var recognitionLocaleIdentifier: String
-    public var translationLanguageIdentifiers: [String]
+    public var translationLanguageIdentifier: String
     public var appLanguage: AppLanguage
     public var microphoneDeviceUID: String?
     public var muteOtherAudio: Bool
@@ -65,8 +65,8 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     public var hasCompletedOnboarding: Bool
     public var onboardingStepIndex: Int?
     public var handsFreeStopHintUseCount: Int
-    /// User price overrides; they take precedence over `AIModelPrice.builtIn`.
-    public var modelPrices: [AIModelPrice]
+    /// Set once the user dismisses the home card that offers AI cleanup.
+    public var aiOfferDismissed: Bool
 
     public var shouldSaveCaptureAudio: Bool {
         saveAudio && historyRetention != .never
@@ -78,7 +78,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
 
     public init(
         recognitionLocaleIdentifier: String = "zh_CN",
-        translationLanguageIdentifiers: [String] = ["en_US"],
+        translationLanguageIdentifier: String = "en_US",
         appLanguage: AppLanguage = .system,
         microphoneDeviceUID: String? = nil,
         muteOtherAudio: Bool = true,
@@ -97,10 +97,10 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         hasCompletedOnboarding: Bool = false,
         onboardingStepIndex: Int? = nil,
         handsFreeStopHintUseCount: Int = 0,
-        modelPrices: [AIModelPrice] = []
+        aiOfferDismissed: Bool = false
     ) {
         self.recognitionLocaleIdentifier = recognitionLocaleIdentifier
-        self.translationLanguageIdentifiers = Array(translationLanguageIdentifiers.prefix(3))
+        self.translationLanguageIdentifier = translationLanguageIdentifier
         self.appLanguage = appLanguage
         self.microphoneDeviceUID = microphoneDeviceUID
         self.muteOtherAudio = muteOtherAudio
@@ -119,12 +119,12 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.onboardingStepIndex = onboardingStepIndex
         self.handsFreeStopHintUseCount = handsFreeStopHintUseCount
-        self.modelPrices = modelPrices
+        self.aiOfferDismissed = aiOfferDismissed
     }
 
     private enum CodingKeys: String, CodingKey {
         case recognitionLocaleIdentifier
-        case translationLanguageIdentifiers
+        case translationLanguageIdentifier
         case appLanguage
         case microphoneDeviceUID
         case muteOtherAudio
@@ -143,7 +143,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         case hasCompletedOnboarding
         case onboardingStepIndex
         case handsFreeStopHintUseCount
-        case modelPrices
+        case aiOfferDismissed
     }
 
     public init(from decoder: any Decoder) throws {
@@ -159,10 +159,10 @@ public struct UserPreferences: Codable, Equatable, Sendable {
                 String.self,
                 forKey: .recognitionLocaleIdentifier
             ) ?? defaults.recognitionLocaleIdentifier,
-            translationLanguageIdentifiers: try container.decodeIfPresent(
-                [String].self,
-                forKey: .translationLanguageIdentifiers
-            ) ?? defaults.translationLanguageIdentifiers,
+            translationLanguageIdentifier: try container.decodeIfPresent(
+                String.self,
+                forKey: .translationLanguageIdentifier
+            ) ?? defaults.translationLanguageIdentifier,
             appLanguage: try container.decodeIfPresent(
                 AppLanguage.self,
                 forKey: .appLanguage
@@ -234,10 +234,10 @@ public struct UserPreferences: Codable, Equatable, Sendable {
                 Int.self,
                 forKey: .handsFreeStopHintUseCount
             ) ?? defaults.handsFreeStopHintUseCount,
-            modelPrices: try container.decodeIfPresent(
-                [AIModelPrice].self,
-                forKey: .modelPrices
-            ) ?? defaults.modelPrices
+            aiOfferDismissed: try container.decodeIfPresent(
+                Bool.self,
+                forKey: .aiOfferDismissed
+            ) ?? defaults.aiOfferDismissed
         )
     }
 
