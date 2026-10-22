@@ -77,6 +77,15 @@ test("hero headings", () => {
   assert.equal(h1("en.html"), "Speak it. It's written.");
 });
 
+test("home pages reference app icons and contain no emoji", () => {
+  for (const file of ["index.html", "en.html"]) {
+    const html = read(file);
+    assert.ok(html.includes("/apps/wechat.png"), `${file} app icon`);
+    // The copyright sign is Extended_Pictographic but renders as text, so it is allowed.
+    assert.ok(!/(?!©)\p{Extended_Pictographic}/u.test(html), `${file} emoji`);
+  }
+});
+
 for (const [file, lang] of [["changelog.html", "zh"], ["en/changelog.html", "en"]]) {
   test(`${file} lists the newest release first with its immutable URL`, () => {
     const html = read(file);

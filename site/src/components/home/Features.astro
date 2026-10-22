@@ -1,0 +1,74 @@
+---
+import { demo, type HomeCopy } from "../../data/home";
+
+interface Props {
+  t: HomeCopy["features"];
+}
+const { t } = Astro.props;
+const toneIcons = ["wechat", "mail", "notes"];
+---
+<section class="feat">
+  <div class="wrap">
+    <div class="eyebrow">{t.eyebrow}</div>
+    <h2 class="big" style="margin-top:8px">{t.h2}</h2>
+    <div class="bento">
+      <div class="cell c-a" id="learnCell">
+        <h3>{t.learn.h3}</h3>
+        <p>{t.learn.p}</p>
+        <div class="learn">
+          {demo.learn.map((row) => (
+            <div class="lr"><span><s>{row.from}</s> → <b>{row.to}</b></span><span class="meter"><i></i><i></i><em>{t.learn.remembered}</em></span></div>
+          ))}
+        </div>
+      </div>
+      <div class="cell c-b">
+        <h3>{t.tone.h3}</h3>
+        <p>{t.tone.p}</p>
+        <div class="tone">
+          {t.tone.items.map((item, i) => <div><img src={`/apps/${toneIcons[i]}.png`} alt="" width="26" height="26" loading="lazy" />{item}</div>)}
+        </div>
+      </div>
+      <div class="cell c-c watch">
+        <h3>{t.fix.h3}</h3>
+        <p>{t.fix.p}</p>
+        <div class="fix">{demo.fix.before}<span class="x">{demo.fix.wrong}</span> <span class="y">{demo.fix.right}</span>{demo.fix.after}</div>
+      </div>
+      <div class="cell c-d">
+        <h3>{t.translate.h3}</h3>
+        <p>{t.translate.p}</p>
+        <div class="trans"><div>{demo.translate.zh}</div><div>{demo.translate.en}</div></div>
+      </div>
+      <div class="cell c-e">
+        <h3>{t.menu.h3}</h3>
+        <p>{t.menu.p}</p>
+        <div class="menu">
+          {t.menu.rows.map(([label, value]) => <div class="r"><span>{label}</span><b>{value}</b></div>)}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  import { onView, prefersReducedMotion } from "../../scripts/onview";
+
+  onView(".feat .watch");
+  onView("#learnCell", (cell) => {
+    const reduce = prefersReducedMotion();
+    cell.querySelectorAll(".lr").forEach((row, i) => {
+      const dots = row.querySelectorAll(".meter i");
+      const first = () => dots[0].classList.add("f");
+      const second = () => {
+        dots[1].classList.add("f");
+        row.classList.add("done");
+      };
+      if (reduce) {
+        first();
+        second();
+        return;
+      }
+      setTimeout(first, 400 + i * 500);
+      setTimeout(second, 900 + i * 500);
+    });
+  });
+</script>

@@ -1,0 +1,27 @@
+---
+import type { HomeCopy } from "../../data/home";
+
+interface Props {
+  t: HomeCopy["price"];
+}
+const { t } = Astro.props;
+---
+<section class="price" id="price">
+  <div class="wrap">
+    <div class="eyebrow">{t.eyebrow}</div>
+    <h2 class="big" style="margin-top:8px">{t.h2[0]}<br />{t.h2[1]}</h2>
+    <div class="pr">
+      <div class="free">
+        <span class="tag">{t.free.tag}</span>
+        <div class="amt">{t.free.amount}</div>
+        <ul>{t.free.items.map((item) => <li>{item}</li>)}</ul>
+      </div>
+      <div class="ai">
+        <span class="tag">{t.ai.tag}</span>
+        <div class="amt">{t.ai.amount}<small>{t.ai.unit}</small></div>
+        <ul>{t.ai.items.map((item) => <li>{item}</li>)}</ul>
+        <p class="fine">{t.ai.fine}</p>
+      </div>
+    </div>
+  </div>
+</section>

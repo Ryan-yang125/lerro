@@ -32,11 +32,15 @@ npm run deploy   # build, then wrangler deploy
 ## Structure
 
 - `src/layouts/Base.astro`: head metadata, nav, footer.
-- `src/components/`: `HomePage`, `ChangelogPage`, `Nav`, `Footer`, `Glyphs` (SVG sprite), `HeroDemo`.
-- `src/data/home.ts`: home page copy in both languages. `src/data/chrome.ts`: nav and footer copy.
+- `src/components/`: `HomePage` (assembles the home sections), `ChangelogPage`, `Nav` (floating pill), `Footer`.
+- `src/components/home/`: one component per home section (`Intro`, `Story`, `Apps`, `Speed`, `Features`, `Steps`, `Pricing`, `Privacy`, `Faq`, `TryIt`), plus `Icon` and `avatars.ts` (hand-drawn chat avatars). Sections that animate carry their own `<script>`: `Story` (pinned scroll story WeChat, Mail, Notes), `Speed` (typing race), `Features` (learning meters), `TryIt` (hold the fn key). Shared helpers are in `src/scripts/onview.ts`.
+- `src/data/home.ts`: home page copy in both languages (`home.zh`, `home.en`) and the demo content shown inside the mock app windows (`demo`, Chinese on both pages because the dictation examples are Chinese). `src/data/chrome.ts`: footer copy.
 - `src/data/releases.ts`: release history.
-- `src/styles/global.css`: design tokens and shared styles. `changelog.css`: changelog page.
+- `src/styles/global.css`: design tokens, buttons, nav, footer. `home.css`: home page sections. `changelog.css`: changelog page.
+- `public/apps/<name>.png`: app icons for the icon grid and demo windows (lowercase names).
 - `src/site.ts`: URLs, version, and `localizedPath`.
+
+The site uses a single light theme (paper background). With `prefers-reduced-motion`, animations and transitions are off, the typing race shows its final text, and the pinned story shows each scene in its finished state while scrolling.
 
 ## Release history
 

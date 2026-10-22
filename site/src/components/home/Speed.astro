@@ -1,0 +1,52 @@
+---
+import { demo, type HomeCopy } from "../../data/home";
+import Icon from "./Icon.astro";
+
+interface Props {
+  t: HomeCopy["speed"];
+}
+const { t } = Astro.props;
+---
+<section class="band">
+  <div class="grain"></div>
+  <div class="wrap">
+    <h2 class="big">{t.h2.pre}<em>{t.h2.em}</em>{t.h2.post}</h2>
+    <p class="lead">{t.lead}</p>
+    <div class="race" id="race" data-text={demo.race} data-unit={t.unit} data-done={t.done}>
+      <div class="lane"><div class="who"><Icon name="keyboard" />{t.typing}</div><div class="txt" id="typeTxt"></div><div class="n" id="typeN">0<small>{t.unit}</small></div></div>
+      <div class="lane hot"><div class="who"><Icon name="mic" />{t.talking}</div><div class="txt" id="talkTxt"></div><div class="n" id="talkN">0<small>{t.unit}</small></div></div>
+    </div>
+  </div>
+</section>
+
+<script>
+  import { onView, prefersReducedMotion } from "../../scripts/onview";
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+  onView("#race", (race) => {
+    const { text = "", unit = "", done = "" } = (race as HTMLElement).dataset;
+    const typeTxt = el("typeTxt"), talkTxt = el("talkTxt"), typeN = el("typeN"), talkN = el("talkN");
+    const ok = ` <span class="ok">${done}</span>`;
+    if (prefersReducedMotion()) {
+      typeTxt.textContent = text;
+      talkTxt.textContent = text;
+      typeN.innerHTML = `${text.length}<small>${unit}</small>`;
+      talkN.innerHTML = `${text.length}<small>${unit}</small>`;
+      return;
+    }
+    // Speaking finishes about four times faster than typing.
+    const start = performance.now();
+    const tick = (now: number) => {
+      const seconds = (now - start) / 1000;
+      const spoken = Math.min(text.length, Math.floor(seconds * 12));
+      const typed = Math.min(text.length, Math.floor(seconds * 3));
+      talkTxt.innerHTML = text.slice(0, spoken) + (spoken < text.length ? '<span class="c"></span>' : ok);
+      typeTxt.innerHTML = text.slice(0, typed) + (typed < text.length ? '<span class="c"></span>' : ok);
+      talkN.innerHTML = `${spoken}<small>${unit}</small>`;
+      typeN.innerHTML = `${typed}<small>${unit}</small>`;
+      if (typed < text.length) requestAnimationFrame(tick);
+    };
+    tick(start);
+  });
+</script>

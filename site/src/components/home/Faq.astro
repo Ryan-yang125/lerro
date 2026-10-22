@@ -1,0 +1,16 @@
+---
+import type { HomeCopy } from "../../data/home";
+
+interface Props {
+  t: HomeCopy["faq"];
+}
+const { t } = Astro.props;
+---
+<section class="faq" id="faq">
+  <div class="wrap">
+    <h2 class="big" style="text-align:center">{t.h2}</h2>
+    <div class="qa">
+      {t.items.map((item, i) => <details open={i === 0}><summary>{item.q}</summary><p>{item.a}</p></details>)}
+    </div>
+  </div>
+</section>

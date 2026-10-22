@@ -1,0 +1,24 @@
+---
+import { downloadUrl } from "../../site";
+import type { HomeCopy } from "../../data/home";
+
+interface Props {
+  t: HomeCopy["hero"];
+}
+const { t } = Astro.props;
+---
+<section class="intro">
+  <div class="glow"></div>
+  <div class="wrap">
+    <h1>{t.h1.line1}<br /><span class="soft">{t.h1.soft}</span>{t.h1.rest}<span class="cur"></span></h1>
+    <p class="lead">{t.lead}</p>
+    <div class="cta">
+      <a class="btn" href={downloadUrl}>
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.8-3.5.8-.7 0-1.8-.8-3-.8-1.6 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.3 0 2.1-1.1 2.8-2.3.9-1.3 1.3-2.6 1.3-2.6s-2.5-1-2.5-3.7zM14.2 5.8c.6-.8 1.1-1.9 1-3-1 0-2.1.6-2.8 1.4-.6.7-1.1 1.8-1 2.9 1 .1 2.1-.6 2.8-1.3z"/></svg>{t.download}
+      </a>
+      <a class="btn ghost" href="#story">{t.story}</a>
+    </div>
+    <p class="req">{t.req}</p>
+    <div class="scrollhint"><i></i>{t.scroll}</div>
+  </div>
+</section>

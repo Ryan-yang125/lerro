@@ -12,13 +12,12 @@ const other: Lang = lang === "zh" ? "en" : "zh";
 ---
 <footer>
   <div class="wrap">
-    <svg class="wordmark" viewBox="-4 -4 172 69" style="color:var(--brand-ink)"><use href="#wm"/></svg>
-    <span>© 2026 Lerro</span>
-    <div class="links">
-      <a href={localizedPath(lang, "/changelog")}>{t.changelog}</a>
-      <a href={privacyUrl}>{t.privacy}</a>
-      <a href={githubUrl}>GitHub</a>
+    <span>© 2026 Lerro · <a href={githubUrl}>{t.openSource}</a></span>
+    <span class="links">
+      <a href={privacyUrl}>{t.privacy}</a><span aria-hidden="true">·</span>
+      <a href={localizedPath(lang, "/changelog")}>{t.changelog}</a><span aria-hidden="true">·</span>
       <a href={localizedPath(other, path)} hreflang={other === "zh" ? "zh-CN" : "en"}>{t.switchLabel}</a>
-    </div>
+    </span>
+    <span class="owners">{t.owners}</span>
   </div>
 </footer>

@@ -1,0 +1,80 @@
+---
+import { downloadUrl } from "../../site";
+import { demo, type HomeCopy } from "../../data/home";
+
+interface Props {
+  t: HomeCopy["final"];
+}
+const { t } = Astro.props;
+---
+<section class="final">
+  <div class="grain"></div>
+  <div class="wrap">
+    <h2 class="big">{t.h2}</h2>
+    <p class="lead">{t.lead}</p>
+    <div class="try" id="try" data-phrase={demo.tryPhrase} data-idle={t.idle} data-short={t.short} data-written={t.written}>
+      <div class="bigkey" id="bigkey" role="button" tabindex="0" aria-label="fn">fn</div>
+      <div class="tryhud" id="tryhud" aria-live="polite">{t.idle}</div>
+    </div>
+    <a class="btn" href={downloadUrl}>{t.download}</a>
+    <p class="req">{t.req}</p>
+  </div>
+</section>
+
+<script>
+  const root = document.getElementById("try")!;
+  const key = document.getElementById("bigkey")!;
+  const hud = document.getElementById("tryhud")!;
+  const final = document.querySelector(".final")!;
+  const { phrase = "", idle = "", short = "", written = "" } = root.dataset;
+
+  let holdTimer = 0;
+  let resetTimer = 0;
+  let said = "";
+
+  function down(e: Event) {
+    e.preventDefault();
+    if (key.classList.contains("down")) return;
+    clearTimeout(resetTimer);
+    key.classList.add("down");
+    hud.classList.add("live");
+    said = "";
+    let k = 0;
+    hud.innerHTML = '<span class="wave"><b></b><b></b><b></b><b></b><b></b></span><span id="trysay"></span>';
+    const bars = hud.querySelectorAll<HTMLElement>(".wave b");
+    const say = hud.querySelector("#trysay")!;
+    holdTimer = window.setInterval(() => {
+      bars.forEach((b) => (b.style.height = 5 + Math.random() * 15 + "px"));
+      if (k < phrase.length) {
+        said += phrase[k++];
+        say.textContent = said;
+      }
+    }, 140);
+  }
+
+  function up() {
+    if (!key.classList.contains("down")) return;
+    key.classList.remove("down");
+    clearInterval(holdTimer);
+    hud.textContent = said.length >= 2 ? `${written}${phrase}。` : short;
+    resetTimer = window.setTimeout(() => {
+      hud.classList.remove("live");
+      hud.textContent = idle;
+    }, 2600);
+  }
+
+  function finalInView() {
+    const r = final.getBoundingClientRect();
+    return r.top < innerHeight * 0.6 && r.bottom > innerHeight * 0.4;
+  }
+
+  key.addEventListener("pointerdown", down);
+  addEventListener("pointerup", up);
+  addEventListener("pointercancel", up);
+  addEventListener("keydown", (e) => {
+    if (e.key === "Fn" || (e.code === "Space" && (document.activeElement === key || (document.activeElement === document.body && finalInView())))) down(e);
+  });
+  addEventListener("keyup", (e) => {
+    if (e.code === "Space" || e.key === "Fn") up();
+  });
+</script>

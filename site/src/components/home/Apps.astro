@@ -1,0 +1,16 @@
+---
+import { demo, type HomeCopy } from "../../data/home";
+
+interface Props {
+  t: HomeCopy["apps"];
+}
+const { t } = Astro.props;
+---
+<section class="apps">
+  <div class="wrap">
+    <p>{t.lead}</p>
+    <div class="icons">
+      {demo.apps.map((icon, i) => <div><img src={`/apps/${icon}.png`} alt="" width="64" height="64" loading="lazy" />{t.names[i]}</div>)}
+    </div>
+  </div>
+</section>

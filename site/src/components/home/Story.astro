@@ -1,0 +1,237 @@
+---
+import { demo, type HomeCopy } from "../../data/home";
+import { avatar } from "./avatars";
+
+interface Props {
+  t: HomeCopy["story"];
+}
+const { t } = Astro.props;
+const wx = demo.wechat;
+const config = {
+  listening: t.hudListening,
+  polishing: t.hudPolishing,
+  scenes: demo.scenes.map((scene, i) => ({
+    app: t.scenes[i].app,
+    titles: t.scenes[i].titles,
+    icon: scene.icon,
+    field: scene.field,
+    toks: scene.toks,
+    final: scene.final,
+  })),
+};
+const first = config.scenes[0];
+---
+<section class="story" id="story" data-config={JSON.stringify(config)}>
+  <div class="pin">
+    <div class="cap">
+      <div class="app"><img id="capIcon" src={`/apps/${first.icon}.png`} alt="" width="22" height="22" /><span id="capApp">{first.app}</span></div>
+      <h3 id="capTitle">{first.titles[0]}</h3>
+      <div class="steps" id="capSteps">{t.steps.map((step, i) => <span class:list={{ on: i === 0 }}>{step}</span>)}</div>
+    </div>
+    <div class="stagebox" id="stagebox">
+      <div class="stagefit" id="stagefit">
+
+        <!-- IM window (WeChat-inspired) -->
+        <div class="win" id="win0">
+          <div class="tl"><i></i><i></i><i></i></div>
+          <div class="wx">
+            <div class="rail">
+              <div class="me av" set:html={avatar("me")}></div>
+              <div class="ic on"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.5C6.8 3.5 2.6 7 2.6 11.3c0 2.4 1.3 4.5 3.4 5.9l-.7 3 3.5-1.8c1 .3 2.1.4 3.2.4 5.2 0 9.4-3.5 9.4-7.5S17.2 3.5 12 3.5z"/></svg><span class="dot">{wx.unread}</span></div>
+              <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="10" cy="8" r="3.6"/><path d="M3.5 20c.8-3.6 3.6-5.6 6.5-5.6s5.7 2 6.5 5.6M16 9h5M17 13h4"/></svg></div>
+              <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg></div>
+              <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></div>
+            </div>
+            <div class="list">
+              <div class="search"><div><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>{wx.search}</div><b>+</b></div>
+              {wx.rows.map((row) => (
+                <div class:list={["row", { on: row.on }]}>
+                  {row.group ? (
+                    <div class="av grp">{row.group.map((name) => <i set:html={avatar(name)}></i>)}</div>
+                  ) : (
+                    <div class="av" set:html={avatar(row.avatar!) + (row.badge ? '<i class="b"></i>' : "")}></div>
+                  )}
+                  <div class="t"><div class="n">{row.name}<span>{row.time}</span></div><div class="p">{row.preview}</div></div>
+                </div>
+              ))}
+            </div>
+            <div class="pane">
+              <div class="ph"><div>{wx.title}<small>{wx.members}</small></div><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16v10H9l-5 4z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span></div>
+              <div class="msgs">
+                <div class="time">{wx.time}</div>
+                {wx.messages.map((m) => (
+                  <div class="m"><div class="av" set:html={avatar(m.avatar)}></div><div><div class="who">{m.who}</div><div class="bub">{m.text}</div></div></div>
+                ))}
+                <div class="m me sent" id="wxSent"><div class="av" set:html={avatar("me")}></div><div><div class="bub">{demo.scenes[0].final}</div></div></div>
+              </div>
+              <div class="input">
+                <div class="field" id="field0"></div>
+                <div class="tools">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1 1.3 2.2 2 3.5 2s2.5-.7 3.5-2M9 9.5h.01M15 9.5h.01"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3.5 7h6l2 2h9v10h-17z"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8 16l10-12M16 16L6 4"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+                </div>
+                <span class="sendbtn" id="wxSend">{wx.send}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mail compose -->
+        <div class="win hide" id="win1">
+          <div class="tl"><i></i><i></i><i></i></div>
+          <div class="mail">
+            <div class="tb"><span class="ttl">{demo.mail.title}</span><span class="send"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 11l18-8-8 18-2-8z"/></svg></span></div>
+            <div class="hdr">
+              <div><span>{demo.mail.toLabel}</span><span class="chip">{demo.mail.toName}</span></div>
+              <div><span>{demo.mail.ccLabel}</span><span></span></div>
+              <div><span>{demo.mail.subjectLabel}</span><b>{demo.mail.title}</b></div>
+            </div>
+            <div class="field" id="field1"></div>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="win hide" id="win2">
+          <div class="tl"><i></i><i></i><i></i></div>
+          <div class="notes">
+            <div class="side">{demo.notes.folders.map(([name, count], i) => <div class:list={["f", { on: i === 0 }]}>{name} <small>{count}</small></div>)}</div>
+            <div class="lst">{demo.notes.list.map((item) => <div class:list={["it", { on: item.on }]}><b>{item.title}</b><span>{item.meta}</span></div>)}</div>
+            <div class="ed"><div class="date">{demo.notes.date}</div><h4>{demo.notes.title}</h4><div class="field" id="field2"></div></div>
+          </div>
+        </div>
+
+        <div class="cloud" id="cloud"></div>
+        <div class="hud" id="hud"><img id="hudIcon" src={`/apps/${first.icon}.png`} alt="" width="24" height="24" /><span class="wave" id="wave"><b></b><b></b><b></b><b></b><b></b><b></b></span><span class="lbl" id="hudLbl">{t.hudListening}</span></div>
+        <div class="keycap"><kbd id="key">fn</kbd><br />{t.key.line1}<br />{t.key.line2}</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  import { prefersReducedMotion } from "../../scripts/onview";
+
+  interface Scene {
+    app: string;
+    titles: string[];
+    icon: string;
+    field: string;
+    toks: [string, string?][];
+    final: string;
+  }
+  interface Config {
+    listening: string;
+    polishing: string;
+    scenes: Scene[];
+  }
+
+  const reduce = prefersReducedMotion();
+  const story = document.getElementById("story")!;
+  const config: Config = JSON.parse(story.dataset.config!);
+  const scenes = config.scenes;
+
+  const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+  const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const seg = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
+
+  const cloud = $("cloud"), hud = $("hud"), hudLbl = $("hudLbl"), hudIcon = $<HTMLImageElement>("hudIcon");
+  const capApp = $("capApp"), capIcon = $<HTMLImageElement>("capIcon"), capTitle = $("capTitle"), capSteps = $("capSteps");
+  const key = $("key"), wxSent = $("wxSent"), wxSend = $("wxSend");
+  const waveBars = [...document.querySelectorAll<HTMLElement>("#wave b")];
+  const wins = [...document.querySelectorAll(".win")];
+
+  // Splits a final text into words, spaces and line breaks so the text can land word by word.
+  const finalWords = (s: string) => s.split(/(\s+|(?<=[，。、：；])|\n)/).filter((x) => x !== undefined && x !== "");
+
+  let curScene = -1;
+  function buildScene(i: number) {
+    curScene = i;
+    const s = scenes[i];
+    const kindClass = { f: "filler", x: "wrong", k: "keep" } as Record<string, string>;
+    cloud.innerHTML = s.toks.map(([w, kind]) => `<span class="tok ${kind ? kindClass[kind] : ""}">${w}</span>`).join("");
+    wins.forEach((w, j) => w.classList.toggle("hide", j !== i));
+    capApp.textContent = s.app;
+    capIcon.src = hudIcon.src = `/apps/${s.icon}.png`;
+    $(s.field).innerHTML =
+      finalWords(s.final).map((w) => (w === "\n" ? "<br>" : `<span class="w">${w}</span>`)).join("") +
+      '<span class="caret" style="display:none"></span>';
+  }
+
+  function render(p: number) {
+    const n = scenes.length;
+    const raw = p * n;
+    const i = Math.min(n - 1, Math.floor(raw));
+    // With reduced motion each scene shows its finished state.
+    const t = reduce ? 0.83 : raw - i;
+    if (i !== curScene) buildScene(i);
+    const s = scenes[i];
+    const field = $(s.field);
+
+    const speak = seg(t, 0.1, 0.46), clean = seg(t, 0.5, 0.62), land = seg(t, 0.66, 0.8), done = seg(t, 0.84, 0.92);
+    key.classList.toggle("down", (t > 0.04 && t < 0.09) || (t > 0.62 && t < 0.66));
+    hud.classList.toggle("on", t > 0.06 && t < 0.68);
+    hudLbl.innerHTML = t < 0.62 ? config.listening : `<span class="shine">${config.polishing}</span>`;
+
+    const toks = [...cloud.children] as HTMLElement[];
+    const shown = Math.round(speak * toks.length);
+    toks.forEach((el, k) => {
+      const filler = el.classList.contains("filler"), wrong = el.classList.contains("wrong");
+      el.classList.toggle("on", k < shown);
+      el.classList.toggle("gone", clean > 0.35 && (filler || wrong));
+      if (wrong) el.classList.toggle("mark", clean > 0);
+      if (el.classList.contains("keep")) el.classList.toggle("fix", clean > 0.5);
+    });
+    cloud.classList.toggle("fly", land > 0.05);
+    cloud.style.opacity = t < 0.08 ? "0" : "";
+
+    const words = [...field.querySelectorAll(".w")];
+    const wn = Math.round(land * words.length);
+    words.forEach((w, k) => w.classList.toggle("on", k < wn));
+    const caret = field.querySelector<HTMLElement>(".caret")!;
+    caret.style.display = land > 0 && done < 1 ? "inline-block" : "none";
+
+    if (i === 0) {
+      wxSent.classList.toggle("show", done > 0.5);
+      if (done > 0.5) words.forEach((w) => w.classList.remove("on"));
+      wxSend.classList.toggle("ready", land > 0.9 && done < 0.5);
+    }
+
+    const step = t < 0.1 ? 0 : t < 0.48 ? 1 : t < 0.66 ? 2 : 3;
+    capTitle.textContent = s.titles[step];
+    [...capSteps.children].forEach((el, k) => el.classList.toggle("on", k === step));
+
+    // Fake voice level while speaking.
+    const talking = t > 0.1 && t < 0.48;
+    waveBars.forEach((b, k) => {
+      b.style.height = talking ? 5 + Math.abs(Math.sin(p * 240 + k * 1.7)) * 16 + "px" : "5px";
+    });
+  }
+
+  // The stage is drawn at 1000x580 (600x580 on narrow screens) and scaled to fit.
+  const stagebox = $("stagebox"), stagefit = $("stagefit");
+  function fit() {
+    const narrow = innerWidth < 760;
+    const W = narrow ? 600 : 1000;
+    stagefit.classList.toggle("narrow", narrow);
+    const k = Math.min(1, stagebox.clientWidth / W, (innerHeight - 200) / 580);
+    stagefit.style.transform = `scale(${k})`;
+    stagebox.style.height = 580 * k + "px";
+    stagebox.style.width = narrow ? W * k + "px" : "";
+  }
+
+  function onScroll() {
+    const r = story.getBoundingClientRect();
+    const total = story.offsetHeight - innerHeight;
+    render(clamp(-r.top / total, 0, 0.9999));
+  }
+
+  addEventListener("resize", () => {
+    fit();
+    onScroll();
+  });
+  addEventListener("scroll", onScroll, { passive: true });
+  fit();
+  onScroll();
+</script>

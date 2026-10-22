@@ -1,0 +1,32 @@
+---
+import type { HomeCopy } from "../../data/home";
+import Icon from "./Icon.astro";
+
+interface Props {
+  t: HomeCopy["privacy"];
+}
+const { t } = Astro.props;
+const bullets = ["mic", "lock", "eye", "code"] as const;
+const orbs = [
+  { icon: "mic", top: "9%", left: "50%" },
+  { icon: "clock", top: "50%", left: "8%" },
+  { icon: "book", top: "50%", left: "92%" },
+  { icon: "key", top: "90%", left: "50%" },
+] as const;
+---
+<section class="priv">
+  <div class="wrap pv">
+    <div>
+      <div class="eyebrow">{t.eyebrow}</div>
+      <h2 class="big" style="margin-top:8px">{t.h2[0]}<br />{t.h2[1]}</h2>
+      <ul>
+        {t.items.map((item, i) => <li><i><Icon name={bullets[i]} /></i><span>{item}</span></li>)}
+      </ul>
+    </div>
+    <div class="vault" aria-hidden="true">
+      <div class="ring"></div><div class="ring r2"></div>
+      {orbs.map((orb, i) => <span class="orb" style={`top:${orb.top};left:${orb.left}`}><Icon name={orb.icon} small />{t.orbs[i]}</span>)}
+      <div class="core"><span><b>L</b></span></div>
+    </div>
+  </div>
+</section>
