@@ -4,7 +4,6 @@ import LerroCore
 struct HomeView: View {
     @Bindable var session: AppSession
     @Environment(\.locale) private var locale
-    @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
 
     var body: some View {
         // One ScrollView for both states: the window toolbar picks its
@@ -20,9 +19,7 @@ struct HomeView: View {
                 content
             }
         }
-        .background {
-            HomeBackdrop(showsGlow: !(systemReduceTransparency || session.visualFixtureReduceTransparency))
-        }
+        .background(LerroTheme.main.ignoresSafeArea())
         .navigationTitle("首页")
         .toolbar {
             // A toolbar item keeps the full-height toolbar, so the sidebar
@@ -74,78 +71,6 @@ struct HomeView: View {
             locale: locale,
             arguments: shortcut
         )
-    }
-}
-
-// MARK: Backdrop
-
-/// Page fill, a dot grid fading out over the top 430 pt, and a faint accent
-/// glow at the top right. Not interactive; the glow is hidden under Reduce
-/// Transparency.
-private struct HomeBackdrop: View {
-    let showsGlow: Bool
-
-    private let dotSpacing: CGFloat = 14
-    private let dotDiameter: CGFloat = 1.2
-    private let dotFadeHeight: CGFloat = 430
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            LerroTheme.main
-            Canvas { context, size in
-                var dots = Path()
-                var y = dotSpacing / 2
-                while y < size.height {
-                    var x = dotSpacing / 2
-                    while x < size.width {
-                        dots.addEllipse(in: CGRect(
-                            x: x - dotDiameter / 2,
-                            y: y - dotDiameter / 2,
-                            width: dotDiameter,
-                            height: dotDiameter
-                        ))
-                        x += dotSpacing
-                    }
-                    y += dotSpacing
-                }
-                context.fill(dots, with: .color(LerroTheme.homeDot))
-            }
-            .frame(height: dotFadeHeight)
-            .mask {
-                LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0),
-                        .init(color: .black.opacity(0.6), location: 0.45),
-                        .init(color: .clear, location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            if showsGlow {
-                Canvas { context, size in
-                    let radiusX: CGFloat = 260
-                    let radiusY: CGFloat = 210
-                    let center = CGPoint(x: size.width - 140, y: 50)
-                    var scaled = context
-                    scaled.translateBy(x: center.x, y: center.y)
-                    scaled.scaleBy(x: 1, y: radiusY / radiusX)
-                    scaled.fill(
-                        Path(ellipseIn: CGRect(x: -radiusX, y: -radiusX, width: radiusX * 2, height: radiusX * 2)),
-                        with: .radialGradient(
-                            Gradient(colors: [LerroTheme.accentSoft, LerroTheme.accentSoft.opacity(0)]),
-                            center: .zero,
-                            startRadius: 0,
-                            endRadius: radiusX
-                        )
-                    )
-                }
-                .frame(height: 280)
-            }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 

@@ -395,12 +395,12 @@ struct OnboardingView: View {
                 // The key's lower edge is a shadow on the shape only, so the
                 // label is not drawn twice.
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isListening ? LerroTheme.accent : LerroTheme.keycapFill)
-                    .shadow(color: isListening ? LerroTheme.accent.opacity(0.4) : LerroTheme.keycapBorder, radius: 0, x: 0, y: isListening ? 1 : 4)
+                    .fill(isListening ? LerroTheme.accent : LerroTheme.keycapFill(colorScheme))
+                    .shadow(color: isListening ? LerroTheme.accent.opacity(0.4) : LerroTheme.keycapBorder(colorScheme), radius: 0, x: 0, y: isListening ? 1 : 4)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(isListening ? LerroTheme.accent : LerroTheme.keycapBorder, lineWidth: 1)
+                    .strokeBorder(isListening ? LerroTheme.accent : LerroTheme.keycapBorder(colorScheme), lineWidth: 1)
             }
             .background {
                 if isListening {

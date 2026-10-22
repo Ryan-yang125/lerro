@@ -179,6 +179,7 @@ struct LerroKeycap: View {
     let text: String
     /// Translucent white keycap for accent-filled surfaces.
     let onAccent: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     init(_ text: String, onAccent: Bool = false) {
         self.text = text
@@ -191,10 +192,13 @@ struct LerroKeycap: View {
             .foregroundStyle(onAccent ? Color.white : LerroTheme.text)
             .padding(.horizontal, 5)
             .frame(minWidth: 22, minHeight: 20)
-            .background(onAccent ? Color.white.opacity(0.22) : LerroTheme.keycapFill, in: shape)
-            .overlay { shape.strokeBorder(onAccent ? Color.clear : LerroTheme.keycapBorder, lineWidth: 0.5) }
-            .shadow(color: onAccent ? Color.clear : LerroTheme.keycapBorder, radius: 0, x: 0, y: 1)
+            .background(onAccent ? Color.white.opacity(0.22) : fill, in: shape)
+            .overlay { shape.strokeBorder(onAccent ? Color.clear : edge, lineWidth: 0.5) }
+            .shadow(color: onAccent ? Color.clear : edge, radius: 0, x: 0, y: 1)
     }
+
+    private var fill: Color { LerroTheme.keycapFill(colorScheme) }
+    private var edge: Color { LerroTheme.keycapBorder(colorScheme) }
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: 5, style: .continuous)

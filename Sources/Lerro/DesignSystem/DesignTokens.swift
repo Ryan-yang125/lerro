@@ -92,11 +92,15 @@ enum LerroTheme {
         highContrastLight: rgb(0x858585),
         highContrastDark: rgb(0x787878)
     )
-    static let keycapFill = adaptive(light: rgb(0xFFFFFF), dark: rgb(0x2C2C2F))
-    static let keycapBorder = adaptive(
-        light: rgb(0x000000, alpha: 0.14),
-        dark: rgb(0xFFFFFF, alpha: 0.14)
-    )
+    /// Keycap colours are picked from the SwiftUI colour scheme. A dynamic
+    /// NSColor fill in the window toolbar kept its light value after the
+    /// system switched to dark while the app was running.
+    static func keycapFill(_ scheme: ColorScheme) -> Color {
+        Color(nsColor: scheme == .dark ? rgb(0x2C2C2F) : rgb(0xFFFFFF))
+    }
+    static func keycapBorder(_ scheme: ColorScheme) -> Color {
+        Color(nsColor: scheme == .dark ? rgb(0xFFFFFF, alpha: 0.14) : rgb(0x000000, alpha: 0.14))
+    }
     static let focusBorder = accent
     static let selection = fillSelected
     static let cardShadow = Color.black.opacity(0.07)
@@ -140,8 +144,6 @@ enum LerroTheme {
         adaptive(light: rgb(0x5C7DFF), dark: rgb(0x3A5AE0)),
         adaptive(light: rgb(0x2F5BFF), dark: rgb(0x6F8BFF))
     ]
-    /// Dot grid behind the top of the Home page.
-    static let homeDot = adaptive(light: rgb(0x000000, alpha: 0.085), dark: rgb(0xFFFFFF, alpha: 0.075))
     static let primaryAction = accentButton
     static let primaryActionHover = accentButton.opacity(0.88)
     static let primaryActionPressed = accentButton.opacity(0.72)
