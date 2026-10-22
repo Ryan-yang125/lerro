@@ -21,6 +21,32 @@ export type LocalizedRelease = ReleaseCopy & Pick<Release, "version" | "build" |
 // distribution URL; older entries stay unchanged.
 export const releases: readonly Release[] = [
   {
+    version: "1.10.0",
+    build: "22",
+    publishedAt: "2026-10-22",
+    downloadUrl: "https://updates.lerroapp.com/releases/1.10.0/22/Lerro-macOS-arm64.dmg",
+    zh: {
+      publishedLabel: "2026 年 10 月 22 日",
+      summary: "新手引导和设置重做，开 AI 整理只要三步。",
+      highlights: [
+        "新手引导从 8 步减到 4 步：打开权限、试说一次、选要不要开 AI 整理、记住快捷键。",
+        "开 AI 整理有三步指引：登录 DeepSeek 开放平台、充值、创建 Key 后粘贴回来，粘贴后自动连上。首次设置、首页和设置里都能找到。",
+        "AI 整理只支持 DeepSeek，余额从 DeepSeek 官方读取，显示在侧边栏和设置里；余额用完时照常写原文，并提示去充值。",
+        "设置从 6 页并成 5 页：通用、听写、AI 整理、隐私、关于。用量明细放进 AI 整理页。",
+      ],
+    },
+    en: {
+      publishedLabel: "October 22, 2026",
+      summary: "Onboarding and Settings are rebuilt, and AI cleanup takes three steps to turn on.",
+      highlights: [
+        "Onboarding goes from eight steps to four: grant permissions, dictate once, choose whether to use AI cleanup, and learn the shortcuts.",
+        "A three-step guide turns on AI cleanup: sign in to the DeepSeek platform, top up, then create a key and paste it, which connects automatically. It appears in onboarding, on Home and in Settings.",
+        "AI cleanup supports DeepSeek only. The balance is read from DeepSeek and shown in the sidebar and Settings; when it runs out, Lerro writes the raw text and points you to top up.",
+        "Settings go from six tabs to five: General, Dictation, AI Cleanup, Privacy and About. Usage details live in the AI Cleanup tab.",
+      ],
+    },
+  },
+  {
     version: "1.9.3",
     build: "21",
     publishedAt: "2026-10-22",

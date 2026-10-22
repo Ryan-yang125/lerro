@@ -6,6 +6,8 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-22
+
 ### Added
 
 - AI cleanup (AI 整理) shows your DeepSeek balance in the sidebar and in
@@ -619,7 +621,8 @@ All notable changes to Lerro will be documented here. The project follows
   plaintext BYOK credentials; logs, history, errors, fixtures, and public exports
   exclude API keys and Authorization headers.
 
-[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.9.3...HEAD
+[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/Ryan-yang125/lerro/compare/v1.9.3...v1.10.0
 [1.9.3]: https://github.com/Ryan-yang125/lerro/compare/v1.9.2...v1.9.3
 [1.9.2]: https://github.com/Ryan-yang125/lerro/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/Ryan-yang125/lerro/compare/v1.9.0...v1.9.1
