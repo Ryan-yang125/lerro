@@ -21,6 +21,28 @@ export type LocalizedRelease = ReleaseCopy & Pick<Release, "version" | "build" |
 // distribution URL; older entries stay unchanged.
 export const releases: readonly Release[] = [
   {
+    version: "1.10.1",
+    build: "23",
+    publishedAt: "2026-10-22",
+    downloadUrl: "https://updates.lerroapp.com/releases/1.10.1/23/Lerro-macOS-arm64.dmg",
+    zh: {
+      publishedLabel: "2026 年 10 月 22 日",
+      summary: "首页背景改成纯色，修复深色模式下快捷键变白。",
+      highlights: [
+        "首页去掉右上角的光晕和点阵，背景改成纯色。",
+        "修复系统在 Lerro 运行时切到深色后，首页右上角的快捷键键帽一直是白色的问题。",
+      ],
+    },
+    en: {
+      publishedLabel: "October 22, 2026",
+      summary: "Home gets a flat background, and shortcut keycaps follow dark mode.",
+      highlights: [
+        "Home drops the glow and the dot grid at the top; the background is now flat.",
+        "Fixes shortcut keycaps at the top of Home staying white after macOS switched to dark mode while Lerro was running.",
+      ],
+    },
+  },
+  {
     version: "1.10.0",
     build: "22",
     publishedAt: "2026-10-22",

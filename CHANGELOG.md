@@ -6,6 +6,17 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-10-22
+
+### Changed
+
+- Home has a flat background; the accent glow and the dot grid are gone.
+
+### Fixed
+
+- Shortcut keycaps in the Home toolbar stayed white after macOS switched to
+  dark mode while Lerro was running.
+
 ## [1.10.0] - 2026-10-22
 
 ### Added
@@ -621,7 +632,8 @@ All notable changes to Lerro will be documented here. The project follows
   plaintext BYOK credentials; logs, history, errors, fixtures, and public exports
   exclude API keys and Authorization headers.
 
-[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/Ryan-yang125/lerro/compare/v1.10.1...HEAD
+[1.10.1]: https://github.com/Ryan-yang125/lerro/compare/v1.10.0...v1.10.1
 [1.10.0]: https://github.com/Ryan-yang125/lerro/compare/v1.9.3...v1.10.0
 [1.9.3]: https://github.com/Ryan-yang125/lerro/compare/v1.9.2...v1.9.3
 [1.9.2]: https://github.com/Ryan-yang125/lerro/compare/v1.9.1...v1.9.2
