@@ -1,7 +1,8 @@
 # Lerro design
 
-Lerro uses one visual language across the macOS app, website, screenshots, and
-release pages: native, quiet, and precise. Brand sources and usage rules are in
+Lerro is native, quiet, and precise everywhere. The macOS app uses native
+adaptive grays; the website uses a warm paper palette. Both share the cursor-L
+mark, the ink-blue accent and the ink-black capsule HUD. Brand sources and usage rules are in
 [`Brand/`](Brand/README.md).
 
 ## Brand
@@ -34,12 +35,18 @@ release pages: native, quiet, and precise. Brand sources and usage rules are in
 ## Website
 
 - Astro static site in [`site/`](site/README.md), Chinese at `/` and English at `/en`.
-- Tokens in `site/src/styles/global.css` repeat the app palette: canvas `#FAFAFA`,
-  ink `#292929`, accent `#2F5BFF`, with dark-mode equivalents.
-- The hero and feature sections recreate the app UI and HUD in HTML using the same
-  tokens, so screenshots and live demos stay consistent with the shipped app.
-- Pill buttons, 0.5 px hairline borders, soft shadows, and `prefers-reduced-motion`
-  and `prefers-color-scheme` support.
+- Warm paper palette in `site/src/styles/global.css`: page `#FAF7F2` (dark
+  `#151412`), surfaces `#FFFDF9` (dark `#1D1B18`), ink `#1C1A16` (dark `#F1EDE6`),
+  one ink-blue accent `#2F5BFF` (dark `#6B8BFF`). Light and dark follow the system;
+  there is no theme toggle.
+- Headings use Noto Serif SC; body text uses the system sans. Primary buttons are
+  near-black pills (cream in dark mode); secondary actions are underlined text links.
+- No gradients, glows or blurred colour spots. Depth comes from hairlines, flat
+  surfaces and edge shadows.
+- The story and feature sections recreate the app UI and HUD in HTML, so
+  screenshots and live demos stay consistent with the shipped app. The demo
+  windows (WeChat, Mail, Notes) keep their real app colours.
+- `prefers-reduced-motion` support.
 
 ## Product truth
 

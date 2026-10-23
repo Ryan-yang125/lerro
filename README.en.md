@@ -9,65 +9,76 @@
 </p>
 
 <p align="center">
-  Press a shortcut and talk, press it again, and the text lands at your cursor.<br>
-  Mix Chinese and English freely, and proper nouns come out right.
+  Reply on WeChat, write an email, or put together a weekly report: press a shortcut and talk.<br>
+  Filler words are removed, corrections are applied, and punctuation and paragraphs are added for you.
 </p>
 
 <p align="center">
-  <a href="https://updates.lerroapp.com/download/macos/latest"><strong>Download for macOS</strong></a>
+  <a href="https://updates.lerroapp.com/download/macos/latest"><strong>Download Lerro for Mac</strong></a>
   · <a href="https://lerroapp.com/en">Website</a>
   · <a href="https://lerroapp.com/en/changelog">Changelog</a>
 </p>
 
 <p align="center">
-  Free and open source · macOS 26 · Apple silicon
+  macOS 26 · Apple silicon · Free, open source, no sign-up
 </p>
 
-![Lerro dictating into a chat window](site/public/readme/en-demo.png)
+![Replying in WeChat: press fn, speak, and Lerro writes the tidied text into the message box](site/public/readme/en-demo.png)
 
-## How it works
+## Three steps, then just talk
 
-1. Press your shortcut (Fn by default) and speak. A small capsule at the bottom
-   of the screen shows the live transcript.
-2. Press the shortcut again. Lerro writes the text into the field you were
-   typing in.
-3. If you switched away before it finished, Lerro stops, keeps the text on the
-   clipboard, and offers to paste it.
+1. Download and drag **Lerro.app** to Applications.
+2. Open it and allow two permissions: Microphone lets it hear you, Accessibility
+   lets it type the text for you.
+3. Press the shortcut (Fn by default) and start talking. Press again to finish,
+   and the text appears at your cursor.
 
-Apple's on-device speech recognition does the listening. With AI cleanup turned
-on, DeepSeek fixes misheard words using your dictionary, removes fillers, and
-adds punctuation.
+Wherever your cursor is, the text goes there: WeChat, Feishu, DingTalk, WeCom,
+Mail, Notes, Word, WPS, your browser, ChatGPT and more. Speaking is 4x faster
+than typing.
 
-![Raw recognition compared with what Lerro wrote](site/public/readme/en-accuracy.png)
+It works right after install and is completely free. Turn on AI cleanup if you
+want smoother text.
 
-## A dictionary that learns
+## It remembers how you talk
 
-Names of people, companies, and projects are hard to recognize the first time.
-When you correct a word Lerro wrote, the AI decides whether it was a
-recognition error and adds it to the dictionary.
+![Remembers names and terms, a different tone in each app, corrections mid-sentence, Chinese to English, and the menu bar](site/public/readme/en-features.png)
 
-![Auto-learned dictionary](site/public/readme/en-dictionary.png)
+- **Names and terms you use often are remembered.** A colleague's name, your
+  company's product, or industry jargon may come out wrong the first time. After
+  the AI corrects one twice, Lerro remembers it. You don't have to add anything
+  by hand.
+- **A different tone in each app.** Set one instruction per app. Switch apps and
+  the tone switches with you, for example casual in WeChat and full sentences in
+  Mail.
+- **Correct yourself mid-sentence.** Say "no, wait" or "change that to", and only
+  your final meaning is kept.
+- **Speak Chinese, write English.** Use a different shortcut, and what you say in
+  Chinese is written in English.
+- **Handy in the menu bar.** Last sentence didn't land? Copy it from the menu bar
+  in one click.
 
-Each app can also have its own tone, for example casual in chat and complete
-sentences in email.
+## Pricing
 
-## AI cleanup with your own DeepSeek account
+- **Free:** Apple's speech recognition on your Mac, so what you say is what's
+  written. Works in every app. No sign-up, no usage limit.
+- **With AI cleanup:** removes filler words, fixes typos, adds punctuation,
+  changes tone per app, translates Chinese to English, and remembers words you
+  use often. It uses your own DeepSeek account and charges by usage: about ¥1
+  per 1,000 uses, or about ¥2 a month at a hundred or so dictations a day. You
+  can see your balance and spending in Lerro.
 
-Lerro has no subscription. AI cleanup supports only
-[DeepSeek](https://platform.deepseek.com) and uses your own account. The app
-walks you through three steps: open the site, top up, then create a key and
-paste it. Once connected, Lerro shows your account balance. At a hundred or so
-dictations a day, it costs about ¥2 a month.
-
-Without AI cleanup, Lerro still works: Apple recognition runs on your Mac for
-free and the transcript is written as is.
+Lerro itself has no membership or subscription. The app has a three-step guide:
+open the DeepSeek site, top up, then create a key and paste it.
 
 ## Privacy
 
-- No account and no telemetry.
-- Speech is recognized on your Mac. With AI cleanup on, only the recognized text
-  goes to DeepSeek.
-- Recordings are not saved unless you turn it on.
+- Apple recognizes your speech on this Mac, and recordings are not saved by
+  default.
+- No account needed. Lerro has no server collecting your data.
+- With AI cleanup on, only text is sent, and only to your own DeepSeek account.
+  You can see what was sent in History.
+- The code is open source, so anyone can inspect it.
 
 Details are in the [Privacy Policy](PRIVACY.md).
 
@@ -75,10 +86,10 @@ Details are in the [Privacy Policy](PRIVACY.md).
 
 1. [Download the latest signed and notarized build](https://updates.lerroapp.com/download/macos/latest).
 2. Move **Lerro.app** to Applications and open it.
-3. Follow the setup to grant Microphone and Accessibility.
+3. Follow the setup to allow Microphone and Accessibility.
 
-Requires an Apple silicon Mac with macOS 26 or later. Lerro updates itself
-from inside the app.
+Requires an Apple silicon Mac (M1 or later) with macOS 26 or later. Lerro updates
+itself from inside the app.
 
 ## Build from source
 
