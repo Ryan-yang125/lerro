@@ -215,7 +215,11 @@ const first = config.scenes[0];
     const narrow = innerWidth < 760;
     const W = narrow ? 600 : 1000;
     stagefit.classList.toggle("narrow", narrow);
-    const k = Math.min(1, stagebox.clientWidth / W, (innerHeight - 200) / 580);
+    // Measure from the viewport: on narrow screens stagebox's width is set
+    // below, so reading it back would keep an old, larger scale after the
+    // viewport shrinks and the window would be clipped on both sides.
+    const available = Math.min(1000, innerWidth * 0.94);
+    const k = Math.min(1, available / W, (innerHeight - 200) / 580);
     stagefit.style.transform = `scale(${k})`;
     stagebox.style.height = 580 * k + "px";
     stagebox.style.width = narrow ? W * k + "px" : "";
