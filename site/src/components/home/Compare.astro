@@ -1,0 +1,33 @@
+---
+import type { HomeCopy } from "../../data/home";
+
+interface Props {
+  t: HomeCopy["compare"];
+}
+const { t } = Astro.props;
+---
+<section class="cmp" id="compare">
+  <div class="wrap">
+    <div class="eyebrow">{t.eyebrow}</div>
+    <h2 class="big" style="margin-top:8px">{t.h2}</h2>
+    <table class="cmptable">
+      <thead>
+        <tr>
+          <th scope="col">{t.head[0]}</th>
+          <th scope="col" class="us"><span class="logo"><b>L</b>erro</span></th>
+          <th scope="col">{t.head[2]}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {t.rows.map((row) => (
+          <tr>
+            <th scope="row">{row[0]}</th>
+            <td class="us" data-label={t.head[1]}>{row[1]}</td>
+            <td data-label={t.head[2]}>{row[2]}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    <p class="cmpnote">{t.note}</p>
+  </div>
+</section>

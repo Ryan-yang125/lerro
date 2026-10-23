@@ -9,6 +9,7 @@ import Speed from "./home/Speed.astro";
 import Features from "./home/Features.astro";
 import Steps from "./home/Steps.astro";
 import Pricing from "./home/Pricing.astro";
+import Compare from "./home/Compare.astro";
 import Privacy from "./home/Privacy.astro";
 import Faq from "./home/Faq.astro";
 import TryIt from "./home/TryIt.astro";
@@ -26,6 +27,7 @@ const t = home[Astro.props.lang];
   <Features t={t.features} />
   <Steps t={t.how} />
   <Pricing t={t.price} />
+  <Compare t={t.compare} />
   <Privacy t={t.privacy} />
   <Faq t={t.faq} />
   <TryIt t={t.final} />

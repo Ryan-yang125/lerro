@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Lerro social preview</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600&display=swap" rel="stylesheet">
+<style>
+/* GitHub social preview, 1280 x 640. Render at this size and export as PNG. */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:640px;overflow:hidden}
+body{background:#FAF7F2;color:#1C1A16;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif;-webkit-font-smoothing:antialiased;position:relative}
+.frame{position:absolute;inset:28px;border:1px solid rgba(28,26,22,.09);border-radius:28px}
+.logo{position:absolute;left:96px;top:84px;height:46px}
+.kicker{position:absolute;left:96px;top:196px;font-size:17px;letter-spacing:.18em;color:#9A9286}
+h1{position:absolute;left:92px;top:232px;font-family:"Noto Serif SC","Songti SC",serif;font-weight:600;font-size:104px;line-height:1.12;letter-spacing:-.03em}
+h1 .s{color:#B3AB9E}
+h1 .cur{display:inline-block;width:7px;height:86px;background:#2F5BFF;border-radius:3px;vertical-align:-10px;margin-left:8px}
+.facts{position:absolute;left:96px;bottom:84px;display:flex;gap:28px;font-size:21px;color:#6B655C}
+.facts b{color:#1C1A16;font-weight:600}
+.side{position:absolute;right:96px;top:150px;width:360px;display:flex;flex-direction:column;align-items:flex-end;gap:22px}
+.bubble{background:#95EC69;color:#111;border-radius:16px 16px 6px 16px;padding:16px 20px;font-size:22px;line-height:1.5;max-width:360px}
+.hud{display:flex;align-items:center;gap:12px;height:56px;padding:0 24px;border-radius:999px;background:#15161A;color:#fff;font-size:20px}
+.wv{display:flex;align-items:center;gap:4px;height:24px}
+.wv i{display:block;width:4px;border-radius:2px;background:#fff}
+.key{display:grid;place-items:center;width:84px;height:76px;border-radius:16px;background:#FFFDF9;box-shadow:0 0 0 1px rgba(28,26,22,.14),0 6px 0 rgba(28,26,22,.14);font-size:26px;font-weight:600}
+.en{position:absolute;right:96px;bottom:84px;font-size:21px;color:#9A9286}
+</style>
+</head>
+<body>
+<div class="frame"></div>
+<img class="logo" src="../../site/public/lerro-logo.svg" alt="Lerro">
+<div class="kicker">MAC 上的免费语音输入</div>
+<h1>说出来，<br><span class="s">就写好了</span><span class="cur"></span></h1>
+<div class="side">
+  <div class="key">fn</div>
+  <div class="hud"><span class="wv"><i style="height:8px"></i><i style="height:18px"></i><i style="height:12px"></i><i style="height:22px"></i><i style="height:10px"></i><i style="height:16px"></i><i style="height:7px"></i></span>AI 整理中…</div>
+  <div class="bubble">周会改到周三下午三点吧，我先把议程发群里。</div>
+</div>
+<div class="facts"><span><b>免费</b> · 开源</span><span>声音在本机识别</span><span>不用注册</span></div>
+<div class="en">Speak it. It's written.</div>
+</body>
+</html>

@@ -60,6 +60,7 @@ bfd6f788e87b05392c7a6c831efcc954991f53075d6649416398fe4795423f33  ./exports/menu
 41df05fc1c1f5842755e2d7747b5fb36a89050c5ec834f82bea22b65fc172561  ./exports/menu-bar/lerro-menubar-processing-3.svg
 efd85a1e9556e889fcca5a0ff9ea04fcc51770b49a35430f00fd093025d4d60a  ./exports/menu-bar/lerro-menubar-processing-4.pdf
 c29a8f0a269bc953154c466b9502b04274ff0896ed881e376042579b626d8063  ./exports/menu-bar/lerro-menubar-processing-4.svg
+ba46c7f525bab77c73183048462f2e69e66730fa3440ffc2bde1a891cc0c37a5  ./exports/social/github-social-preview.png
 8116e11d6334a4a46aa79a2b2aab58ffd6026d7638040004433848a96798267e  ./guidelines/brand-guidelines.md
 85ed927d1b7123412846a8adf206414d9d05150ad43773b02ad00a28743158b9  ./guidelines/color-accessibility.md
 2f162069820d382932fb0d7ff6d10b01837841acf397630f8767e2110a8c4242  ./guidelines/logo-usage.md
@@ -107,6 +108,7 @@ ce765acd34ff9d46b8e0425750d2745308ae2f371e7e97e9e29159fa927b42ea  ./templates/re
 7f1431b5245d7d8c4ed5b71dd1aa3f85569e85704b07283239a1286d4088e49e  ./templates/release-card.svg
 5cc952dab8254736ecdfa9eebfc3117eb7aa32803f2d154c2f6db0189cdcfb35  ./templates/screenshot-frame.png
 e4861e91c7b0ad2fbe2d6951f756943c533e7142a0d6968d7bfb09b4677e7483  ./templates/screenshot-frame.svg
+1d248a57328ff1a00e0f84f47d455c7436173616ef50bce538cb761876270b30  ./templates/social-preview.html
 7215cb7b6dbc04fa26e7f78d9c76094fb405a340fc9115f178caacdd1c95a6bd  ./tokens/LerroTokens.swift
 bd845f4d0b6252f4a9ff4bee9cf94f0c26f051b8577cca26f62d53bb809c8c8d  ./tokens/brand.css
 493bdf5a6a32b4c20a5d5e6ca63b95a6611e388713d394c44b379bc09152519f  ./tokens/brand.tokens.json

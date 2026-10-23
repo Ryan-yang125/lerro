@@ -9,6 +9,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Ryan-yang125/lerro/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/Ryan-yang125/lerro?label=%E7%89%88%E6%9C%AC&color=2F5BFF"></a>
+  <a href="LICENSE"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-1C1A16"></a>
+  <img alt="macOS 26" src="https://img.shields.io/badge/macOS-26%20%C2%B7%20Apple%20%E8%8A%AF%E7%89%87-1C1A16">
+</p>
+
+<p align="center">
   回微信、写邮件、整理周报，按一下快捷键说就行。<br>
   口头禅自动去掉，说错的地方自动改好，标点和分段也帮你加上。
 </p>
@@ -21,6 +27,10 @@
 
 <p align="center">
   macOS 26 · Apple 芯片 · 免费、开源、不用注册
+</p>
+
+<p align="center">
+  <strong>Typeless 和 Wispr Flow 的免费开源替代：声音在你的 Mac 本机识别，不用注册。</strong>
 </p>
 
 ![在微信里回消息：按一下 fn 说话，Lerro 整理好写进输入框](site/public/readme/zh-demo.png)
@@ -44,6 +54,18 @@
 - **说错了，直接改口**：说「不对」「改成」，只留下你最后的意思。
 - **说中文，写英文**：换一个快捷键，说中文直接写出英文。
 - **菜单栏里随手可用**：上一句没写进去？在菜单栏里一键复制。
+
+## 和 Typeless、Wispr Flow 比
+
+| | Lerro | Typeless / Wispr Flow |
+| --- | --- | --- |
+| 价格 | 免费；开 AI 整理一个月 2 块钱左右 | 专业版一年 144 美元（约 1000 元）；免费版每周有字数上限 |
+| 声音在哪识别 | 你的 Mac 本机 | 上传到云端识别 |
+| 要不要注册 | 不用注册 | 要登录账号 |
+| 代码 | 开源 | 不开源 |
+| 平台 | 只有 Mac（macOS 26、Apple 芯片） | Mac、Windows、手机都有 |
+
+竞品信息来自 [Typeless 定价](https://www.typeless.com/pricing)、[Typeless 隐私政策](https://www.typeless.com/privacy)、[Wispr Flow 定价](https://wisprflow.ai/pricing)、[Wispr Flow 隐私说明](https://wisprflow.ai/privacy)和两家的安装说明，2026 年 10 月 24 日核对。Typeless、Wispr Flow 是各自所有者的商标。
 
 ## 价格
 

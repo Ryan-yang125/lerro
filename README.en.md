@@ -9,6 +9,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Ryan-yang125/lerro/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Ryan-yang125/lerro?label=release&color=2F5BFF"></a>
+  <a href="LICENSE"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-1C1A16"></a>
+  <img alt="macOS 26" src="https://img.shields.io/badge/macOS-26%20%C2%B7%20Apple%20silicon-1C1A16">
+</p>
+
+<p align="center">
   Reply on WeChat, write an email, or put together a weekly report: press a shortcut and talk.<br>
   Filler words are removed, corrections are applied, and punctuation and paragraphs are added for you.
 </p>
@@ -21,6 +27,10 @@
 
 <p align="center">
   macOS 26 · Apple silicon · Free, open source, no sign-up
+</p>
+
+<p align="center">
+  <strong>A free, open-source alternative to Typeless and Wispr Flow: your speech is recognized on your Mac, with no sign-up.</strong>
 </p>
 
 ![Replying in WeChat: press fn, speak, and Lerro writes the tidied text into the message box](site/public/readme/en-demo.png)
@@ -58,6 +68,23 @@ want smoother text.
 - **Handy in the menu bar.** Last sentence didn't land? Copy it from the menu bar
   in one click.
 
+## Lerro vs. Typeless and Wispr Flow
+
+| | Lerro | Typeless / Wispr Flow |
+| --- | --- | --- |
+| Price | Free; AI cleanup costs about ¥2 (around $0.30) a month | Pro is $144 a year; the free plan has a weekly word limit |
+| Where speech is recognized | On your Mac | Uploaded to the cloud |
+| Account | No sign-up | Sign-in required |
+| Source code | Open source | Closed source |
+| Platforms | Mac only (macOS 26, Apple silicon) | Mac, Windows and phones |
+
+Competitor details are from the [Typeless pricing](https://www.typeless.com/pricing),
+[Typeless privacy policy](https://www.typeless.com/privacy),
+[Wispr Flow pricing](https://wisprflow.ai/pricing),
+[Wispr Flow privacy page](https://wisprflow.ai/privacy) and both setup guides,
+checked on October 24, 2026. Typeless and Wispr Flow are trademarks of their
+respective owners.
+
 ## Pricing
 
 - **Free:** Apple's speech recognition on your Mac, so what you say is what's
@@ -65,7 +92,8 @@ want smoother text.
 - **With AI cleanup:** removes filler words, fixes typos, adds punctuation,
   changes tone per app, translates Chinese to English, and remembers words you
   use often. It uses your own DeepSeek account and charges by usage: about ¥1
-  per 1,000 uses, or about ¥2 a month at a hundred or so dictations a day. You
+  per 1,000 uses, or about ¥2 (around $0.30) a month at a hundred or so
+  dictations a day. You
   can see your balance and spending in Lerro.
 
 Lerro itself has no membership or subscription. The app has a three-step guide:
