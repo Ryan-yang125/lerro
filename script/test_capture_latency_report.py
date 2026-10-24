@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -53,10 +54,22 @@ class CaptureLatencyReportTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.path = Path(self.tmp.name) / "history.json"
+        self.path = Path(self.tmp.name) / "history.sqlite"
 
     def write(self, entries):
-        self.path.write_text(json.dumps(entries), encoding="utf-8")
+        """Writes entries the way the app stores them: createdAt as a column of reference-date seconds."""
+        connection = sqlite3.connect(self.path)
+        with connection:
+            connection.execute("CREATE TABLE history (created_at REAL NOT NULL, entry BLOB NOT NULL)")
+            for entry in entries:
+                created = REPORT.parse_created_at(entry["createdAt"])
+                seconds = (created - REPORT.REFERENCE_DATE).total_seconds()
+                stored = {key: value for key, value in entry.items() if key != "createdAt"}
+                connection.execute(
+                    "INSERT INTO history (created_at, entry) VALUES (?, ?)",
+                    (seconds, json.dumps(stored).encode("utf-8")),
+                )
+        connection.close()
 
     def run_report(self, *args, as_json=True):
         out = io.StringIO()
@@ -176,7 +189,7 @@ class CaptureLatencyReportTests(unittest.TestCase):
         names = [name for name, _, _ in REPORT.STEPS]
         self.assertEqual(names[0], "hotkeyPressed>hotkeyHandled")
         self.assertNotIn("listening>stopRequested", names)
-        self.assertEqual(len(names), 12 + 4 + 6)
+        self.assertEqual(len(names), 12 + 4 + 5)
         self.assertEqual(len(REPORT.SUMMARIES), 12)
 
     def test_missing_file_exits_nonzero(self):

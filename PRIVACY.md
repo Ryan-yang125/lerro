@@ -10,8 +10,9 @@ release artifacts.
 Lerro stores preferences, history, personal dictionary entries, per-app tone
 profiles, optional audio, and AI usage records below its Application Support
 directory. The DeepSeek API key you enter is a plaintext field in
-`preferences.json`. The directory uses mode `0700`; the preferences file uses
-mode `0600`. Software running as the same macOS user can read this file.
+`preferences.json`. History is a SQLite database, `history.sqlite`, with its
+`-wal` and `-shm` companion files. The directory uses mode `0700`; the
+preferences file and the history database use mode `0600`. Software running as the same macOS user can read this file.
 
 Raw-audio retention starts disabled. Selecting “never save” for history prevents
 new history and recording files from being persisted. History can contain the

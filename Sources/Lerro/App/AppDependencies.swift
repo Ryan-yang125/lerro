@@ -54,7 +54,10 @@ struct AppDependencies: Sendable {
             hotkeys: GlobalHotkeyMonitor(),
             permissions: MacPermissionService(),
             loginItem: MacLoginItemManager(),
-            history: FileHistoryRepository(fileURL: paths.historyFile),
+            history: SQLiteHistoryRepository(
+                databaseURL: paths.historyDatabase,
+                legacyJSONURL: paths.legacyHistoryFile
+            ),
             dictionary: FileDictionaryRepository(fileURL: paths.dictionaryFile),
             preferences: preferences,
             aiUsage: aiUsage,

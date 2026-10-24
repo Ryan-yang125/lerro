@@ -75,6 +75,7 @@ final class AppSession {
     private(set) var termLearningState: TermLearningState = .empty
     private(set) var dictionaryWeekSummary: DictionaryWeekSummary = .empty
     private(set) var recentHistoryEntries: [HistoryEntry] = []
+    private(set) var historyAllCount = 0
     var visualFixturePresentation: String?
     var isPanelOnlyVisualFixture = false
     var visualFixtureReduceMotion = false
@@ -157,6 +158,7 @@ final class AppSession {
     }
 
     private static let handsFreeStopHintLimit = 20
+    private static let recentHistoryLimit = 6
     private static let silenceLevelThreshold: Float = 0.2
     private static let silenceWarningDelay: TimeInterval = 3
 
@@ -207,7 +209,8 @@ final class AppSession {
     private var preferenceSaveWaiters: [CheckedContinuation<Void, Never>] = []
     private var lastAppliedSystemPreferences: UserPreferences?
     private var pendingRetentionApplication: HistoryRetention?
-    private var historyUsageEntries: [HistoryEntry] = []
+    /// History from the last `DictionaryWeek.windowSeconds`, for the dictionary week summary.
+    private var historyWeekEntries: [HistoryEntry] = []
     private var dailyUsageDays: [DailyUsage] = []
     private var homeStatisticsDay = Calendar.current.startOfDay(for: .now)
     private var homeStatisticsGeneration = UUID()
@@ -301,10 +304,6 @@ final class AppSession {
         case .idle, .success, .failed, .cancelled:
             false
         }
-    }
-
-    var historyAllCount: Int {
-        historyUsageEntries.count
     }
 
     func selectMicrophone(uid: String?) {
@@ -406,7 +405,7 @@ final class AppSession {
             termLearningState = .empty
             Self.usageLogger.error("Term learning load failed: \(String(describing: type(of: error)), privacy: .public)")
         }
-        updateUsageSummary()
+        rebuildDictionaryWeekSummary()
     }
 
     func termLearningStatus(for term: String) -> TermLearningStatus {
@@ -500,9 +499,9 @@ final class AppSession {
     func historyEntries(ids: Set<UUID>) async -> [UUID: HistoryEntry] {
         guard !ids.isEmpty else { return [:] }
         do {
-            let all = try await dependencies.history.entries()
+            let entries = try await dependencies.history.entries(ids: ids)
             return Dictionary(
-                all.filter { ids.contains($0.id) }.map { ($0.id, $0) },
+                entries.map { ($0.id, $0) },
                 uniquingKeysWith: { first, _ in first }
             )
         } catch {
@@ -1089,11 +1088,7 @@ final class AppSession {
         Task { @MainActor [weak self] in
             guard let self else { return }
             let applications = await dependencies.applicationCatalog.applications()
-            let entries = (try? await dependencies.history.entries()) ?? []
-            var counts: [String: Int] = [:]
-            for case let bundleIdentifier? in entries.map(\.bundleIdentifier) where !bundleIdentifier.isEmpty {
-                counts[bundleIdentifier, default: 0] += 1
-            }
+            let counts = (try? await dependencies.history.bundleIdentifierCounts()) ?? [:]
             if availableApplications != applications {
                 availableApplications = applications
             }
@@ -1308,8 +1303,8 @@ final class AppSession {
         Task { [weak self] in
             guard let self else { return }
             do {
-                let allEntries = try await dependencies.history.entries()
-                try await deleteAudioFiles(relativePaths: allEntries.map(\.audioRelativePath))
+                let audioPaths = try await dependencies.history.audioRelativePaths(createdBefore: nil)
+                try await deleteAudioFiles(relativePaths: audioPaths)
                 try await dependencies.history.deleteAll()
                 try await dependencies.dailyUsage.deleteAll()
                 try await dependencies.termLearning.deleteAll()
@@ -2496,11 +2491,9 @@ final class AppSession {
     }
 
     private func applyRetentionAndClean(_ retention: HistoryRetention, now: Date) async throws {
-        guard retention != .forever, retention != .never else { return }
-        let before = try await dependencies.history.entries()
-        let expiring = before.filter { !retention.retains(createdAt: $0.createdAt, now: now) }
-        guard !expiring.isEmpty else { return }
-        try await deleteAudioFiles(relativePaths: expiring.map(\.audioRelativePath))
+        guard let cutoff = retention.cutoff(now: now) else { return }
+        let expiringAudio = try await dependencies.history.audioRelativePaths(createdBefore: cutoff)
+        try await deleteAudioFiles(relativePaths: expiringAudio)
         try await dependencies.history.applyRetention(retention, now: now)
     }
 
@@ -2508,10 +2501,17 @@ final class AppSession {
         let generation = UUID()
         historyUsageGeneration = generation
         do {
-            let entries = try await dependencies.history.entries()
+            let recent = try await dependencies.history.page(
+                HistoryPageRequest(limit: Self.recentHistoryLimit)
+            )
+            let week = try await dependencies.history.entries(
+                since: Date.now.addingTimeInterval(-DictionaryWeek.windowSeconds)
+            )
             guard historyUsageGeneration == generation else { return }
-            historyUsageEntries = entries
-            updateUsageSummary()
+            recentHistoryEntries = recent.entries
+            historyAllCount = recent.totalCount
+            historyWeekEntries = week
+            rebuildDictionaryWeekSummary()
             await reloadHistory()
         } catch {
             guard historyUsageGeneration == generation else { return }
@@ -2524,7 +2524,7 @@ final class AppSession {
     private func refreshDictionaryAndUsage() async {
         do {
             dictionaryEntries = try await dependencies.dictionary.entries()
-            updateUsageSummary()
+            rebuildDictionaryWeekSummary()
         } catch {
             currentError = LerroError.localData(
                 "词典读取失败：\(error.localizedDescription)"
@@ -2537,7 +2537,10 @@ final class AppSession {
     private func seedDailyUsageIfNeeded() async {
         do {
             guard try await dependencies.dailyUsage.days().isEmpty else { return }
-            let seeded = DailyUsage.seed(from: historyUsageEntries, calendar: .current)
+            let seeded = DailyUsage.seed(
+                from: try await dependencies.history.entries(),
+                calendar: .current
+            )
             guard !seeded.isEmpty else { return }
             try await dependencies.dailyUsage.replaceAll(seeded)
         } catch {
@@ -2567,7 +2570,7 @@ final class AppSession {
 
     private func rebuildDictionaryWeekSummary() {
         dictionaryWeekSummary = DictionaryWeek.summary(
-            history: historyUsageEntries,
+            history: historyWeekEntries,
             dictionary: dictionaryEntries,
             now: .now
         )
@@ -2581,13 +2584,6 @@ final class AppSession {
             Self.usageLogger.error("Daily usage record failed: \(String(describing: type(of: error)), privacy: .public)")
         }
         await refreshHomeStatistics()
-    }
-
-    private func updateUsageSummary() {
-        recentHistoryEntries = Array(
-            historyUsageEntries.sorted { $0.createdAt > $1.createdAt }.prefix(6)
-        )
-        rebuildDictionaryWeekSummary()
     }
 
     private func normalizedHistorySearch(_ value: String) -> String {
@@ -2615,9 +2611,9 @@ final class AppSession {
         guard let audioFileStore else { return }
         // Recordings of just-completed captures are indexed by pending persistence.
         await persistenceTask?.value
-        let allEntries: [HistoryEntry]
+        let audioPaths: [String]
         do {
-            allEntries = try await dependencies.history.entries()
+            audioPaths = try await dependencies.history.audioRelativePaths(createdBefore: nil)
         } catch {
             currentError = LerroError.localData(
                 "历史索引读取失败，录音目录保持不变：\(error.localizedDescription)"
@@ -2626,7 +2622,7 @@ final class AppSession {
         }
         do {
             try await audioFileStore.reconcile(
-                referencedRelativePaths: Set(allEntries.compactMap(\.audioRelativePath))
+                referencedRelativePaths: Set(audioPaths)
             )
         } catch {
             currentError = userFacingError(error, context: "本地数据处理失败，请重试")

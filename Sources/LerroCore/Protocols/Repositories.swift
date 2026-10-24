@@ -34,9 +34,17 @@ public struct HistoryPage: Sendable, Equatable {
     }
 }
 
+/// History ordered newest first; equal `createdAt` values order by `id.uuidString` ascending.
 public protocol HistoryRepository: Sendable {
+    /// Every entry. Only for one-time whole-history work such as the daily usage seed.
     func entries() async throws -> [HistoryEntry]
+    func entries(ids: Set<UUID>) async throws -> [HistoryEntry]
+    func entries(since: Date) async throws -> [HistoryEntry]
     func page(_ request: HistoryPageRequest) async throws -> HistoryPage
+    /// Non-nil audio paths of entries created before `date`, or of every entry when `date` is nil.
+    func audioRelativePaths(createdBefore date: Date?) async throws -> [String]
+    /// Entry count per non-empty bundle identifier.
+    func bundleIdentifierCounts() async throws -> [String: Int]
     func save(_ entry: HistoryEntry) async throws
     func delete(id: UUID) async throws
     func deleteAll() async throws

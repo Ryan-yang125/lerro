@@ -1383,7 +1383,13 @@ private struct GatedHistoryRepository: HistoryRepository {
     let gate: HistorySaveGate
 
     func entries() async throws -> [HistoryEntry] { await base.entries() }
+    func entries(ids: Set<UUID>) async throws -> [HistoryEntry] { await base.entries(ids: ids) }
+    func entries(since: Date) async throws -> [HistoryEntry] { await base.entries(since: since) }
     func page(_ request: HistoryPageRequest) async throws -> HistoryPage { await base.page(request) }
+    func audioRelativePaths(createdBefore date: Date?) async throws -> [String] {
+        await base.audioRelativePaths(createdBefore: date)
+    }
+    func bundleIdentifierCounts() async throws -> [String: Int] { await base.bundleIdentifierCounts() }
     func save(_ entry: HistoryEntry) async throws {
         await gate.waitUntilOpen()
         await base.save(entry)

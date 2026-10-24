@@ -32,15 +32,19 @@ public enum HistoryRetention: String, CaseIterable, Codable, Sendable {
     case forever
     case never
 
-    public func retains(createdAt: Date, now: Date) -> Bool {
-        let maximumAge: TimeInterval
+    /// Entries created before this date expire; nil keeps every entry.
+    public func cutoff(now: Date) -> Date? {
         switch self {
-        case .oneDay: maximumAge = 86_400
-        case .oneWeek: maximumAge = 7 * 86_400
-        case .oneMonth: maximumAge = 30 * 86_400
-        case .forever, .never: return true
+        case .oneDay: now.addingTimeInterval(-86_400)
+        case .oneWeek: now.addingTimeInterval(-7 * 86_400)
+        case .oneMonth: now.addingTimeInterval(-30 * 86_400)
+        case .forever, .never: nil
         }
-        return now.timeIntervalSince(createdAt) <= maximumAge
+    }
+
+    public func retains(createdAt: Date, now: Date) -> Bool {
+        guard let cutoff = cutoff(now: now) else { return true }
+        return createdAt >= cutoff
     }
 }
 
