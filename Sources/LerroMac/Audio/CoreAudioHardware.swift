@@ -45,6 +45,25 @@ enum CoreAudioHardware {
         }
     }
 
+    /// True when the input device (the default input for nil, or when the UID
+    /// is unknown, as `AppleSpeechService` falls back to the default) is
+    /// Bluetooth. False when the transport type cannot be read.
+    static func isBluetoothInput(uid: String?) -> Bool {
+        guard let deviceID = uid.flatMap(inputDeviceID(forUID:)) ?? defaultInputDeviceID() else {
+            return false
+        }
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard let transport = uint32Property(objectID: deviceID, address: &address) else {
+            return false
+        }
+        return transport == kAudioDeviceTransportTypeBluetooth
+            || transport == kAudioDeviceTransportTypeBluetoothLE
+    }
+
     static func muteDefaultOutput() -> OutputMuteSnapshot? {
         guard let deviceID = defaultDeviceID(selector: kAudioHardwarePropertyDefaultOutputDevice) else {
             return nil

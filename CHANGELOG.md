@@ -6,6 +6,18 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+### Changed
+
+- A single-modifier shortcut (for example ⌘ alone) opens the microphone as soon
+  as the key goes down, so speech right after the release is no longer cut off.
+  When the press is part of another shortcut, that audio is dropped from memory.
+  Bluetooth microphones keep opening after the release.
+
+### Fixed
+
+- Holding the single-modifier shortcut key while clicking the mouse, or for
+  longer than one second, no longer starts a dictation on release.
+
 ## [1.10.2] - 2026-10-24
 
 ### Changed

@@ -54,7 +54,9 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
    选区、安全状态指纹，以及 AI 整理开关、API Key、上下文开关、语气和目标语言。
 2. **收音**：等待当前语言的 Apple Speech 资源就绪后立即打开麦克风，HUD 显示。麦克风打开后在后台准备
    `SpeechTranscriber` 与 `SpeechAnalyzer`，音频按顺序缓存在内存，分析器就绪后先送缓存再送实时音频。
-   空闲时 `AppleSpeechService` 保留一个已建好但未启动的 `AVAudioEngine`，麦克风指示灯只在录音期间亮起。
+   空闲时 `AppleSpeechService` 保留一个已建好但未启动的 `AVAudioEngine`。单修饰键快捷键按下时（`armed`）先预开麦克风，
+   音频只缓存在内存；确认后 `start` 接管它，组合键（`disarmed`）直接丢弃；蓝牙输入不预开麦
+   （[ADR 0019](decisions/0019-microphone-prearm-at-modifier-key-down.md)）。
 3. **转写**：`SpeechTranscriber` 使用 `.progressiveTranscription`（[ADR 0015](decisions/0015-speech-transcriber.md)），
    partial 只用于预览。`TranscriptSpacing.normalize` 去掉中文标点两侧的空格。Apple Speech 不接收词典内容。
 4. **处理**：AI 整理关闭（`raw`）或没有 API Key 时，Dictate 把 Apple transcript 直接交付，Translate 在开始前失败并提示开启 AI 整理。
@@ -76,14 +78,15 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 每次 capture 有一个 [`CaptureTrace`](../Sources/LerroCore/Models/CaptureTrace.swift)（起点为物理按键时刻，
 `ContinuousClock` 里程碑）。结果写入 os.Logger `app.lerro.mac` / `capture-trace`、Points of Interest signpost 和历史的
 `phaseTimings`；[`script/capture_latency_report.py`](../script/capture_latency_report.py) 只读打开本机 `history.sqlite`
-输出各区段 p50 / p90。
+输出各区段 p50 / p90；`microphoneLive`（按键到麦克风开始收音）用于比较预开麦前后，`--prearm yes|no` 按是否预开麦筛选。
 
 ## 快捷键
 
 - Core 的 `HotkeyDefinition` 保存物理 binding 与 `hold` / `toggle` 语义；冲突按规范化物理 `HotkeySignature` 判断。
 - `hold`：began 启动，同一 definition ID 的 ended 完成。`toggle`：第一次 began 启动，第二次 began 完成。
-- `GlobalHotkeyMonitor` 独占 active HID CGEventTap：监听 `flagsChanged`、`keyDown`、`keyUp`，单修饰键先经过
-  120 ms 候选，命中的普通键吞掉 down、repeat 与 up，未命中的系统 chord 透传。Fn 63 与 Globe 179 映射到同一语义。
+- `GlobalHotkeyMonitor` 独占 active HID CGEventTap：监听 `flagsChanged`、`keyDown`、`keyUp`，单修饰键先成为候选
+  （hold 120 ms 后激活；toggle 松开时确认，按住超过 1 秒或期间点击鼠标则作废；Dictate / Translate 的候选发 `armed`，
+  作废时发 `disarmed`），命中的普通键吞掉 down、repeat 与 up，未命中的系统 chord 透传。Fn 63 与 Globe 179 映射到同一语义。
   Lerro 合成的 Command-V 带 source marker 并始终透传。tap 被禁用时先取消活动手势，再在 main queue 重建。
 - trigger 通过单一 FIFO stream 进入 `AppSession`。Fn 前缀升级为更具体的 chord 时，依次取消旧 capture、
   转交物理按键所有权并启动新 action。决策见 [ADR 0003](decisions/0003-explicit-hotkey-gesture-semantics.md) 与

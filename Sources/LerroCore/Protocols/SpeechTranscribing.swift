@@ -23,10 +23,19 @@ public protocol SpeechTranscribing: Sendable {
     /// Builds the audio input ahead of a capture without starting the
     /// microphone, so the next `start` opens it sooner.
     func prewarmAudioInput(microphoneDeviceUID: String?) async
+    /// Starts the microphone for a capture that may follow and keeps its
+    /// audio in memory only. The next `start` for the same device adopts it.
+    /// A no-op while a session runs, when already prearmed, or when the input
+    /// is a Bluetooth device.
+    func prearmMicrophone(microphoneDeviceUID: String?) async
+    /// Stops a prearmed microphone and drops its audio. A no-op without one.
+    func discardPrearmedMicrophone() async
 }
 
 public extension SpeechTranscribing {
     func prewarmAudioInput(microphoneDeviceUID: String?) async {}
+    func prearmMicrophone(microphoneDeviceUID: String?) async {}
+    func discardPrearmedMicrophone() async {}
 
     func resourceStatus(localeIdentifier: String) async -> LanguageResourceStatus {
         LanguageResourceStatus(

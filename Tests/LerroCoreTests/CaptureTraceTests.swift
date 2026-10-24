@@ -179,7 +179,7 @@ struct CaptureTraceTests {
         #expect(names.count == (CaptureMilestone.startupChain.count - 1)
             + (CaptureMilestone.analyzerChain.count - 1)
             + (CaptureMilestone.finishChain.count - 1))
-        #expect(CaptureTraceSegment.summaries.count == 12)
+        #expect(CaptureTraceSegment.summaries.count == 13)
     }
 
     // MARK: HistoryPhaseTimings

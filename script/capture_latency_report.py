@@ -28,7 +28,9 @@ REFERENCE_DATE = datetime(2001, 1, 1, tzinfo=timezone.utc)
 # (CaptureMilestone.startupChain / analyzerChain / finishChain and CaptureTraceSegment.summaries).
 # Keep these lists identical to the Swift definitions. Entries recorded before
 # the microphone moved ahead of analyzer preparation have the old order, so
-# steps that run backwards for them are skipped.
+# steps that run backwards for them are skipped. Entries with a prearmed
+# microphone carry microphonePrearmed and have their engine milestones before
+# hotkeyHandled, so the steps around them run backwards and are skipped too.
 STARTUP_CHAIN = [
     "hotkeyPressed", "hotkeyHandled", "hudArmed", "permissionsChecked", "hotkeysConfigured",
     "contextCaptured", "speechResourcesReady", "speechStartRequested", "speechLocaleResolved",
@@ -46,6 +48,7 @@ FINISH_CHAIN = [
 # (name, from, to)
 SUMMARIES = [
     ("readyToSpeak", "hotkeyPressed", "listening"),
+    ("microphoneLive", "hotkeyPressed", "audioEngineStarted"),
     ("hotkeyDispatch", "hotkeyPressed", "hotkeyHandled"),
     ("appPreparation", "hotkeyHandled", "speechStartRequested"),
     ("speechStartup", "speechStartRequested", "listening"),
@@ -65,7 +68,7 @@ FINISH_STEPS = [(f"{a}>{b}", a, b) for a, b in zip(FINISH_CHAIN, FINISH_CHAIN[1:
 STEPS = STARTUP_STEPS + ANALYZER_STEPS + FINISH_STEPS
 
 KNOWN_MILESTONES = (
-    set(STARTUP_CHAIN) | set(ANALYZER_CHAIN) | set(FINISH_CHAIN) | {"firstAudioBuffer", "firstPartial"}
+    set(STARTUP_CHAIN) | set(ANALYZER_CHAIN) | set(FINISH_CHAIN) | {"firstAudioBuffer", "firstPartial", "microphonePrearmed"}
 )
 LEGACY_FIELDS = ("transcription", "processing", "delivery")
 MODES = ("dictation", "translation", "ask")
@@ -156,7 +159,7 @@ def load_entries(path: Path) -> list[dict]:
     return entries
 
 
-def filter_entries(entries, since, until, mode, route, last):
+def filter_entries(entries, since, until, mode, route, last, prearm=None):
     kept = []
     for entry in entries:
         created = parse_created_at(entry.get("createdAt"))
@@ -170,6 +173,8 @@ def filter_entries(entries, since, until, mode, route, last):
         if mode and entry.get("mode") != mode:
             continue
         if route and entry.get("processingRoute") != route:
+            continue
+        if prearm and ("microphonePrearmed" in milestones_of(entry)) != (prearm == "yes"):
             continue
         kept.append((created, entry))
     kept.sort(key=lambda item: (item[0] is None, item[0] or datetime.min.astimezone()))
@@ -226,9 +231,12 @@ def build_report(path: Path, kept, slowest_count: int) -> dict:
                 values.append(float(value))
         legacy[field] = stats(values) or {"n": 0}
 
+    prearmed = sum(1 for _, e in kept if "microphonePrearmed" in milestones_of(e))
+
     return {
         "file": str(path),
         "entries": len(kept),
+        "entriesPrearmed": prearmed,
         "entriesWithMilestones": len(with_milestones),
         "from": min(dates).isoformat(timespec="seconds") if dates else None,
         "to": max(dates).isoformat(timespec="seconds") if dates else None,
@@ -255,6 +263,7 @@ def render_text(report: dict, slowest_count: int) -> str:
         f"file: {report['file']}",
         f"entries considered: {report['entries']}",
         f"entries with milestones: {report['entriesWithMilestones']}",
+        f"entries with prearmed microphone: {report['entriesPrearmed']}",
         f"date range: {report['from'] or '-'} .. {report['to'] or '-'}",
         "times in milliseconds; percentiles are nearest-rank",
         "",
@@ -286,6 +295,8 @@ def run(argv: list[str] | None = None) -> int:
                         help="local YYYY-MM-DD[THH:MM]; a bare date includes that whole day")
     parser.add_argument("--mode", choices=MODES)
     parser.add_argument("--route", choices=ROUTES)
+    parser.add_argument("--prearm", choices=("yes", "no"),
+                        help="keep only entries with (yes) or without (no) a prearmed microphone")
     parser.add_argument("--last", type=int, help="keep only the most recent N entries after filtering")
     parser.add_argument("--slowest", type=int, default=5, help="number of slowest entries to list")
     parser.add_argument("--json", action="store_true", help="print aggregates as JSON")
@@ -297,7 +308,7 @@ def run(argv: list[str] | None = None) -> int:
         print(f"cannot read history: {type(error).__name__}", file=sys.stderr)
         return 2
 
-    kept = filter_entries(entries, args.since, args.until, args.mode, args.route, args.last)
+    kept = filter_entries(entries, args.since, args.until, args.mode, args.route, args.last, args.prearm)
     report = build_report(args.history, kept, args.slowest)
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))

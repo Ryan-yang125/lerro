@@ -307,6 +307,12 @@ public enum ShortcutActivation: String, CaseIterable, Codable, Sendable {
 }
 
 public enum HotkeyGesturePhase: String, Codable, Sendable {
+    /// A modifier-only capture shortcut is physically pressed and may still
+    /// turn out to be part of a combo. Followed by `began` or `disarmed`.
+    case armed
+    /// The armed press turned out to be a combo, was held too long or was
+    /// interrupted. No `began` follows for it.
+    case disarmed
     case began
     case ended
 }

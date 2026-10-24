@@ -190,7 +190,24 @@ class CaptureLatencyReportTests(unittest.TestCase):
         self.assertEqual(names[0], "hotkeyPressed>hotkeyHandled")
         self.assertNotIn("listening>stopRequested", names)
         self.assertEqual(len(names), 12 + 4 + 5)
-        self.assertEqual(len(REPORT.SUMMARIES), 12)
+        self.assertEqual(len(REPORT.SUMMARIES), 13)
+
+    def test_prearm_filter_and_microphone_live(self):
+        plain = traced_entry("2026-10-01T10:00:00Z", 0.23)
+        plain["phaseTimings"]["milestones"]["audioEngineStarted"] = 0.229
+        prearmed = traced_entry("2026-10-02T10:00:00Z", 0.13)
+        prearmed["phaseTimings"]["milestones"].update(
+            {"microphonePrearmed": 0.004, "audioEngineStarted": 0.098}
+        )
+        self.write([plain, prearmed])
+
+        report = self.run_report()
+        self.assertEqual(report["entriesPrearmed"], 1)
+        only = self.run_report("--prearm", "yes")
+        self.assertEqual(only["entries"], 1)
+        self.assertEqual(self.segment(only, "microphoneLive")["p50"], 98)
+        without = self.run_report("--prearm", "no")
+        self.assertEqual(self.segment(without, "microphoneLive")["p50"], 229)
 
     def test_missing_file_exits_nonzero(self):
         with contextlib.redirect_stderr(io.StringIO()):
