@@ -30,7 +30,7 @@ struct AppTonePickerSheet: View {
                             Button {
                                 select(application)
                             } label: {
-                                HStack(spacing: 10) {
+                                HStack(spacing: 12) {
                                     LerroAppIcon(
                                         bundleIdentifier: application.bundleIdentifier,
                                         name: application.name,

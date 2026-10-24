@@ -11,8 +11,6 @@ struct HistoryView: View {
     @State private var entryPendingDeletion: HistoryEntry?
     @Environment(\.locale) private var locale
 
-    private static let listWidth: CGFloat = 360
-
     init(session: AppSession) {
         self.session = session
         _tab = State(initialValue: HistoryTab(mode: session.historyModeFilter))
@@ -30,6 +28,7 @@ struct HistoryView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                    .controlSize(.large)
                     LerroSearchField(text: $searchText, prompt: "搜索历史")
                         .lerroPageTextInput(.history, in: session)
                 }
@@ -79,7 +78,7 @@ struct HistoryView: View {
             }
         } else {
             let selected = entries.first { $0.id == selectedID } ?? entries[0]
-            LerroSplitLayout(axis: .horizontal, firstLength: Self.listWidth) {
+            LerroSplitLayout(axis: .horizontal, firstLength: LerroTheme.historyListWidth) {
                 HistoryListView(
                     session: session,
                     groups: HistoryPresentation.groups(from: entries, locale: locale),

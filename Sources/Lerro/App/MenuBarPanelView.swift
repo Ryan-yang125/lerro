@@ -35,7 +35,7 @@ struct MenuBarPanelView: View {
             pickerRows
             footer
         }
-        .padding(12)
+        .padding(8)
         .frame(width: 304)
         .tracking(LerroTheme.uiTracking)
         .tint(LerroTheme.accent)
@@ -107,7 +107,7 @@ struct MenuBarPanelView: View {
                 .monospacedDigit()
                 .foregroundStyle(status == .listening ? LerroTheme.accentText : LerroTheme.secondaryText)
         }
-        .padding(.horizontal, 9)
+        .padding(.horizontal, 10)
         .frame(height: 22)
         .background(pillFill, in: Capsule())
         .accessibilityElement(children: .ignore)
@@ -126,9 +126,9 @@ struct MenuBarPanelView: View {
     // MARK: Permissions
 
     private func permissionRow(_ permission: MenuBarPanelPresentation.MissingPermission) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: LerroIconSize.medium.labelSpacing) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 13))
+                .lerroIcon(.medium)
                 .foregroundStyle(LerroTheme.warning)
                 .accessibilityHidden(true)
             Text(verbatim: localized(permission.titleKey))
@@ -144,7 +144,7 @@ struct MenuBarPanelView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(LerroTheme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(LerroTheme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: LerroTheme.rowRadius, style: .continuous))
         .padding(.bottom, 10)
         .accessibilityElement(children: .contain)
     }
@@ -188,22 +188,22 @@ struct MenuBarPanelView: View {
                 break
             }
         } label: {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 7) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: LerroIconSize.medium.labelSpacing) {
                     switch tile {
                     case .finish:
                         MenuBarWaveform()
                     case .cancel:
                         Image(systemName: "xmark.circle")
-                            .font(.system(size: 13, weight: .medium))
+                            .lerroIcon(.medium)
                             .foregroundStyle(LerroTheme.accent)
                     case .start, .disabled:
                         Image(systemName: isDictation ? "waveform" : "translate")
-                            .font(.system(size: 13, weight: .medium))
+                            .lerroIcon(.medium)
                             .foregroundStyle(LerroTheme.accent)
                     }
                     Text(verbatim: title)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(LerroFont.cardTitle)
                         .lineLimit(1)
                 }
                 switch tile {
@@ -231,10 +231,10 @@ struct MenuBarPanelView: View {
                     LerroAppIcon(
                         bundleIdentifier: entry.bundleIdentifier,
                         name: entry.applicationName,
-                        size: 14
+                        size: 16
                     )
                     Text(verbatim: "\(entry.applicationName) · \(relativeText(entry.createdAt, now: context.date))")
-                        .font(.system(size: 11.5))
+                        .font(LerroFont.caption)
                         .foregroundStyle(LerroTheme.metadataText)
                         .lineLimit(1)
                 }
@@ -266,7 +266,7 @@ struct MenuBarPanelView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(LerroTheme.fillContainerThin, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(LerroTheme.fillContainerThin, in: RoundedRectangle(cornerRadius: LerroTheme.rowRadius, style: .continuous))
         .padding(.top, 10)
         .accessibilityElement(children: .contain)
     }
@@ -308,7 +308,7 @@ struct MenuBarPanelView: View {
                 markdownText("AI **%@**", aiCostText)
             }
         }
-        .font(.system(size: 11.5))
+        .font(LerroFont.caption)
         .foregroundStyle(LerroTheme.metadataText)
         .padding(.horizontal, 4)
         .padding(.top, 10)
@@ -357,10 +357,9 @@ struct MenuBarPanelView: View {
         title: String,
         @ViewBuilder control: () -> Control
     ) -> some View {
-        HStack(spacing: 9) {
+        HStack(spacing: LerroIconSize.medium.labelSpacing) {
             Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 16, height: 16)
+                .lerroIcon(.medium)
                 .foregroundStyle(LerroTheme.secondaryText)
             Text(verbatim: localized(title))
                 .font(LerroFont.body)
@@ -418,10 +417,9 @@ struct MenuBarPanelView: View {
             focus.closePanel()
             AppUpdateController.shared.checkForUpdates()
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: LerroIconSize.medium.labelSpacing) {
                 Image(systemName: "arrow.down.circle")
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(width: 16, height: 16)
+                    .lerroIcon(.medium)
                 Text(verbatim: updateTitle)
                     .font(LerroFont.bodyEmphasis)
                 Spacer(minLength: 0)
@@ -429,8 +427,8 @@ struct MenuBarPanelView: View {
             .foregroundStyle(LerroTheme.accentText)
             .padding(.horizontal, 10)
             .frame(height: 32)
-            .background(LerroTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(LerroTheme.accentSoft, in: RoundedRectangle(cornerRadius: LerroTheme.rowRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: LerroTheme.rowRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .padding(.bottom, 10)
@@ -633,8 +631,8 @@ private struct MenuBarTileStyle: ButtonStyle {
                 .padding(.horizontal, 12)
                 .frame(height: 60)
                 .foregroundStyle(isProminent ? LerroTheme.primaryActionForeground : LerroTheme.text)
-                .background(fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(fill, in: RoundedRectangle(cornerRadius: LerroTheme.rowRadius, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: LerroTheme.rowRadius, style: .continuous))
                 .opacity(isPressed ? 0.8 : 1)
                 .opacity(isEnabled ? 1 : 0.45)
                 .onHover { hovering = $0 }

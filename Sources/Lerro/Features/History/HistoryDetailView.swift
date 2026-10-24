@@ -60,8 +60,7 @@ struct HistoryDetailView: View {
                 aiCall
                 audio
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 18)
+            .padding(.horizontal, LerroTheme.detailHorizontalPadding)
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -75,40 +74,42 @@ struct HistoryDetailView: View {
     // MARK: Header
 
     private var header: some View {
-        HStack(spacing: 10) {
-            LerroAppIcon(bundleIdentifier: entry.bundleIdentifier, name: entry.applicationName, size: 28)
-            VStack(alignment: .leading, spacing: 1) {
+        HStack(spacing: 12) {
+            LerroAppIcon(bundleIdentifier: entry.bundleIdentifier, name: entry.applicationName, size: 24)
+            VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: entry.applicationName)
-                    .font(LerroFont.bodyEmphasis)
+                    .font(LerroFont.cardTitle)
                     .foregroundStyle(LerroTheme.text)
                     .lineLimit(1)
                 Text(verbatim: subtitle)
-                    .font(LerroFont.footnote)
+                    .font(LerroFont.caption)
                     .foregroundStyle(LerroTheme.metadataText)
                     .lineLimit(1)
             }
+            .layoutPriority(1)
             Spacer(minLength: 8)
-            Button {
-                session.copyText(entry.finalText)
-            } label: {
-                Label("复制", systemImage: "doc.on.doc")
+            HStack(spacing: 8) {
+                Button {
+                    session.copyText(entry.finalText)
+                } label: {
+                    // The metadata line keeps its full width; in a narrow
+                    // window the button drops its title and keeps the icon.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: LerroIconSize.medium.labelSpacing) {
+                            Image(systemName: "doc.on.doc")
+                                .lerroIcon(.medium)
+                            Text("复制")
+                        }
+                        Image(systemName: "doc.on.doc")
+                            .lerroIcon(.medium)
+                    }
+                }
+                .buttonStyle(LerroButtonStyle(.secondary))
+                .accessibilityLabel(Text("复制"))
+                HistoryMoreMenu(entry: entry, session: session, requestDelete: requestDelete)
             }
-            .buttonStyle(LerroButtonStyle(.secondary))
-            Menu {
-                HistoryEntryMenuItems(entry: entry, session: session, requestDelete: requestDelete)
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(LerroTheme.text)
-                    .frame(width: 28, height: 28)
-                    .background(LerroTheme.actionFill, in: Circle())
-                    .contentShape(Circle())
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .accessibilityLabel(Text("更多操作"))
         }
+        .frame(height: 40)
     }
 
     private var subtitle: String {
@@ -341,6 +342,41 @@ struct HistoryDetailView: View {
     }
 }
 
+// MARK: More menu
+
+/// 28×28 ellipsis menu with the same hover fill as `LerroIconButton`.
+private struct HistoryMoreMenu: View {
+    let entry: HistoryEntry
+    let session: AppSession
+    let requestDelete: (HistoryEntry) -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Menu {
+            HistoryEntryMenuItems(entry: entry, session: session, requestDelete: requestDelete)
+        } label: {
+            Image(systemName: "ellipsis")
+                .lerroIcon(.large)
+                .foregroundStyle(isHovering ? LerroTheme.text : LerroTheme.secondaryText)
+                .frame(width: LerroIconButton.size, height: LerroIconButton.size)
+                .background(isHovering ? LerroTheme.fillHover : Color.clear, in: shape)
+                .contentShape(shape)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .frame(width: LerroIconButton.size, height: LerroIconButton.size)
+        .onHover { isHovering = $0 }
+        .animation(.easeOut(duration: LerroTheme.hoverDuration), value: isHovering)
+        .accessibilityLabel(Text("更多操作"))
+    }
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+    }
+}
+
 // MARK: Timing
 
 private struct HistoryTimingView: View {
@@ -465,7 +501,7 @@ private struct HistoryAudioRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(LerroTheme.fillContainerThin, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(LerroTheme.fillContainerThin, in: RoundedRectangle(cornerRadius: LerroTheme.rowRadius, style: .continuous))
     }
 
     private var progressBar: some View {

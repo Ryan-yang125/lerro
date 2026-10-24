@@ -8,7 +8,7 @@ struct HomeAIOfferCard: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        HStack(alignment: .center, spacing: 22) {
+        HStack(alignment: .center, spacing: 24) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("开启 AI 整理")
                     .font(LerroFont.pageTitle)
@@ -28,7 +28,7 @@ struct HomeAIOfferCard: View {
             .frame(width: 200, alignment: .leading)
             example
         }
-        .homeCard(EdgeInsets(top: 16, leading: 18, bottom: 16, trailing: 18))
+        .homeCard()
     }
 
     private var example: some View {
@@ -37,7 +37,7 @@ struct HomeAIOfferCard: View {
                 .foregroundStyle(LerroTheme.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Image(systemName: "arrow.right")
-                .font(.system(size: 12, weight: .medium))
+                .lerroIcon(.small)
                 .foregroundStyle(LerroTheme.tertiaryText)
                 .accessibilityHidden(true)
             Text(verbatim: LerroInterfaceLocalization.string("周三下午四点开会，叫上 Laura。", locale: locale))
@@ -47,11 +47,11 @@ struct HomeAIOfferCard: View {
         }
         .font(LerroFont.body)
         .lineSpacing(2)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .background(
             LerroTheme.fillContainerThin,
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            in: RoundedRectangle(cornerRadius: LerroTheme.rowRadius, style: .continuous)
         )
         .accessibilityElement(children: .combine)
     }

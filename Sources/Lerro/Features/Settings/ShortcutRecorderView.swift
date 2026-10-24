@@ -763,9 +763,9 @@ private struct ShortcutLiveKeycap: View {
             .padding(.horizontal, 16)
             .frame(minWidth: 72, minHeight: 38)
             .background(isPressed ? LerroTheme.accent : LerroTheme.topLayer)
-            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.navigationRadius, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: LerroTheme.navigationRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
                     .stroke(isPressed ? LerroTheme.accent : LerroTheme.border, lineWidth: 1)
             }
             .shadow(color: .black.opacity(isPressed ? 0.08 : 0.12), radius: isPressed ? 1 : 3, y: isPressed ? 1 : 2)

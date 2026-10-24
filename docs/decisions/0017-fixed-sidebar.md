@@ -4,6 +4,7 @@
 - 日期：2026-10-24
 - 决策人：Lerro maintainers
 - 替代：ADR 0014 中「主窗口使用 `NavigationSplitView`」与侧栏、工具栏的部分
+- 被替代：隐藏标题栏的部分由 [ADR 0020](0020-main-window-alignment.md) 改为空的统一工具栏
 
 ## 背景
 

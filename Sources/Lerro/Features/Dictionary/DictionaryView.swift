@@ -83,22 +83,22 @@ struct DictionaryView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                    .controlSize(.large)
                     LerroSearchField(text: $session.dictionarySearch, prompt: "搜索词典")
                         .lerroPageTextInput(.dictionary, in: session)
-                    Menu {
-                        Button("导入 CSV…") { Task { await importCSV() } }
-                        Button("导出 CSV…") { exportCSV() }
-                            .disabled(session.dictionaryEntries.isEmpty)
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .accessibilityLabel(Text("更多"))
-                    }
-                    .menuIndicator(.hidden)
-                    .help("更多")
+                    DictionaryMoreMenu(
+                        canExport: !session.dictionaryEntries.isEmpty,
+                        importCSV: { Task { await importCSV() } },
+                        exportCSV: exportCSV
+                    )
                     Button {
                         editorTarget = .new
                     } label: {
-                        Label("新建", systemImage: "plus")
+                        HStack(spacing: LerroIconSize.medium.labelSpacing) {
+                            Image(systemName: "plus")
+                                .lerroIcon(.medium)
+                            Text("新建")
+                        }
                     }
                     .buttonStyle(LerroButtonStyle(.primary))
                 }
@@ -156,17 +156,28 @@ struct DictionaryView: View {
         }
         return List(selection: $selection) {
             ForEach(Array(sections.enumerated()), id: \.element.0) { index, section in
-                Section {
-                    ForEach(section.1) { entry in
-                        row(entry)
-                            .listRowBackground(section.0 == .recent ? LerroTheme.success.opacity(0.08) : nil)
-                    }
-                } header: {
-                    sectionHeader(section.0, showsLimitNote: index == 0 && scope == .all)
+                sectionHeading(section.0, isFirst: index == 0, showsLimitNote: index == 0 && scope == .all)
+                    .listRowInsets(rowInsets)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                ForEach(section.1) { entry in
+                    row(
+                        entry,
+                        isFirst: entry.id == section.1.first?.id,
+                        isLast: entry.id == section.1.last?.id
+                    )
+                    .listRowInsets(rowInsets)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(rowBackground(
+                        section.0,
+                        isFirst: entry.id == section.1.first?.id,
+                        isLast: entry.id == section.1.last?.id
+                    ))
                 }
             }
         }
-        .listStyle(.inset)
+        .environment(\.defaultMinListRowHeight, LerroTheme.sectionHeadingHeight)
+        .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .alternatingRowBackgrounds(.disabled)
         .contextMenu(forSelectionType: DictionaryEntry.ID.self) { ids in
@@ -191,8 +202,41 @@ struct DictionaryView: View {
         }
     }
 
-    private func sectionHeader(_ group: DictionaryGroup, showsLimitNote: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+    /// A plain macOS List adds 8 pt on each side of a row's insets; with it the
+    /// text leading edge lands at x = 248. Later groups start 24 below the previous one.
+    private static let listCellPadding: CGFloat = 8
+
+    private var rowInsets: EdgeInsets {
+        EdgeInsets(
+            top: 0,
+            leading: LerroTheme.contentHorizontalPadding - Self.listCellPadding,
+            bottom: 0,
+            trailing: LerroTheme.contentHorizontalPadding - Self.listCellPadding
+        )
+    }
+
+    /// The "本周新增" highlight runs from 12 left of the text to 16 from the
+    /// window edge, with rounded corners on the first and last row of the group.
+    @ViewBuilder
+    private func rowBackground(_ group: DictionaryGroup, isFirst: Bool, isLast: Bool) -> some View {
+        if group == .recent {
+            UnevenRoundedRectangle(
+                topLeadingRadius: isFirst ? LerroTheme.rowRadius : 0,
+                bottomLeadingRadius: isLast ? LerroTheme.rowRadius : 0,
+                bottomTrailingRadius: isLast ? LerroTheme.rowRadius : 0,
+                topTrailingRadius: isFirst ? LerroTheme.rowRadius : 0,
+                style: .continuous
+            )
+            .fill(LerroTheme.success.opacity(0.08))
+            .padding(.leading, 16)
+            .padding(.trailing, 16)
+        } else {
+            Color.clear
+        }
+    }
+
+    private func sectionHeading(_ group: DictionaryGroup, isFirst: Bool, showsLimitNote: Bool) -> some View {
+        HStack(alignment: .center) {
             Text(LocalizedStringKey(group.title))
                 .font(LerroFont.cardTitle)
                 .foregroundStyle(LerroTheme.text)
@@ -204,10 +248,11 @@ struct DictionaryView: View {
                     .foregroundStyle(LerroTheme.metadataText)
             }
         }
-        .padding(.vertical, 2)
+        .frame(height: LerroTheme.sectionHeadingHeight)
+        .padding(.top, isFirst ? LerroTheme.contentTopPadding : 24)
     }
 
-    private func row(_ entry: DictionaryEntry) -> some View {
+    private func row(_ entry: DictionaryEntry, isFirst: Bool, isLast: Bool) -> some View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 title(entry)
@@ -224,20 +269,18 @@ struct DictionaryView: View {
                 .font(LerroFont.caption.monospacedDigit())
                 .foregroundStyle(LerroTheme.metadataText)
                 .lineLimit(1)
-            Button {
+            LerroIconButton(systemImage: "xmark", help: "删除", iconSize: .medium) {
                 pendingDeletion = [entry]
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(LerroTheme.tertiaryText)
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .help("删除")
-            .accessibilityLabel(Text("删除"))
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) {
+            if !isLast {
+                Rectangle()
+                    .fill(LerroTheme.thinBorder)
+                    .frame(height: 0.5)
+            }
+        }
     }
 
     private func title(_ entry: DictionaryEntry) -> some View {
@@ -407,6 +450,42 @@ struct DictionaryView: View {
 
     private func localized(_ key: String) -> String {
         LerroInterfaceLocalization.string(key, locale: locale)
+    }
+}
+
+// MARK: - More menu
+
+/// 28×28 icon-button menu with the hover fill of `LerroIconButton`.
+private struct DictionaryMoreMenu: View {
+    let canExport: Bool
+    let importCSV: () -> Void
+    let exportCSV: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Menu {
+            Button("导入 CSV…", action: importCSV)
+            Button("导出 CSV…", action: exportCSV)
+                .disabled(!canExport)
+        } label: {
+            Image(systemName: "ellipsis")
+                .lerroIcon(.large)
+                .frame(width: LerroIconButton.size, height: LerroIconButton.size)
+                .foregroundStyle(hovering ? LerroTheme.text : LerroTheme.secondaryText)
+                .background(
+                    hovering ? LerroTheme.fillHover : Color.clear,
+                    in: RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+                .accessibilityLabel(Text("更多"))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .frame(width: LerroIconButton.size, height: LerroIconButton.size)
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: LerroTheme.hoverDuration), value: hovering)
+        .help("更多")
     }
 }
 

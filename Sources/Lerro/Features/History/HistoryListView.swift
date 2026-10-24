@@ -42,13 +42,17 @@ struct HistoryListView: View {
                                 )
                                 .id(entry.id)
                             }
+                            if group.id != groups.last?.id {
+                                Color.clear.frame(height: 12)
+                            }
                         } header: {
                             HistoryGroupHeader(title: group.title)
                         }
                     }
                     paginationFooter
                 }
-                .padding(.horizontal, 10)
+                .padding(.horizontal, LerroTheme.historyListInset)
+                .padding(.top, LerroTheme.contentTopPadding)
                 .padding(.bottom, 16)
             }
             .lerroPageFocusable(.history, in: session)
@@ -68,10 +72,10 @@ struct HistoryListView: View {
             if session.isLoadingHistoryPage {
                 ProgressView()
                     .controlSize(.small)
-                    .frame(maxWidth: .infinity, minHeight: 34)
+                    .frame(maxWidth: .infinity, minHeight: 32)
                     .accessibilityLabel(Text("正在加载更多"))
             } else if session.historyHasMore {
-                Color.clear.frame(height: 34)
+                Color.clear.frame(height: 32)
             }
         }
         .task(id: pageTrigger) {
@@ -111,12 +115,10 @@ private struct HistoryGroupHeader: View {
 
     var body: some View {
         Text(verbatim: title)
-            .font(LerroFont.sectionLabel)
-            .foregroundStyle(LerroTheme.metadataText)
-            .padding(.horizontal, 10)
-            .padding(.top, 12)
-            .padding(.bottom, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .font(LerroFont.listHeading)
+            .foregroundStyle(LerroTheme.secondaryText)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: LerroTheme.sectionHeadingHeight, alignment: .leading)
             .background(LerroTheme.main)
             .accessibilityAddTraits(.isHeader)
     }
@@ -134,11 +136,11 @@ private struct HistoryRow: View {
 
     var body: some View {
         Button(action: select) {
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
                 LerroAppIcon(
                     bundleIdentifier: entry.bundleIdentifier,
                     name: entry.applicationName,
-                    size: 22
+                    size: 20
                 )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: HistoryPresentation.listText(for: entry, locale: locale))
@@ -151,8 +153,8 @@ private struct HistoryRow: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 9)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(background, in: shape)
             .contentShape(shape)
@@ -179,7 +181,7 @@ private struct HistoryRow: View {
             Text(verbatim: HistoryPresentation.footnote(for: entry, locale: locale))
                 .foregroundStyle(LerroTheme.metadataText)
         }
-        .font(LerroFont.footnote)
+        .font(LerroFont.caption)
         .lineLimit(1)
     }
 
@@ -192,7 +194,7 @@ private struct HistoryRow: View {
     }
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
+        RoundedRectangle(cornerRadius: LerroTheme.rowRadius, style: .continuous)
     }
 
     private var background: Color {

@@ -25,7 +25,7 @@ struct AppTonesView: View {
     @State private var isPickerPresented = false
     @Environment(\.locale) private var locale
 
-    private let columns = [GridItem(.adaptive(minimum: 220), spacing: 12, alignment: .top)]
+    private let columns = [GridItem(.adaptive(minimum: 220), spacing: LerroTheme.cardSpacing, alignment: .top)]
 
     var body: some View {
         let target = currentTarget
@@ -34,13 +34,17 @@ struct AppTonesView: View {
                 Button {
                     isPickerPresented = true
                 } label: {
-                    Label("添加应用", systemImage: "plus")
+                    HStack(spacing: LerroIconSize.medium.labelSpacing) {
+                        Image(systemName: "plus")
+                            .lerroIcon(.medium)
+                        Text("添加应用")
+                    }
                 }
                 .buttonStyle(LerroButtonStyle(.primary))
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: LerroTheme.cardSpacing) {
                         AppToneCard(
                             name: localized("其他所有应用"),
                             bundleIdentifier: nil,
@@ -86,8 +90,9 @@ struct AppTonesView: View {
                     )
                     .id(target.id)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, LerroTheme.contentHorizontalPadding)
-                .padding(.top, 20)
+                .padding(.top, LerroTheme.contentTopPadding)
                 .padding(.bottom, 24)
             }
         }
@@ -120,7 +125,7 @@ struct AppTonesView: View {
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: "plus")
-                    .font(.system(size: 20, weight: .regular))
+                    .lerroIcon(.extraLarge)
                 Text("添加应用")
                     .font(LerroFont.caption)
             }
@@ -235,7 +240,7 @@ struct AppTonesView: View {
 // MARK: - Card
 
 private struct AppToneCard: View {
-    static let minimumHeight: CGFloat = 116
+    static let minimumHeight: CGFloat = 134
 
     let name: String
     let bundleIdentifier: String?
@@ -252,11 +257,11 @@ private struct AppToneCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
+                HStack(spacing: 12) {
                     if bundleIdentifier == nil {
-                        DefaultToneIcon(size: 32)
+                        DefaultToneIcon(size: 28)
                     } else {
-                        LerroAppIcon(bundleIdentifier: bundleIdentifier, name: name, size: 32)
+                        LerroAppIcon(bundleIdentifier: bundleIdentifier, name: name, size: 28)
                     }
                     Text(verbatim: name)
                         .font(LerroFont.bodyEmphasis)
@@ -286,7 +291,7 @@ private struct AppToneCard: View {
                 }
             }
         }
-        .padding(14)
+        .padding(LerroTheme.cardPadding)
         .frame(maxWidth: .infinity, minHeight: Self.minimumHeight, alignment: .topLeading)
         .background(
             isSelected ? LerroTheme.accentSoft : LerroTheme.topLayer,
@@ -326,7 +331,7 @@ private struct DefaultToneIcon: View {
                     endPoint: .bottomTrailing
                 ))
             Image(systemName: "square.grid.2x2")
-                .font(.system(size: size * 0.45, weight: .medium))
+                .lerroIcon(.medium)
                 .foregroundStyle(.white)
         }
         .frame(width: size, height: size)
@@ -393,7 +398,7 @@ private struct AppToneEditor: View {
                 Divider()
                 previewColumn
             }
-            .padding(16)
+            .padding(LerroTheme.cardPadding)
         }
         .background(
             LerroTheme.topLayer,
@@ -426,7 +431,7 @@ private struct AppToneEditor: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             if target.kind == .defaultTone {
                 DefaultToneIcon(size: 24)
             } else {
@@ -450,8 +455,8 @@ private struct AppToneEditor: View {
                 .buttonStyle(LerroButtonStyle(.primary))
                 .disabled(!canSave)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, LerroTheme.cardPadding)
+        .padding(.vertical, 12)
     }
 
     private var instructionColumn: some View {
@@ -480,8 +485,14 @@ private struct AppToneEditor: View {
 
             if session.selectedAIIsReady {
                 TextField("示例句子", text: $sample, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .font(LerroFont.body)
                     .lineLimit(1...3)
+                    .padding(8)
+                    .background(
+                        LerroTheme.fillContainerThin,
+                        in: RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                    )
                     .lerroPageTextInput(.appTones, in: session)
 
                 previewResultBox
@@ -489,10 +500,11 @@ private struct AppToneEditor: View {
                 Button {
                     runPreview()
                 } label: {
-                    Label(
-                        LocalizedStringKey(previewResult == nil ? "用 AI 试一下" : "用 AI 再试一次"),
-                        systemImage: "arrow.clockwise"
-                    )
+                    HStack(spacing: LerroIconSize.medium.labelSpacing) {
+                        Image(systemName: "arrow.clockwise")
+                            .lerroIcon(.medium)
+                        Text(LocalizedStringKey(previewResult == nil ? "用 AI 试一下" : "用 AI 再试一次"))
+                    }
                 }
                 .buttonStyle(LerroButtonStyle(.secondary))
                 .disabled(isPreviewing || trimmedDraft.isEmpty || trimmedSample.isEmpty)

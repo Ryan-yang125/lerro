@@ -8,12 +8,12 @@ struct HomeActivityCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 44) {
+            HStack(alignment: .top, spacing: 40) {
                 metric(statistics.activeDays, title: "活跃天数")
                 metric(statistics.currentStreak, title: "当前连续")
                 metric(statistics.longestStreak, title: "最长连续")
                 Spacer(minLength: 0)
-                VStack(alignment: .trailing, spacing: 1) {
+                VStack(alignment: .trailing, spacing: 2) {
                     value(statistics.today.totalWords, unit: "字")
                     Text("今天")
                         .font(LerroFont.caption)
@@ -43,11 +43,11 @@ struct HomeActivityCard: View {
             .font(LerroFont.footnote)
             .foregroundStyle(LerroTheme.metadataText)
         }
-        .homeCard(EdgeInsets(top: 18, leading: 20, bottom: 16, trailing: 20))
+        .homeCard()
     }
 
     private func metric(_ number: Int, title: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 2) {
             value(number, unit: "天")
             Text(LocalizedStringKey(title))
                 .font(LerroFont.caption)
@@ -123,7 +123,7 @@ private struct HomeHeatmap: View {
         return VStack(alignment: .leading, spacing: gap) {
             ForEach(0..<7, id: \.self) { row in
                 Text(verbatim: [1, 3, 5].contains(row) && row < symbols.count ? symbols[row] : "")
-                    .font(.system(size: 10))
+                    .font(LerroFont.axisLabel)
                     .foregroundStyle(LerroTheme.metadataText)
                     .frame(height: cell, alignment: .center)
             }

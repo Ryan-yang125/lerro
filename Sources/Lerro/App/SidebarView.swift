@@ -9,9 +9,9 @@ struct SidebarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             LerroWordmark(height: 18)
-                .padding(.leading, 20)
-                .padding(.top, LerroTheme.pageHeaderHeight + 4)
-                .padding(.bottom, 14)
+                .padding(.leading, LerroTheme.sidebarInset + LerroTheme.sidebarRowPadding)
+                .frame(height: LerroTheme.sidebarWordmarkRowHeight, alignment: .leading)
+                .padding(.top, LerroTheme.pageHeaderHeight)
             VStack(spacing: 2) {
                 row(.home, title: "首页", systemImage: "house")
                 row(.history, title: "历史", systemImage: "clock.arrow.circlepath", count: session.historyAllCount)
@@ -28,7 +28,7 @@ struct SidebarView: View {
                     count: session.preferences.appToneProfiles.count
                 )
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, LerroTheme.sidebarInset)
             Spacer(minLength: 0)
             footer
         }
@@ -53,7 +53,7 @@ struct SidebarView: View {
     }
 
     private var footer: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 4) {
             if AppUpdateController.shared.updateAvailable {
                 updateCard
             }
@@ -67,11 +67,14 @@ struct SidebarView: View {
                 Text(verbatim: AppMetadata.version)
                     .font(LerroFont.footnote)
                     .foregroundStyle(LerroTheme.tertiaryText)
+                    .padding(.trailing, LerroTheme.sidebarRowPadding)
             }
-            .padding(.horizontal, 4)
+            // 5 = (28 button - 18 icon box) / 2, so the icon box lands on x = 18.
+            .padding(.leading, 5)
+            .frame(height: LerroTheme.sidebarRowHeight)
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 10)
+        .padding(.horizontal, LerroTheme.sidebarInset)
+        .padding(.bottom, 8)
     }
 
     @ViewBuilder
@@ -122,11 +125,7 @@ struct SidebarView: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 LerroStatusDot(color: dot)
-                (Text(verbatim: title)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(LerroTheme.text)
-                    + Text(verbatim: detail)
-                    .foregroundStyle(LerroTheme.secondaryText))
+                Text("\(Text(verbatim: title).fontWeight(.semibold).foregroundStyle(LerroTheme.text))\(Text(verbatim: detail).foregroundStyle(LerroTheme.secondaryText))")
                     .font(LerroFont.caption)
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -137,15 +136,15 @@ struct SidebarView: View {
                 }
                 if showsChevron {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
+                        .lerroIcon(.small)
                         .foregroundStyle(LerroTheme.tertiaryText)
                         .accessibilityHidden(true)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(fill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding(.horizontal, LerroTheme.sidebarRowPadding)
+            .frame(height: LerroTheme.sidebarRowHeight)
+            .background(fill, in: RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(verbatim: title + detail + (trailingLink.map { "，\($0)" } ?? "")))
@@ -184,9 +183,9 @@ struct SidebarView: View {
         return Button {
             AppUpdateController.shared.checkForUpdates()
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: LerroIconSize.medium.labelSpacing) {
                 Image(systemName: "arrow.down.circle")
-                    .font(LerroFont.caption)
+                    .lerroIcon(.medium)
                 Text(verbatim: title)
                     .font(LerroFont.caption.weight(.semibold))
                     .lineLimit(1)
@@ -195,13 +194,13 @@ struct SidebarView: View {
                     .font(LerroFont.caption)
             }
             .foregroundStyle(LerroTheme.accentText)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, LerroTheme.sidebarRowPadding)
+            .frame(height: LerroTheme.sidebarRowHeight)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
                     .fill(LerroTheme.accentSoft)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(verbatim: "\(title)，\(localized("更新"))"))
@@ -234,11 +233,10 @@ private struct SidebarRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 9) {
+            HStack(spacing: LerroIconSize.large.labelSpacing) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 14))
+                    .lerroIcon(.large)
                     .foregroundStyle(isSelected ? LerroTheme.accent : LerroTheme.secondaryText)
-                    .frame(width: 20)
                 Text(verbatim: title)
                     .font(isSelected ? LerroFont.bodyEmphasis : LerroFont.body)
                     .foregroundStyle(LerroTheme.text)
@@ -250,13 +248,13 @@ private struct SidebarRow: View {
                         .foregroundStyle(LerroTheme.tertiaryText)
                 }
             }
-            .padding(.horizontal, 10)
-            .frame(height: 32)
+            .padding(.horizontal, LerroTheme.sidebarRowPadding)
+            .frame(height: LerroTheme.sidebarRowHeight)
             .background(
                 isSelected ? LerroTheme.fillSelected : isHovered ? LerroTheme.fillHover : Color.clear,
-                in: RoundedRectangle(cornerRadius: LerroTheme.navigationRadius, style: .continuous)
+                in: RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
             )
-            .contentShape(RoundedRectangle(cornerRadius: LerroTheme.navigationRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }

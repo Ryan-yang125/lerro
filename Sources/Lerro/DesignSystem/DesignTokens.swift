@@ -164,17 +164,50 @@ enum LerroTheme {
     static let hudLiveTextMaximumWidth: CGFloat = 400
 
     // MARK: Geometry
+    //
+    // Main-window alignment (docs: DESIGN.md "Alignment"). Points from the
+    // window's top-left corner:
+    //   y = 26   traffic lights, page titles, every page-header control
+    //   y = 72   sidebar wordmark, the first heading of a page's content,
+    //            the History detail app row
+    //   x = 18   everything in the sidebar
+    //   x = 248  page titles and page content
+    //   x = 604  History detail
 
     static let hubMinimumSize = CGSize(width: 988, height: 658)
     static let sidebarWidth: CGFloat = 220
-    /// Height of the page header row, level with the traffic lights.
+    /// Height of the page header row; its middle line holds the traffic lights.
     static let pageHeaderHeight: CGFloat = 52
+    /// Sidebar list and footer inset from the sidebar edges.
+    static let sidebarInset: CGFloat = 8
+    /// Leading and trailing padding inside a sidebar row; with `sidebarInset`
+    /// it puts every sidebar icon on x = 18.
+    static let sidebarRowPadding: CGFloat = 10
+    static let sidebarRowHeight: CGFloat = 32
+    /// Wordmark row under the traffic lights, 52–92, middle line y = 72.
+    static let sidebarWordmarkRowHeight: CGFloat = 40
     static let contentHorizontalPadding: CGFloat = 28
+    /// Space between the page header and the first content block (y = 60).
+    static let contentTopPadding: CGFloat = 8
+    /// Heading row at the top of a content group; the first one spans 60–84.
+    static let sectionHeadingHeight: CGFloat = 24
+    static let cardPadding: CGFloat = 20
+    static let cardSpacing: CGFloat = 12
+    static let historyListWidth: CGFloat = 360
+    /// History list inset; with the row padding of 12 it puts row icons on x = 248.
+    static let historyListInset: CGFloat = 16
+    static let detailHorizontalPadding: CGFloat = 24
     static let hudPanelSize = CGSize(width: 560, height: 120)
     static let hudContentBottomInset: CGFloat = 18
-    static let navigationRadius: CGFloat = 8
+
+    // Radii are concentric: an inner radius is the outer radius minus the
+    // distance between the two edges, and never less than `keycapRadius`.
     static let cardRadius: CGFloat = 16
+    /// History rows, Dictionary highlight, blocks inside the menu bar panel.
+    static let rowRadius: CGFloat = 10
+    /// Sidebar rows, icon buttons, text fields and editors.
     static let controlRadius: CGFloat = 8
+    static let keycapRadius: CGFloat = 6
 
     // MARK: Typography
 
@@ -239,10 +272,63 @@ enum LerroFont {
     static let cardUnit = Font.system(size: 13, weight: .semibold)
     static let streakValue = Font.system(size: 22, weight: .bold).monospacedDigit()
     static let streakUnit = Font.system(size: 12, weight: .semibold)
-    static let cardDelta = Font.system(size: 11.5, weight: .semibold).monospacedDigit()
+    static let cardDelta = Font.system(size: 12, weight: .semibold).monospacedDigit()
     static let cardTitle = Font.system(size: 13, weight: .semibold)
-    static let axisLabel = Font.system(size: 10.5)
+    static let axisLabel = Font.system(size: 11)
     static let caption = Font.system(size: 12)
     static let footnote = Font.system(size: 11)
     static let sectionLabel = Font.system(size: 11, weight: .semibold)
+    /// History date headings.
+    static let listHeading = Font.system(size: 12, weight: .semibold)
+}
+
+/// The four SF Symbols sizes. Symbols are outline and regular weight; status
+/// and playback symbols use the filled variant. Apply with
+/// `.lerroIcon(.large)`, which also fixes the alignment box so a symbol's
+/// leading edge sits on the layout's alignment line.
+enum LerroIconSize {
+    /// Disclosure and menu chevrons, clear buttons, external-link arrows.
+    case small
+    /// Search glyphs, menu bar panel rows, icons inside text buttons, row delete.
+    case medium
+    /// Sidebar rows, 28 pt icon buttons.
+    case large
+    /// Empty states and onboarding.
+    case extraLarge
+
+    var pointSize: CGFloat {
+        switch self {
+        case .small: 10
+        case .medium: 12
+        case .large: 14
+        case .extraLarge: 20
+        }
+    }
+
+    /// Alignment box around the symbol.
+    var box: CGFloat {
+        switch self {
+        case .small: 12
+        case .medium: 16
+        case .large: 18
+        case .extraLarge: 24
+        }
+    }
+
+    /// Space between the symbol box and a label beside it.
+    var labelSpacing: CGFloat {
+        switch self {
+        case .small: 4
+        case .medium: 6
+        case .large, .extraLarge: 8
+        }
+    }
+}
+
+extension View {
+    /// Sizes an SF Symbol to one of the four icon sizes inside its alignment box.
+    func lerroIcon(_ size: LerroIconSize) -> some View {
+        font(.system(size: size.pointSize))
+            .frame(width: size.box, height: size.box)
+    }
 }

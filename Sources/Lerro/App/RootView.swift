@@ -9,15 +9,17 @@ struct RootView: View {
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
     @State private var focusResetter = WindowFocusResetter()
+    @State private var toolbarBandHeight: CGFloat = 0
 
     var body: some View {
         ZStack {
             if session.isPanelOnlyVisualFixture {
                 visualFixture
             } else {
-                // A fixed sidebar beside the page. The window has no title bar:
-                // the sidebar runs up under the traffic lights and each page
-                // draws its own header (LerroPageHeader).
+                // A fixed sidebar beside the page. The window has an empty
+                // toolbar and no visible title: the sidebar runs up under the
+                // traffic lights and each page draws its own header
+                // (LerroPageHeader) in the toolbar's 52 pt band.
                 LerroSplitLayout(axis: .horizontal, firstLength: LerroTheme.sidebarWidth) {
                     SidebarView(session: session)
                         .background(LerroTheme.sidebar)
@@ -29,7 +31,6 @@ struct RootView: View {
                     detail
                         .background(LerroTheme.main)
                 }
-                .ignoresSafeArea(.container, edges: .top)
                 .tracking(LerroTheme.uiTracking)
                 .allowsHitTesting(!session.isOnboardingPresented)
                 .accessibilityHidden(session.isOnboardingPresented)
@@ -42,11 +43,15 @@ struct RootView: View {
                 }
             }
         }
+        .ignoresSafeArea(.container, edges: .top)
+        // SwiftUI adds the toolbar band to the minimum content size, so it is
+        // taken off here to keep the whole window at least 988 × 658.
         .frame(
             minWidth: LerroTheme.hubMinimumSize.width,
-            minHeight: LerroTheme.hubMinimumSize.height
+            minHeight: LerroTheme.hubMinimumSize.height - toolbarBandHeight
         )
         .tint(LerroTheme.accent)
+        .background(MainWindowToolbarInstaller(bandHeight: $toolbarBandHeight))
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: session.isOnboardingPresented)
         .onChange(of: session.visualFixturePresentation, initial: true) { _, presentation in
             if presentation?.hasPrefix("settings-") == true {
@@ -177,5 +182,35 @@ private final class WindowTrackingView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         resetter.window = window
+    }
+}
+
+/// Gives the main window an empty unified toolbar. macOS then draws the
+/// window with its toolbar corner radius (26 pt) and centres the traffic
+/// lights on y = 26, the middle line of every page header.
+private struct MainWindowToolbarInstaller: NSViewRepresentable {
+    @Binding var bandHeight: CGFloat
+
+    func makeNSView(context: Context) -> NSView {
+        let view = ToolbarInstallingView()
+        view.onInstall = { height in bandHeight = height }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+private final class ToolbarInstallingView: NSView {
+    var onInstall: (CGFloat) -> Void = { _ in }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window, window.toolbar == nil else { return }
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.toolbar = NSToolbar(identifier: "LerroMainWindow")
+        window.toolbarStyle = .unified
+        let bandHeight = window.frame.height - window.contentLayoutRect.height
+        DispatchQueue.main.async { [onInstall] in onInstall(bandHeight) }
     }
 }

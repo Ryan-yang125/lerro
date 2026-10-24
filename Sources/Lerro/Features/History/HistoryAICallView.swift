@@ -47,13 +47,13 @@ struct HistoryAICallView: View {
             Divider()
             footer
         }
-        .background(LerroTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(LerroTheme.card, in: RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
                 .strokeBorder(LerroTheme.thinBorder, lineWidth: 0.5)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: LerroTheme.cardRadius, style: .continuous)
                 .strokeBorder(LerroTheme.accent, lineWidth: 2)
                 .opacity(isHighlighted ? 1 : 0)
                 .animation(reduceMotion ? Animation?.none : Animation.easeOut(duration: 0.3), value: isHighlighted)
@@ -69,7 +69,7 @@ struct HistoryAICallView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("AI 处理")
-                .font(.system(size: 13, weight: .semibold))
+                .font(LerroFont.cardTitle)
                 .foregroundStyle(LerroTheme.text)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
@@ -81,9 +81,9 @@ struct HistoryAICallView: View {
                 .truncationMode(.middle)
                 .textSelection(.enabled)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 12)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
     }
 
     private var headerSummary: String {
@@ -150,15 +150,15 @@ struct HistoryAICallView: View {
         if call.terms.contains(where: { TermLearner.normalized($0) == corrected }) {
             switch session.termLearningStatus(for: fix.corrected) {
             case .inDictionary:
-                HStack(spacing: 3) {
+                HStack(spacing: 4) {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
+                        .lerroIcon(.small)
                         .accessibilityHidden(true)
                     Text("已记住")
                 }
                 .font(LerroFont.footnote.weight(.medium))
                 .foregroundStyle(LerroTheme.success)
-                .padding(.horizontal, 7)
+                .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(LerroTheme.success.opacity(0.14), in: Capsule())
             case .pending(let remaining):
@@ -169,7 +169,7 @@ struct HistoryAICallView: View {
                 ))
                 .font(LerroFont.footnote)
                 .foregroundStyle(LerroTheme.secondaryText)
-                .padding(.horizontal, 7)
+                .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(LerroTheme.fillContainerTough, in: Capsule())
             case .notLearning:
@@ -208,7 +208,7 @@ struct HistoryAICallView: View {
 
     private var seenBlock: some View {
         block("发给 AI 的内容") {
-            Grid(alignment: .topLeading, horizontalSpacing: 8, verticalSpacing: 7) {
+            Grid(alignment: .topLeading, horizontalSpacing: LerroIconSize.medium.labelSpacing, verticalSpacing: 8) {
                 if let context {
                     seenRow(symbol: "mic", label: "你说的话") { valueText(context.transcript) }
                     if let target = context.targetLanguage, !target.isEmpty {
@@ -289,9 +289,8 @@ struct HistoryAICallView: View {
     ) -> some View {
         GridRow(alignment: .firstTextBaseline) {
             Image(systemName: symbol)
-                .font(.system(size: 11))
+                .lerroIcon(.medium)
                 .foregroundStyle(LerroTheme.tertiaryText)
-                .frame(width: 16)
                 .accessibilityHidden(true)
             Text(LocalizedStringKey(label))
                 .foregroundStyle(LerroTheme.metadataText)
@@ -371,7 +370,7 @@ struct HistoryAICallView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 Text("费用")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(LerroFont.listHeading)
                     .foregroundStyle(LerroTheme.secondaryText)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
@@ -382,7 +381,7 @@ struct HistoryAICallView: View {
                         HStack(spacing: 4) {
                             Text("计算方式")
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 9, weight: .semibold))
+                                .lerroIcon(.small)
                                 .rotationEffect(.degrees(showsCostDetail ? 90 : 0))
                         }
                         .font(LerroFont.caption)
@@ -402,9 +401,8 @@ struct HistoryAICallView: View {
                     .padding(.top, 8)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     private var costSentence: String {
@@ -431,7 +429,7 @@ struct HistoryAICallView: View {
 
     private func costTable(_ cost: AICallCost) -> some View {
         let symbol = cost.currency.symbol
-        return Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 4) {
+        return Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 4) {
             ForEach(Array(cost.lines.enumerated()), id: \.offset) { _, line in
                 if line.tokens > 0 {
                     GridRow {
@@ -524,9 +522,9 @@ struct HistoryAICallView: View {
             .buttonStyle(.plain)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
     }
 
     // MARK: Layout helpers
@@ -537,15 +535,14 @@ struct HistoryAICallView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(LocalizedStringKey(title))
-                .font(.system(size: 12, weight: .semibold))
+                .font(LerroFont.listHeading)
                 .foregroundStyle(LerroTheme.secondaryText)
                 .accessibilityAddTraits(.isHeader)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 }
 
@@ -636,12 +633,16 @@ private struct HistoryAIRawDataSheet: View {
                 Button {
                     session.copyText(content)
                 } label: {
-                    Label("复制", systemImage: "doc.on.doc")
+                    HStack(spacing: LerroIconSize.medium.labelSpacing) {
+                        Image(systemName: "doc.on.doc")
+                            .lerroIcon(.medium)
+                        Text("复制")
+                    }
                 }
                 .buttonStyle(LerroButtonStyle(.secondary))
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 14)
+            .padding(.vertical, 12)
             Divider()
             ScrollView([.vertical, .horizontal]) {
                 Text(verbatim: content)

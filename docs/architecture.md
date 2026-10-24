@@ -201,7 +201,7 @@ WAL）：每条记录一行，`created_at`、`mode`、`status`、文字、应用
 
 ## UI
 
-- 主窗口为隐藏标题栏的窗口，左侧是 220 pt 固定侧栏（首页、历史、词典、应用语气），每页顶部是 `LerroPageHeader`（[ADR 0017](decisions/0017-fixed-sidebar.md)）；设置位于 `Settings` 场景（⌘,），标签为通用、听写、AI 整理、
+- 主窗口挂一个空的统一工具栏、隐藏标题（[ADR 0020](decisions/0020-main-window-alignment.md)），左侧是 220 pt 固定侧栏（首页、历史、词典、应用语气），每页顶部是 `LerroPageHeader`（[ADR 0017](decisions/0017-fixed-sidebar.md)）；设置位于 `Settings` 场景（⌘,），标签为通用、听写、AI 整理、
   隐私、关于；用量明细是 AI 整理页里的二级页面（`aiSettingsShowsUsage`）。`AppSession.openSettings(_:)` 选中标签并打开设置窗口。菜单栏面板单独呈现。决策见 [ADR 0014](decisions/0014-main-window-rebuild.md)。
 - HUD 是 40 pt 高的墨黑玻璃胶囊，宽度最大 480 pt，所有状态在同一胶囊内形变，由
   [`AppSession.currentHUDVisualState`](../Sources/Lerro/App/AppSession.swift) 与

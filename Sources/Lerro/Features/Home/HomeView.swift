@@ -25,10 +25,9 @@ struct HomeView: View {
 
     private var content: some View {
         let statistics = session.homeStatistics
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: LerroTheme.cardSpacing) {
             HomeHeaderView(totalWords: statistics.total.totalWords)
-            .padding(.top, 6)
-            .padding(.bottom, 8)
+                .padding(.bottom, 8)
             HomeStatCards(statistics: statistics)
             if session.showsAIOffer {
                 HomeAIOfferCard(
@@ -42,16 +41,16 @@ struct HomeView: View {
                 }
             }
             HomeActivityCard(statistics: statistics)
-            LerroEqualColumns(spacing: 12) {
+            LerroEqualColumns(spacing: LerroTheme.cardSpacing) {
                 HomeTopAppsCard(apps: statistics.topApps)
                 HomeHoursCard(hourCounts: statistics.hourCounts, peakHour: statistics.peakHour)
             }
         }
-        .padding(.top, 4)
+        .padding(.top, LerroTheme.contentTopPadding)
         .padding(.bottom, 28)
         .padding(.horizontal, LerroTheme.contentHorizontalPadding)
         .frame(maxWidth: 812 + 2 * LerroTheme.contentHorizontalPadding, alignment: .topLeading)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private var emptyTitle: String {
@@ -68,10 +67,10 @@ struct HomeView: View {
 // MARK: Shared card style and formatting
 
 extension View {
-    /// Surface, hairline border and card radius shared by the Home cards.
-    func homeCard(_ padding: EdgeInsets) -> some View {
+    /// Surface, hairline border, card radius and padding shared by the Home cards.
+    func homeCard() -> some View {
         self
-            .padding(padding)
+            .padding(LerroTheme.cardPadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(
                 LerroTheme.card,

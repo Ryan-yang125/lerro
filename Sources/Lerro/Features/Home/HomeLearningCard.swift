@@ -40,7 +40,7 @@ struct HomeLearningCard: View {
                 .foregroundStyle(LerroTheme.metadataText)
             }
         }
-        .homeCard(EdgeInsets(top: 16, leading: 18, bottom: 16, trailing: 18))
+        .homeCard()
     }
 
     private var title: String {

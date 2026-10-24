@@ -40,7 +40,7 @@ struct HomeShortcutsView: View {
     ]
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             ForEach(actions, id: \.action) { item in
                 if let hotkey = hotkeys.first(where: { $0.action == item.action }) {
                     HStack(spacing: 6) {
@@ -53,7 +53,6 @@ struct HomeShortcutsView: View {
                 }
             }
         }
-        .padding(.horizontal, 4)
         .fixedSize()
     }
 }
@@ -66,7 +65,7 @@ struct HomeStatCards: View {
     var body: some View {
         let total = statistics.total
         let today = statistics.today
-        LerroEqualColumns(spacing: 12) {
+        LerroEqualColumns(spacing: LerroTheme.cardSpacing) {
             HomeStatCard(
                 parts: HomeFormat.duration(total.savedSeconds, locale: locale),
                 title: "比打字省下",
@@ -122,10 +121,10 @@ private struct HomeStatCard: View {
     let today: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 ForEach(parts) { part in
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text(verbatim: part.value)
                             .font(LerroFont.cardValue)
                             .foregroundStyle(LerroTheme.text)
@@ -155,9 +154,9 @@ private struct HomeStatCard: View {
             }
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .padding(.top, 7)
+            .padding(.top, 8)
         }
-        .homeCard(EdgeInsets(top: 16, leading: 18, bottom: 15, trailing: 18))
+        .homeCard()
         .accessibilityElement(children: .combine)
     }
 }

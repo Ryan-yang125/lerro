@@ -12,13 +12,13 @@ struct HomeTopAppsCard: View {
                 .font(LerroFont.cardTitle)
                 .foregroundStyle(LerroTheme.text)
                 .accessibilityAddTraits(.isHeader)
-            VStack(spacing: 9) {
+            VStack(spacing: 8) {
                 ForEach(apps) { app in
                     row(app)
                 }
             }
         }
-        .homeCard(EdgeInsets(top: 16, leading: 18, bottom: 16, trailing: 18))
+        .homeCard()
     }
 
     private func row(_ app: HomeStatistics.AppShare) -> some View {
@@ -105,7 +105,7 @@ struct HomeHoursCard: View {
                 peakLine(peakHour)
             }
         }
-        .homeCard(EdgeInsets(top: 16, leading: 18, bottom: 16, trailing: 18))
+        .homeCard()
         .accessibilityElement(children: .combine)
     }
 

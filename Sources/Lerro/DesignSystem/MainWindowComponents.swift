@@ -72,24 +72,34 @@ struct LerroButtonStyle: ButtonStyle {
     }
 }
 
-/// 26×26 icon button with a hover fill.
+/// 28×28 icon button with a hover fill. The symbol is `.large` unless the
+/// button sits inside a row, where it is `.medium`.
 struct LerroIconButton: View {
+    static let size: CGFloat = 28
+
     let systemImage: String
     let help: String
+    let iconSize: LerroIconSize
     let action: () -> Void
     @Environment(\.locale) private var locale
 
-    init(systemImage: String, help: String, action: @escaping () -> Void) {
+    init(
+        systemImage: String,
+        help: String,
+        iconSize: LerroIconSize = .large,
+        action: @escaping () -> Void
+    ) {
         self.systemImage = systemImage
         self.help = help
+        self.iconSize = iconSize
         self.action = action
     }
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 26, height: 26)
+                .lerroIcon(iconSize)
+                .frame(width: Self.size, height: Self.size)
         }
         .buttonStyle(IconStyle())
         .help(Text(verbatim: localizedHelp))
@@ -116,9 +126,9 @@ struct LerroIconButton: View {
                     .foregroundStyle(hovering ? LerroTheme.text : LerroTheme.secondaryText)
                     .background(
                         isPressed || hovering ? LerroTheme.fillHover : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
                     )
-                    .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous))
                     .opacity(isEnabled ? 1 : 0.5)
                     .onHover { hovering = $0 }
                     .animation(.easeOut(duration: LerroTheme.hoverDuration), value: hovering)
@@ -135,7 +145,7 @@ struct LerroShortcutKeys: View {
     var onAccent = false
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             ForEach(Array(Self.keys(in: displayName).enumerated()), id: \.offset) { _, key in
                 LerroKeycap(key, onAccent: onAccent)
             }
@@ -191,8 +201,8 @@ struct LerroKeycap: View {
         Text(verbatim: text)
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(onAccent ? Color.white : LerroTheme.text)
-            .padding(.horizontal, 5)
-            .frame(minWidth: 22, minHeight: 20)
+            .padding(.horizontal, 6)
+            .frame(minWidth: 20, minHeight: 20)
             .background(onAccent ? Color.white.opacity(0.22) : fill, in: shape)
             .overlay { shape.strokeBorder(onAccent ? Color.clear : edge, lineWidth: 0.5) }
             .shadow(color: onAccent ? Color.clear : edge, radius: 0, x: 0, y: 1)
@@ -202,7 +212,7 @@ struct LerroKeycap: View {
     private var edge: Color { LerroTheme.keycapBorder(colorScheme) }
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 5, style: .continuous)
+        RoundedRectangle(cornerRadius: LerroTheme.keycapRadius, style: .continuous)
     }
 }
 
@@ -271,7 +281,7 @@ struct LerroStatusDot: View {
     var body: some View {
         Circle()
             .fill(color)
-            .frame(width: 7, height: 7)
+            .frame(width: 8, height: 8)
             .accessibilityHidden(true)
     }
 }
@@ -465,7 +475,7 @@ struct LerroPageHeader<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Text(verbatim: title)
                 .font(LerroFont.pageTitle)
                 .foregroundStyle(LerroTheme.text)
@@ -490,7 +500,7 @@ extension LerroPageHeader where Trailing == EmptyView {
     }
 }
 
-/// Search field for a page header.
+/// 200×28 capsule search field for a page header.
 struct LerroSearchField: View {
     @Binding var text: String
     let prompt: String
@@ -500,7 +510,7 @@ struct LerroSearchField: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12, weight: .medium))
+                .lerroIcon(.medium)
                 .foregroundStyle(LerroTheme.tertiaryText)
                 .accessibilityHidden(true)
             TextField(text: $text, prompt: Text(verbatim: localizedPrompt)) {
@@ -515,21 +525,18 @@ struct LerroSearchField: View {
                     text = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
+                        .lerroIcon(.small)
                         .foregroundStyle(LerroTheme.tertiaryText)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("清除"))
             }
         }
-        .padding(.horizontal, 9)
+        .padding(.horizontal, 10)
         .frame(width: 200, height: 28)
-        .background(
-            LerroTheme.fillContainerThin,
-            in: RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
-        )
+        .background(LerroTheme.fillContainerThin, in: Capsule())
         .overlay {
-            RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+            Capsule()
                 .strokeBorder(focused ? LerroTheme.accent : LerroTheme.thinBorder, lineWidth: focused ? 1 : 0.5)
         }
         .contentShape(Rectangle())
