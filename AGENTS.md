@@ -65,6 +65,17 @@ Lerro -> LerroIntelligence -> LerroCore
 - UI 改动用 inert fixture（见 `docs/development.md`）检查 1080×750 与 988×658、浅色、深色、Increase Contrast、Reduce Transparency、Reduce Motion。
 - 品牌资产与规则在 [`Brand/`](Brand/README.md)。
 
+## 性能规则
+
+完整规范、预算和测量方法见 [`docs/performance.md`](docs/performance.md)。
+
+- 页面级分栏用 `LerroSplitLayout`，等宽卡片行用 `LerroEqualColumns`；不用 `HStack`/`VStack` 包页面级 `ScrollView`，卡片行不用 `.fixedSize` 取齐。
+- 四个页面常驻：页面根部不放随可见性变化的环境值或 `.disabled`；新的可聚焦控件接 `lerroPageTextInput` 或 `lerroPageFocusable`；进入页面要做的事用 `onLerroPageVisibilityChange`；用数据初始化的 `@State` 跟随数据变化。
+- 高频属性只给 HUD 读；`@Observable` 属性值没变就不赋值。
+- commit point 之后到回到 `idle` 之间没有等待和存储 I/O；采集链路新增步骤要加 `CaptureMilestone`。
+- 存储不整份重写文件，页面用分页和条件查询，不读全量历史。
+- 改动主窗口、页面或 `AppSession` 时运行 `./script/measure_ui_performance.sh`，切页超出预算或焦点检查失败时在最终说明里写明原因和数字。
+
 ## 变更与发布
 
 - 行为、命令、环境变量或数据边界变化时，同一变更更新对应文档。长期架构决策写入 [`docs/decisions/`](docs/decisions/README.md)。

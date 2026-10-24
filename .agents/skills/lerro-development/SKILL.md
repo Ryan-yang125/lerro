@@ -24,6 +24,9 @@ holds the commands. `docs/architecture.md` describes the code.
    `swift test`.
 3. For UI, build with `./script/build_and_run.sh --debug --no-launch` and check with
    the inert fixture variables in `docs/development.md`.
+   For main-window, page, or `AppSession` changes, follow `docs/performance.md`
+   and run `./script/measure_ui_performance.sh` on a release build
+   (`./script/build_and_run.sh --no-launch`); debug builds are not comparable.
 4. Update the document that describes any behavior, command, data, or permission
    you changed. Add an ADR under `docs/decisions/` for a long-lived architecture
    change.

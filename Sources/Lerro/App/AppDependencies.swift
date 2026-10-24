@@ -72,8 +72,9 @@ struct AppDependencies: Sendable {
     }
 
     private static func fixture(startupStorageError: String? = nil) -> AppDependencies {
-        let history = fixtureHistory()
-        let dictionary = fixtureDictionary()
+        let large = ProcessInfo.processInfo.environment["LERRO_FIXTURE_SCALE"] == "large"
+        let history = large ? scaledFixtureHistory(fixtureHistory(), count: 900) : fixtureHistory()
+        let dictionary = large ? scaledFixtureDictionary(fixtureDictionary(), count: 40) : fixtureDictionary()
         let onboardingRequested = ProcessInfo.processInfo.environment["LERRO_FIXTURE_ONBOARDING"] == "1"
         let onboardingStepIndex: Int? = switch ProcessInfo.processInfo.environment["LERRO_FIXTURE_ONBOARDING_STEP"] {
         case "welcome": 0
@@ -133,6 +134,42 @@ struct AppDependencies: Sendable {
             UUID(uuidString: "5C0F1B52-0000-4000-8000-000000000021")!,
             UUID(uuidString: "5C0F1B52-0000-4000-8000-000000000022")!
         ]
+    }
+
+    /// Repeats the base entries over earlier weeks with stable IDs, about half a
+    /// year of history for `LERRO_FIXTURE_SCALE=large`.
+    private static func scaledFixtureHistory(_ base: [HistoryEntry], count: Int) -> [HistoryEntry] {
+        guard !base.isEmpty, count > base.count else { return base }
+        var entries = base
+        for index in 0..<(count - base.count) {
+            var entry = base[index % base.count]
+            let copy = index / base.count + 1
+            entry.id = UUID(uuidString: String(format: "00000000-0000-0000-0001-%012lx", index))!
+            entry.createdAt = entry.createdAt.addingTimeInterval(-Double(copy) * 6 * 86_400)
+            entries.append(entry)
+        }
+        return entries.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// Adds numbered variants of the base phrases for `LERRO_FIXTURE_SCALE=large`.
+    private static func scaledFixtureDictionary(_ base: [DictionaryEntry], count: Int) -> [DictionaryEntry] {
+        guard !base.isEmpty, count > base.count else { return base }
+        var entries = base
+        for index in 0..<(count - base.count) {
+            var entry = base[index % base.count]
+            let copy = index / base.count + 1
+            let shift = -Double(copy) * 5 * 86_400
+            entry.id = UUID(uuidString: String(format: "00000000-0000-0000-0002-%012lx", index))!
+            entry.phrase = "\(entry.phrase) \(copy)"
+            entry.replacement = entry.replacement == base[index % base.count].phrase
+                ? entry.phrase
+                : "\(entry.replacement) \(copy)"
+            entry.createdAt = entry.createdAt.addingTimeInterval(shift)
+            entry.updatedAt = entry.updatedAt.addingTimeInterval(shift)
+            entry.learnedFromEntryIDs = []
+            entries.append(entry)
+        }
+        return entries
     }
 
     private static func fixtureTermLearningState() -> TermLearningState {

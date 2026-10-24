@@ -26,7 +26,10 @@ struct LerroApp: App {
         Window("Lerro", id: "main") {
             RootView(session: session)
                 .environment(\.locale, LerroInterfaceLocalization.locale(for: session.preferences.appLanguage))
-                .task { await session.start() }
+                .task {
+                    await session.start()
+                    FixtureBenchmark.runIfRequested(session)
+                }
                 .onReceive(NotificationCenter.default.publisher(
                     for: NSApplication.didBecomeActiveNotification
                 )) { _ in

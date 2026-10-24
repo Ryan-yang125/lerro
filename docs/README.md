@@ -6,6 +6,7 @@ Current code and `script/` take precedence when they differ from this prose.
 | --- | --- |
 | [`development.md`](development.md) | Build, run, test, fixtures, signing modes, release steps, website, troubleshooting |
 | [`architecture.md`](architecture.md) | Targets, capture flow, delivery, intelligence, storage, privacy boundaries |
+| [`performance.md`](performance.md) | Performance budgets, rules for new code, and how to measure |
 | [`decisions/`](decisions/README.md) | Architecture decision records |
 | [`../AGENTS.md`](../AGENTS.md) | Rules for agents and contributors working in this repository |
 | [`../PRIVACY.md`](../PRIVACY.md) | What data Lerro stores and sends |

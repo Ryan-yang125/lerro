@@ -94,10 +94,22 @@ open -F -n --env LERRO_FIXTURE_MODE=1 --env LERRO_FIXTURE_PRESENTATION=hud-recov
 | `LERRO_FIXTURE_APPEARANCE` | `light`, `dark` |
 | `LERRO_FIXTURE_LANGUAGE` | `en`, `zh-Hans` |
 | `LERRO_FIXTURE_REDUCE_MOTION`, `LERRO_FIXTURE_INCREASE_CONTRAST`, `LERRO_FIXTURE_REDUCE_TRANSPARENCY` | `1` |
+| `LERRO_FIXTURE_SCALE` | `large` scales the fixture to about 900 history entries and 40 dictionary entries |
+| `LERRO_FIXTURE_BENCHMARK` | `page-switch` (switch time per page), `focus` (keyboard focus on hidden pages). Prints `BENCHMARK` lines to stdout and quits |
+| `LERRO_FIXTURE_BENCHMARK_ROUNDS` | Page switch rounds, default 8; the first round is discarded |
 
 For UI changes, check the main window at 1080x750 and 988x658, light and dark
 appearance, Increase Contrast, Reduce Transparency, Reduce Motion, and the
 affected HUD states and Settings tabs.
+
+For main window, page, or `AppSession` changes, run the UI benchmark on a release
+build. It uses the benchmark variables above, compares page switches with the
+budget in [`performance.md`](performance.md), and restores the window frame
+default afterwards:
+
+```zsh
+./script/measure_ui_performance.sh [app_path] [runs]
+```
 
 ## Signing modes
 
