@@ -21,6 +21,32 @@ export type LocalizedRelease = ReleaseCopy & Pick<Release, "version" | "build" |
 // distribution URL; older entries stay unchanged.
 export const releases: readonly Release[] = [
   {
+    version: "1.11.1",
+    build: "26",
+    publishedAt: "2026-10-25",
+    downloadUrl: "https://updates.lerroapp.com/releases/1.11.1/26/Lerro-macOS-arm64.dmg",
+    zh: {
+      publishedLabel: "2026 年 10 月 25 日",
+      summary: "主窗口重新对齐，图标和按钮尺寸统一。",
+      highlights: [
+        "主窗口换成 macOS 26 自带 App 的窗口样式，圆角一致，红绿灯和页面标题在同一条线上。",
+        "侧栏、各页面的标题和内容对齐到相同位置，切换页面时不再左右移动。",
+        "图标、按钮、搜索框、间距和圆角统一成一套尺寸。",
+        "窗口较窄时，历史详情也能完整显示时间和状态，复制按钮只显示图标。",
+      ],
+    },
+    en: {
+      publishedLabel: "October 25, 2026",
+      summary: "The main window is realigned, with one set of icon and button sizes.",
+      highlights: [
+        "The main window uses the macOS 26 window style of the built-in apps: the same corner radius, and the traffic lights on the same line as the page title.",
+        "The sidebar, page titles, and page content line up at the same positions, so nothing moves sideways when you switch pages.",
+        "Icons, buttons, search fields, spacing, and corner radii use one set of sizes.",
+        "In a narrow window, History details show the full time and status, and the Copy button shows only its icon.",
+      ],
+    },
+  },
+  {
     version: "1.11.0",
     build: "25",
     publishedAt: "2026-10-24",

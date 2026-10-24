@@ -6,6 +6,22 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-10-25
+
+### Changed
+
+- The main window uses the macOS 26 window style with a toolbar: the corner
+  radius matches the built-in apps, and the traffic lights sit on the same line
+  as the page title.
+- The sidebar, page titles, and page content line up at the same positions on
+  every page, so nothing moves sideways when you switch pages.
+- Icons, buttons, search fields, spacing, and corner radii use one set of sizes.
+
+### Fixed
+
+- In a narrow window, History details show the full time and status line. The
+  Copy button shows only its icon there.
+
 ## [1.11.0] - 2026-10-24
 
 ### Changed
