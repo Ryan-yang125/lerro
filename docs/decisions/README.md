@@ -15,6 +15,7 @@ An ADR records a decision that shapes modules, data, permissions, distribution, 
 | [0014](0014-main-window-rebuild.md) | Native main window, separate Settings window, ink-blue accent |
 | [0015](0015-speech-transcriber.md) | `SpeechTranscriber` for live recognition |
 | [0016](0016-deepseek-only.md) | DeepSeek is the only AI service; balance from the official endpoint |
+| [0018](0018-sqlite-history-store.md) | History in SQLite with FTS5 search; one-time import of `history.json` |
 
 Numbers only increase and are never reused. Gaps are decisions that were superseded or removed together with the feature they covered (local MLX models, delivery receipts, voice edits, the vendored Hugging Face stack).
 

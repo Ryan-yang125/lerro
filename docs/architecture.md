@@ -75,7 +75,7 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 
 每次 capture 有一个 [`CaptureTrace`](../Sources/LerroCore/Models/CaptureTrace.swift)（起点为物理按键时刻，
 `ContinuousClock` 里程碑）。结果写入 os.Logger `app.lerro.mac` / `capture-trace`、Points of Interest signpost 和历史的
-`phaseTimings`；[`script/capture_latency_report.py`](../script/capture_latency_report.py) 读取本机 `history.json`
+`phaseTimings`；[`script/capture_latency_report.py`](../script/capture_latency_report.py) 只读打开本机 `history.sqlite`
 输出各区段 p50 / p90。
 
 ## 快捷键
@@ -162,14 +162,19 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 | 文件 | 内容 |
 | --- | --- |
 | `preferences.json`（`0600`） | 偏好、API Key、上下文开关 |
-| `history.json` | 听写记录：raw/final 文本、路由、模型 ID、上下文类别、阶段耗时、交付状态、AI 调用原样记录（`aiCall`） |
+| `history.sqlite`（`0600`，WAL 模式另有 `-wal`、`-shm`） | 听写记录：raw/final 文本、路由、模型 ID、上下文类别、阶段耗时、交付状态、AI 调用原样记录（`aiCall`） |
 | `dictionary.json` | 词典，含每个词条的使用次数、最近使用时间，以及自动学会词条的听错写法和来源历史 ID |
 | `term-candidates.json`（`0600`） | 专有名词学习状态：候选词、曾被听成的写法、出现过的历史记录 ID，以及被用户删除而不再学习的词；随全部历史一起删除，`historyRetention == .never` 时不写入 |
 | `ai-usage.json` | 远程调用的时间、功能、模型 ID、token 数、延迟、成败、所属历史 ID |
 | `usage-days.json` | 首页统计的每日汇总：字数、次数、时长、各应用字数、各小时次数；不含文字，保留 400 天 |
 | `Audio/` | 可选录音（CAF），`saveAudio` 默认关闭 |
 
-仓库通过 [`JSONDocumentStore`](../Sources/LerroCore/Stores/JSONDocumentStore.swift) 原子写入并串行化。偏好新增字段为旧文档提供默认值。
+历史由 [`SQLiteHistoryRepository`](../Sources/LerroCore/Stores/SQLiteHistoryRepository.swift) 存进 SQLite（系统 `libsqlite3`，
+WAL）：每条记录一行，`created_at`、`mode`、`status`、文字、应用、录音路径是列，完整记录是 JSON 列；FTS5 trigram 表索引
+`final_text` 和 `application_name`。分页、搜索、计数、按 ID 或时间取记录都在数据库里完成，`AppSession` 不读取全部历史；
+`entries()` 只用于一次性的每日用量补建。首次打开时若有旧的 `history.json`，导入一次后删除。见 [ADR 0018](decisions/0018-sqlite-history-store.md)。
+
+其他仓库通过 [`JSONDocumentStore`](../Sources/LerroCore/Stores/JSONDocumentStore.swift) 原子写入并串行化。偏好新增字段为旧文档提供默认值。
 文件损坏时向上报告并保留原文件。删除历史先删除音频再移除索引；历史索引读取失败时保留孤儿音频。
 
 ## 隐私边界

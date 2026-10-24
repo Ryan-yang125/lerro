@@ -9,7 +9,9 @@ public struct ApplicationPaths: Sendable {
     static let privateRootPermissions = 0o700
 
     public let rootDirectory: URL
-    public let historyFile: URL
+    public let historyDatabase: URL
+    /// Pre-SQLite history store, imported once and then deleted.
+    public let legacyHistoryFile: URL
     public let dictionaryFile: URL
     public let preferencesFile: URL
     public let aiUsageFile: URL
@@ -19,7 +21,8 @@ public struct ApplicationPaths: Sendable {
 
     public init(rootDirectory: URL) {
         self.rootDirectory = rootDirectory
-        self.historyFile = rootDirectory.appending(path: "history.json")
+        self.historyDatabase = rootDirectory.appending(path: "history.sqlite")
+        self.legacyHistoryFile = rootDirectory.appending(path: "history.json")
         self.dictionaryFile = rootDirectory.appending(path: "dictionary.json")
         self.preferencesFile = rootDirectory.appending(path: "preferences.json")
         self.aiUsageFile = rootDirectory.appending(path: "ai-usage.json")

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Read-only latency report over Lerro capture history.
 
-Reads history.json (a JSON array of HistoryEntry objects) and summarizes the
-capture milestones stored in each entry's phaseTimings. The file is opened
+Reads history.sqlite (one JSON-encoded HistoryEntry per row) and summarizes the
+capture milestones stored in each entry's phaseTimings. The database is opened
 read-only. No text content (rawText, finalText, processedText, windowTitle) is
 ever printed; applicationName is shown in the slowest-entries list.
 
@@ -15,11 +15,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-DEFAULT_HISTORY = Path.home() / "Library/Application Support/app.lerro.mac/history.json"
+DEFAULT_HISTORY = Path.home() / "Library/Application Support/app.lerro.mac/history.sqlite"
+# HistoryEntry.createdAt is stored as seconds since this date (Foundation's reference date).
+REFERENCE_DATE = datetime(2001, 1, 1, tzinfo=timezone.utc)
 
 # Source of truth: Sources/LerroCore/Models/CaptureTrace.swift
 # (CaptureMilestone.startupChain / analyzerChain / finishChain and CaptureTraceSegment.summaries).
@@ -138,11 +141,19 @@ def stats(values: list[float]) -> dict | None:
 
 
 def load_entries(path: Path) -> list[dict]:
-    with open(path, "rb") as handle:  # read-only
-        document = json.loads(handle.read().decode("utf-8"))
-    if not isinstance(document, list):
-        raise ValueError("history file must contain a JSON array")
-    return [e for e in document if isinstance(e, dict)]
+    connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        rows = connection.execute("SELECT created_at, entry FROM history").fetchall()
+    finally:
+        connection.close()
+    entries = []
+    for created_at, blob in rows:
+        entry = json.loads(blob)
+        if not isinstance(entry, dict):
+            continue
+        entry["createdAt"] = (REFERENCE_DATE + timedelta(seconds=created_at)).isoformat()
+        entries.append(entry)
+    return entries
 
 
 def filter_entries(entries, since, until, mode, route, last):
@@ -269,7 +280,7 @@ def render_text(report: dict, slowest_count: int) -> str:
 
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--history", type=Path, default=DEFAULT_HISTORY, help="path to history.json")
+    parser.add_argument("--history", type=Path, default=DEFAULT_HISTORY, help="path to history.sqlite")
     parser.add_argument("--since", type=lambda v: parse_bound(v, False), help="local YYYY-MM-DD[THH:MM]")
     parser.add_argument("--until", type=lambda v: parse_bound(v, True),
                         help="local YYYY-MM-DD[THH:MM]; a bare date includes that whole day")
@@ -282,7 +293,7 @@ def run(argv: list[str] | None = None) -> int:
 
     try:
         entries = load_entries(args.history)
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, sqlite3.Error) as error:
         print(f"cannot read history: {type(error).__name__}", file=sys.stderr)
         return 2
 

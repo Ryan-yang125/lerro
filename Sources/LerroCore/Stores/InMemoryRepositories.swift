@@ -15,6 +15,23 @@ public actor InMemoryHistoryRepository: HistoryRepository {
             return lhs.id.uuidString < rhs.id.uuidString
         }
     }
+    public func entries(ids: Set<UUID>) -> [HistoryEntry] {
+        entries().filter { ids.contains($0.id) }
+    }
+    public func entries(since: Date) -> [HistoryEntry] {
+        entries().filter { $0.createdAt >= since }
+    }
+    public func audioRelativePaths(createdBefore date: Date?) -> [String] {
+        entries().filter { entry in date.map { entry.createdAt < $0 } ?? true }
+            .compactMap(\.audioRelativePath)
+    }
+    public func bundleIdentifierCounts() -> [String: Int] {
+        var counts: [String: Int] = [:]
+        for case let bundleIdentifier? in values.map(\.bundleIdentifier) where !bundleIdentifier.isEmpty {
+            counts[bundleIdentifier, default: 0] += 1
+        }
+        return counts
+    }
     public func page(_ request: HistoryPageRequest) -> HistoryPage {
         let matches = entries().filter { entry in
             let matchesMode = request.mode.map { entry.mode == $0 } ?? true
@@ -38,8 +55,8 @@ public actor InMemoryHistoryRepository: HistoryRepository {
     public func delete(id: UUID) { values.removeAll { $0.id == id } }
     public func deleteAll() { values.removeAll() }
     public func applyRetention(_ retention: HistoryRetention, now: Date) {
-        guard retention != .forever, retention != .never else { return }
-        values.removeAll { !retention.retains(createdAt: $0.createdAt, now: now) }
+        guard let cutoff = retention.cutoff(now: now) else { return }
+        values.removeAll { $0.createdAt < cutoff }
     }
 }
 

@@ -21,7 +21,10 @@ let package = Package(
     targets: [
         .target(
             name: "LerroCore",
-            path: "Sources/LerroCore"
+            path: "Sources/LerroCore",
+            linkerSettings: [
+                .linkedLibrary("sqlite3")
+            ]
         ),
         .target(
             name: "LerroIntelligence",
