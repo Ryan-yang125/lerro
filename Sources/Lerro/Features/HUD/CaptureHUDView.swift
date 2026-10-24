@@ -411,7 +411,6 @@ struct CaptureHUDView: View {
             switch session.activeMode {
             case .dictation: "正在处理听写"
             case .translation: "正在翻译"
-            case .ask: "正在处理"
             }
         case .deliveredRawFallback: session.hudFallbackMessage ?? "AI 未响应，已写入原文"
         case .error: session.captureError ?? "听写失败，可以重试"
@@ -424,7 +423,6 @@ struct CaptureHUDView: View {
         switch session.activeMode {
         case .dictation: "已锁定，免按住听写进行中"
         case .translation: "已锁定，免按住翻译进行中"
-        case .ask: "已锁定，免按住指令进行中"
         }
     }
 

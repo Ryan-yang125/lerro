@@ -111,7 +111,6 @@ final class AppSession {
         return switch activeSession.mode {
         case .translation: true
         case .dictation: activeSession.intelligenceMode != .raw
-        case .ask: false
         }
     }
 
@@ -154,7 +153,6 @@ final class AppSession {
         switch mode {
         case .dictation: .dictate
         case .translation: .translate
-        case .ask: .ask
         }
     }
 
@@ -1347,10 +1345,6 @@ final class AppSession {
             currentError = "这条记录没有可重试的转写文本"
             return
         }
-        if entry.mode == .ask {
-            currentError = "历史指令仅供查看"
-            return
-        }
         guard authorizeIntelligenceIfNeeded(for: entry.mode, requiresAI: true) else {
             return
         }
@@ -1363,7 +1357,7 @@ final class AppSession {
                 bundleIdentifier: entry.bundleIdentifier,
                 windowTitle: entry.windowTitle
             )
-            let task = intelligenceTask(mode: entry.mode, transcript: entry.rawText, context: context)
+            let task = intelligenceTask(mode: entry.mode)
             let request = IntelligenceRequest(
                 task: task,
                 mode: intelligenceMode,
@@ -1530,8 +1524,6 @@ final class AppSession {
             handleCaptureHotkey(trigger, mode: .dictation)
         case .translate:
             handleCaptureHotkey(trigger, mode: .translation)
-        case .ask:
-            return
         case .pasteLastResult:
             if trigger.phase == .began { pasteLastResult() }
         case .cancel:
@@ -1681,7 +1673,6 @@ final class AppSession {
         }
         guard !isCleaningCapture else { return }
         guard !hasActiveCapture else { return }
-        guard mode != .ask else { return }
         guard authorizeIntelligenceIfNeeded(for: mode) else { return }
         deliveredTextObservationTask?.cancel()
         Task { await dependencies.deliveredTextObserver.stopObserving() }
@@ -1944,11 +1935,7 @@ final class AppSession {
         transcription: SpeechTranscription
     ) async throws {
         let processingTranscript = transcription.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let task = intelligenceTask(
-            mode: session.mode,
-            transcript: processingTranscript,
-            context: session.context
-        )
+        let task = intelligenceTask(mode: session.mode)
         let request = IntelligenceRequest(
             task: task,
             mode: session.intelligenceMode,
@@ -2447,14 +2434,10 @@ final class AppSession {
         return true
     }
 
-    private func intelligenceTask(mode: CaptureMode, transcript: String, context: CapturedContext) -> IntelligenceTask {
+    private func intelligenceTask(mode: CaptureMode) -> IntelligenceTask {
         switch mode {
-        case .dictation:
-            return .polish
-        case .translation:
-            return .translate
-        case .ask:
-            return .polish
+        case .dictation: .polish
+        case .translation: .translate
         }
     }
 

@@ -89,14 +89,13 @@ struct UserPreferencesTests {
         #expect(paste.activation == .toggle)
     }
 
-    @Test("Modifier key codes and the Fn flag normalize on load and the removed Ask shortcut is dropped")
+    @Test("Modifier key codes and the Fn flag normalize on load")
     func normalizesHotkeysOnLoad() throws {
         let saved = Data(#"""
         {
           "hotkeys": [
             {"action":"dictate","keyCode":null,"modifiers":0,"usesFunctionKey":true,"activation":"hold","displayName":"Fn"},
             {"action":"translate","keyCode":56,"modifiers":8388608,"usesFunctionKey":true,"activation":"hold","displayName":"Fn Left Shift"},
-            {"action":"ask","keyCode":2,"modifiers":1048576,"usesFunctionKey":false,"activation":"toggle","displayName":"⌘D"},
             {"action":"pasteLastResult","keyCode":9,"modifiers":1310720,"usesFunctionKey":false,"activation":"toggle","displayName":"⌃⌘V"}
           ]
         }
@@ -112,7 +111,6 @@ struct UserPreferencesTests {
         #expect(translate.activation == .hold)
         #expect(translate.keyCode == nil)
         #expect(translate.modifiers == (1 << 23) | (1 << 17))
-        #expect(!preferences.hotkeys.contains { $0.action == .ask })
         #expect(paste.activation == .toggle)
     }
 
@@ -122,7 +120,7 @@ struct UserPreferencesTests {
         {
           "hotkeys": [
             {"action":"dictate","keyCode":63,"modifiers":0,"usesFunctionKey":false,"activation":"hold","displayName":"Fn key"},
-            {"action":"ask","keyCode":null,"modifiers":8388608,"usesFunctionKey":true,"activation":"toggle","displayName":"Fn flag"}
+            {"action":"translate","keyCode":null,"modifiers":8388608,"usesFunctionKey":true,"activation":"toggle","displayName":"Fn flag"}
           ]
         }
         """#.utf8)

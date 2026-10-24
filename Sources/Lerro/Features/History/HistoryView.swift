@@ -109,7 +109,7 @@ struct HistoryView: View {
         } else {
             LerroEmptyState(
                 title: "还没有历史记录",
-                hint: "完成一次听写、翻译或指令后，记录会出现在这里。"
+                hint: "完成一次听写或翻译后，记录会出现在这里。"
             )
         }
     }

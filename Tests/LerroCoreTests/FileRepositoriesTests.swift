@@ -115,7 +115,7 @@ struct FileRepositoriesTests {
         let wrongMode = makeHistoryEntry(
             id: UUID(),
             createdAt: Date(timeIntervalSince1970: 100),
-            mode: .ask,
+            mode: .dictation,
             text: "Lerro question",
             applicationName: "Browser"
         )
