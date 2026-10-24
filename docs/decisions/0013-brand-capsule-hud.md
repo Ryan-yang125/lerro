@@ -15,7 +15,7 @@ V1.6 的 HUD 在不同状态之间切换形状：录音是胶囊，处理中是�
 V1.7 品牌重做选定方向 A「光标 L」：一根光标立在一条文字基线上组成 L。色板为墨黑
 `#15161A`、纸白 `#F6F4EF`、墨水蓝 `#2F5BFF`。
 
-## 方案
+## 决策
 
 - 所有状态在同一个 40 pt 高的胶囊内完成，宽度以 spring 变化，最大 480 pt。状态模型位于
   [`CaptureHUDModel.swift`](../../Sources/Lerro/Features/HUD/CaptureHUDModel.swift)，

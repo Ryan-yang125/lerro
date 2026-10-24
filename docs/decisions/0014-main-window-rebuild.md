@@ -20,7 +20,7 @@ V1.6 主窗口使用自绘 sidebar、卡片、pill 与窗口内设置浮层。�
 - 品牌强调色进入系统控件。
 - 历史需要能回看 AI 改了什么、耗时在哪、发给 AI 的上下文是什么。
 
-## 方案
+## 决策
 
 - 主窗口使用 `NavigationSplitView`（已由 [ADR 0017](0017-fixed-sidebar.md) 改为固定侧栏）。侧栏含 wordmark、首页 / 历史 / 词典 / 应用语气（带数量 badge），
   底部为 AI 状态行（`AppSession.aiStatus`）、设置齿轮与版本号。

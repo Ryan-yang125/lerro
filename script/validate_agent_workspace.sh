@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+import subprocess
 import sys
 import urllib.parse
 
@@ -97,12 +98,27 @@ for marker in (
     if marker not in agents_text:
         errors.append(f"AGENTS.md is missing bootstrap marker: {marker}")
 
+adr_status = re.compile(r"^- 状态：(proposed|accepted|superseded|rejected)\b", re.MULTILINE)
+for adr in sorted((root / "docs" / "decisions").glob("[0-9][0-9][0-9][0-9]-*.md")):
+    text = adr.read_text(encoding="utf-8")
+    name = adr.relative_to(root)
+    if not adr_status.search(text):
+        errors.append(f"ADR is missing a valid status line: {name}")
+    for section in ("背景", "决策", "后果"):
+        if not re.search(rf"^## {section}\s*$", text, re.MULTILINE):
+            errors.append(f"ADR is missing section ## {section}: {name}")
+
+# Every Markdown file Git tracks or would track.
+listed = subprocess.run(
+    ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.md"],
+    cwd=root,
+    check=True,
+    capture_output=True,
+).stdout.decode("utf-8")
 markdown_files = [
-    root / "AGENTS.md",
-    root / "CLAUDE.md",
-    *sorted((root / "docs").rglob("*.md")),
-    root / canonical,
-    root / bridge,
+    root / relative
+    for relative in sorted(set(listed.split("\0")))
+    if relative and (root / relative).is_file()
 ]
 checked_links = 0
 for source in markdown_files:

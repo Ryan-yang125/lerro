@@ -21,8 +21,10 @@ mark, the ink-blue accent and the ink-black capsule HUD. Brand sources and usage
   needed information uses `#6B6B6B`.
 - SF Pro, PingFang SC, SF Mono. Scale in `LerroFont`: page title 15 semibold,
   body 13, detail 16, stat 30, caption 12, footnote 11. Tracking -0.15.
-- Native `NavigationSplitView`, `List`, `Table`, `Form`, and a separate Settings
-  window. Primary actions are pill buttons. Hover fades fill in 150 ms; pointer-down
+- Main window: a fixed 220 pt sidebar and the page, with a hidden title bar; each
+  page starts with `LerroPageHeader` ([ADR 0017](docs/decisions/0017-fixed-sidebar.md)).
+  Lists, tables, and forms use native `List`, `Table`, and `Form`; Settings is a
+  separate window. Primary actions are pill buttons. Hover fades fill in 150 ms; pointer-down
   drops opacity to 0.8 in 100 ms. Reduce Motion keeps the same opacity feedback.
 - Icons: outline SF Symbols; status and playback use filled.
 - HUD: a fixed ink-black Liquid Glass capsule, 40 pt high and at most 480 pt wide.

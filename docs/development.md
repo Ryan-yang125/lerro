@@ -230,8 +230,8 @@ there.
 ## CI
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs one Linux job: shell
-syntax, `script/validate_agent_workspace.sh` (agent entry points and Markdown link
-check), the three Python script tests, and the website lint, build, and tests.
+syntax, `script/validate_agent_workspace.sh` (agent entry points, local links in every
+Markdown file, ADR status and sections), the three Python script tests, and the website lint, build, and tests.
 Swift build, tests, signing, and packaging run locally in `verify_release.sh`.
 
 ## Troubleshooting

@@ -27,4 +27,10 @@ Adding or removing a production target or reversing a dependency; replacing the 
 
 ## Format
 
-File name `NNNN-short-kebab-title.md`. Status is `proposed`, `accepted`, `superseded`, or `rejected`. Sections: Context, Decision, Alternatives, Consequences, Privacy and security, Verification. When a direction changes, add a new ADR that names the one it replaces and delete the old file if nothing in it is still in effect.
+ADRs are written in Chinese. File name `NNNN-short-kebab-title.md`.
+
+- Header list under the title: `- 状态：` with `proposed`, `accepted`, `superseded`, or `rejected` (a superseded ADR names its replacement after the value), `- 日期：`, `- 决策人：`, and when they apply `- 替代：` and `- 关联任务/PR：`.
+- Required sections: `## 背景`, `## 决策`, `## 后果`.
+- Sections when they apply: `## 备选方案`, `## 隐私与安全`, `## 验证`, `## 迁移与兼容`.
+
+[`validate_agent_workspace.sh`](../../script/validate_agent_workspace.sh) checks the status line and the required sections. When a direction changes, add a new ADR that names the one it replaces and delete the old file if nothing in it is still in effect.

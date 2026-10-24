@@ -6,7 +6,7 @@
 
 1. 读 [`README.md`](README.md) 和 [`docs/README.md`](docs/README.md)，按任务读 [`docs/architecture.md`](docs/architecture.md) 或 [`docs/development.md`](docs/development.md)。
 2. 运行 `git status --short`，保留用户和其他 agent 的并行改动。
-3. 运行 `./script/validate_agent_workspace.sh`（检查 agent 入口文件与 Markdown 相对链接）。
+3. 运行 `./script/validate_agent_workspace.sh`（检查 agent 入口文件、全部 Markdown 的相对链接和 ADR 格式）。
 4. 用 `rg` 定位符号和调用者，再确定改动边界；先跑最窄的相关测试。
 5. 完整工作流见 [`.agents/skills/lerro-development/SKILL.md`](.agents/skills/lerro-development/SKILL.md)；Claude Code 通过 `CLAUDE.md` 与 `.claude/skills` 进入同一流程。
 6. 构建、测试、签名与发布命令都在 [`docs/development.md`](docs/development.md)。
