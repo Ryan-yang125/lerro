@@ -21,6 +21,32 @@ export type LocalizedRelease = ReleaseCopy & Pick<Release, "version" | "build" |
 // distribution URL; older entries stay unchanged.
 export const releases: readonly Release[] = [
   {
+    version: "1.11.0",
+    build: "25",
+    publishedAt: "2026-10-24",
+    downloadUrl: "https://updates.lerroapp.com/releases/1.11.0/25/Lerro-macOS-arm64.dmg",
+    zh: {
+      publishedLabel: "2026 年 10 月 24 日",
+      summary: "按下快捷键就开始收音，主窗口和历史记录更快。",
+      highlights: [
+        "单独按 ⌘ 这类单修饰键快捷键时，按下就打开麦克风，松开后马上说的话不会被吞掉；如果是组合键，录到的音频直接丢掉。蓝牙麦克风仍在松开后打开。",
+        "历史记录改存在 SQLite 数据库里，搜索更快；第一次打开时自动导入原来的历史。",
+        "文字粘贴完胶囊马上消失，恢复剪贴板和保存历史在后台完成。",
+        "主窗口侧栏固定宽度，切换页面更快，Tab 键只在当前页面里移动。",
+      ],
+    },
+    en: {
+      publishedLabel: "October 24, 2026",
+      summary: "The microphone opens when you press the shortcut, and the main window and history are faster.",
+      highlights: [
+        "A single-modifier shortcut such as ⌘ alone opens the microphone on key down, so words spoken right after the release are kept. When the press is part of another shortcut, that audio is dropped. Bluetooth microphones still open after the release.",
+        "History is stored in a SQLite database with faster search. The existing history is imported on first launch.",
+        "The capsule closes as soon as the text is pasted. Restoring the clipboard and saving history happen in the background.",
+        "The main window has a fixed-width sidebar and switches pages faster, and Tab only moves within the visible page.",
+      ],
+    },
+  },
+  {
     version: "1.10.2",
     build: "24",
     publishedAt: "2026-10-24",

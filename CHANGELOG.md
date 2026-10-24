@@ -6,12 +6,21 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-24
+
 ### Changed
 
 - A single-modifier shortcut (for example ⌘ alone) opens the microphone as soon
   as the key goes down, so speech right after the release is no longer cut off.
   When the press is part of another shortcut, that audio is dropped from memory.
   Bluetooth microphones keep opening after the release.
+- History is stored in a SQLite database with full-text search. On first launch
+  Lerro imports the existing history once and removes the old `history.json`.
+  Saving a dictation writes one row, however long the history is.
+- The capsule closes as soon as the text is pasted. Restoring the clipboard and
+  saving history happen in the background.
+- The main window has a fixed-width sidebar and switches pages faster. All four
+  pages stay loaded, and keyboard focus stays on the visible page.
 
 ### Fixed
 
