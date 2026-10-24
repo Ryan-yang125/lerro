@@ -131,7 +131,7 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
   条目、最多 40 个 `known_terms`、应用语气。transcript 始终包含。
 - [`PipelineIntelligenceService`](../Sources/LerroCore/Services/PipelineIntelligenceService.swift) 提供 `polish`、`translate`、
   词典学习分类，并为每次远程调用写入一条 `AIUsageRecord`（`ai-usage.json`，保留 90 天，带所属历史记录的 ID）。费用在本机按
-  内置人民币价格表 `AIModelPriceTable` 估算，显示在设置 › AI 整理 › 用量明细，调用记录可跳回对应历史。
+  内置人民币价格表 `AIModelPrice.builtIn` 估算，显示在设置 › AI 整理 › 用量明细，调用记录可跳回对应历史。
 - 听写和翻译的远程调用以 `AICallTrace` 原样存进 `HistoryEntry.aiCall`：发送的 user 内容、模型回答、提示词版本、模型 ID、
   token 和延迟。历史详情的「AI 处理」从中解析出改词、发送的上下文和费用明细。
 - 三份系统提示词（听写整理、翻译、自动学词）以 [`AIPromptDocument`](../Sources/LerroCore/Services/AIPromptDocument.swift)
@@ -185,7 +185,7 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 ## 更新与分发
 
 [`AppUpdateController`](../Sources/Lerro/App/AppUpdateController.swift) 持有 Sparkle `SPUStandardUpdaterController`，读取
-[`Info.plist`](../config/Info.plist) 中的 appcast 与 Ed25519 公钥，启动时及每 24 小时静默探测。fixture 与 XCTest 进程不创建它。
+[`Info.plist`](../config/Info.plist) 中的 appcast 与 Ed25519 公钥，启动时及每 4 小时静默探测。fixture 与 XCTest 进程不创建它。
 `updates.lerroapp.com` 是 Cloudflare Worker（D1 + 私有 R2），决策见
 [ADR 0007](decisions/0007-cloudflare-distribution-and-sparkle-updates.md)，Worker 说明见
 [`distribution/README.md`](../distribution/README.md)。

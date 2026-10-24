@@ -23,4 +23,4 @@ python3 script/benchmark_contextual_dictation.py --validate
 python3 script/benchmark_contextual_dictation.py --results path/to/results.json --output report.json
 ```
 
-The report includes exact-match rate, normalized text similarity, protected-span accuracy, formatting accuracy, and p50/p95 latency. Keep the corpus unchanged within the v1.3 release line so local, remote, and competitor runs remain comparable.
+The report includes exact-match rate, normalized text similarity, protected-span accuracy, formatting accuracy, and p50/p95 latency. Keep the corpus unchanged within the v1.3 release line so remote and competitor runs remain comparable.

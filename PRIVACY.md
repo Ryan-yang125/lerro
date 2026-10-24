@@ -92,7 +92,7 @@ rewrites are excluded.
 
 Application logs exclude audio, transcripts, selected text, focused text,
 changed spans, prompts, model output, dictionary contents, API keys,
-authorization headers, invitation codes, and personal identifiers.
+authorization headers, and personal identifiers.
 
 ## Apple Speech
 
