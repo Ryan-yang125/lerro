@@ -675,16 +675,6 @@ private struct FixtureMicrophoneLevelTester: MicrophoneLevelTesting {
     func availableInputDevices() async -> [AudioInputDevice] {
         [AudioInputDevice(uid: "fixture-input", name: "MacBook Pro 麦克风", isDefault: true)]
     }
-
-    func start(microphoneDeviceUID: String?) async throws -> MicrophoneLevelTestSession {
-        let stream = AsyncThrowingStream<Float, any Error> { continuation in
-            continuation.yield(0.36)
-            continuation.finish()
-        }
-        return MicrophoneLevelTestSession(id: UUID(), levels: stream)
-    }
-
-    func stop(sessionID: UUID) async {}
 }
 
 private struct FixtureContextCapture: ContextCapturing {

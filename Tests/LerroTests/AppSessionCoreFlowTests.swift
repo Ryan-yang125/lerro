@@ -1665,13 +1665,6 @@ private struct StubApplicationCatalog: ApplicationCataloging {
 
 private struct StubMicrophoneTester: MicrophoneLevelTesting {
     func availableInputDevices() async -> [AudioInputDevice] { [] }
-    func start(microphoneDeviceUID: String?) async throws -> MicrophoneLevelTestSession {
-        MicrophoneLevelTestSession(
-            id: UUID(),
-            levels: AsyncThrowingStream { $0.finish() }
-        )
-    }
-    func stop(sessionID: UUID) async {}
 }
 
 private final class StubHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
