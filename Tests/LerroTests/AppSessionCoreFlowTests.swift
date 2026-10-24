@@ -1518,7 +1518,6 @@ private actor StubDelivery: TextDelivering {
     func deliver(
         _ text: String,
         to context: CapturedContext,
-        replacingSelection: Bool,
         targetPolicy: TextDeliveryTargetPolicy,
         onCommit: @escaping TextDeliveryCommitHandler
     ) async throws -> TextDeliveryReceipt {
@@ -1599,7 +1598,6 @@ private actor StubIntelligence: IntelligenceProcessing {
         if fails { throw TestFailure.intelligence }
         return IntelligenceResult(
             text: resultText,
-            disposition: .insert,
             modelIdentifier: "test-model",
             source: request.mode == .remote ? .remote : .raw,
             call: request.mode == .remote

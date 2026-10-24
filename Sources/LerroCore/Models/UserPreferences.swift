@@ -72,10 +72,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         saveAudio && historyRetention != .never
     }
 
-    public var isAutomaticDictionaryLearningActive: Bool {
-        automaticDictionaryLearningEnabled && intelligenceMode != .raw
-    }
-
     public init(
         recognitionLocaleIdentifier: String = "zh_CN",
         translationLanguageIdentifier: String = "en_US",

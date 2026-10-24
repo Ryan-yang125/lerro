@@ -24,7 +24,6 @@ struct UserPreferencesTests {
         #expect(preferences.remoteProvider == RemoteProviderConfiguration())
         #expect(preferences.appToneProfiles.isEmpty)
         #expect(preferences.automaticDictionaryLearningEnabled)
-        #expect(!preferences.isAutomaticDictionaryLearningActive)
         #expect(!preferences.hasCompletedOnboarding)
         #expect(preferences.onboardingStepIndex == nil)
         #expect(IntelligenceMode.allCases == [.raw, .remote])
@@ -168,7 +167,14 @@ struct UserPreferencesTests {
             intelligenceMode: .remote,
             remoteProvider: RemoteProviderConfiguration(
                 apiKey: "secret-test-key",
-                contextSharing: .minimal
+                contextSharing: RemoteContextSharing(
+                    application: false,
+                    windowTitle: false,
+                    nearbyText: false,
+                    selectedText: false,
+                    dictionary: false,
+                    tone: false
+                )
             ),
             hasCompletedOnboarding: false,
             onboardingStepIndex: 17
@@ -182,7 +188,6 @@ struct UserPreferencesTests {
         #expect(decoded.onboardingStepIndex == 17)
         #expect(decoded.appLanguage == .english)
         #expect(decoded.automaticDictionaryLearningEnabled)
-        #expect(decoded.isAutomaticDictionaryLearningActive)
     }
 
     @Test("Capture sounds default to on when missing and keep a saved off value")
@@ -273,18 +278,6 @@ struct UserPreferencesTests {
 
         #expect(decoded.intelligenceMode == .raw)
         #expect(decoded.hasCompletedOnboarding)
-    }
-
-    @Test("Automatic dictionary learning requires an active AI mode")
-    func gatesAutomaticDictionaryLearning() {
-        var preferences = UserPreferences()
-        #expect(!preferences.isAutomaticDictionaryLearningActive)
-
-        preferences.intelligenceMode = .remote
-        #expect(preferences.isAutomaticDictionaryLearningActive)
-
-        preferences.automaticDictionaryLearningEnabled = false
-        #expect(!preferences.isAutomaticDictionaryLearningActive)
     }
 
     @Test("The insufficient balance error names DeepSeek")

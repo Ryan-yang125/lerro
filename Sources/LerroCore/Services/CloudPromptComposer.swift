@@ -12,7 +12,6 @@ public struct CloudPromptComposer: Sendable {
     public func prompts(
         for request: IntelligenceRequest
     ) throws -> (system: String, user: String) {
-        let sharing = request.remoteProvider?.contextSharing ?? .balanced
         let payload = payload(for: request)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]

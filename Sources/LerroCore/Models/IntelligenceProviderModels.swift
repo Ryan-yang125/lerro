@@ -33,14 +33,6 @@ public struct RemoteContextSharing: Codable, Hashable, Sendable {
 
     public static let full = RemoteContextSharing()
     public static let balanced = RemoteContextSharing(windowTitle: false)
-    public static let minimal = RemoteContextSharing(
-        application: false,
-        windowTitle: false,
-        nearbyText: false,
-        selectedText: false,
-        dictionary: false,
-        tone: false
-    )
 }
 
 public struct RemoteProviderConfiguration: Codable, Hashable, Sendable {
@@ -144,13 +136,7 @@ public struct RemoteConnectionTestOutcome: Sendable, Equatable {
             tokens: tokens
         )
     }
-
-    public static func failure(_ message: String) -> RemoteConnectionTestOutcome {
-        RemoteConnectionTestOutcome(succeeded: false, message: message)
-    }
 }
-
-public typealias RemoteConnectionTestResult = RemoteConnectionTestOutcome
 
 public enum IntelligenceResultSource: String, Codable, Hashable, Sendable {
     case raw

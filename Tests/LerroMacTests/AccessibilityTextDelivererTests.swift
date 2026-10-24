@@ -15,7 +15,7 @@ struct AccessibilityTextDelivererTests {
         ] {
             let deliverer = AccessibilityTextDeliverer(
                 activateTarget: { _ in true }, focusSnapshot: { snapshot },
-                pasteOverride: { text, _, _ in await recorder.recordPaste(text) }
+                pasteOverride: { text, _ in await recorder.recordPaste(text) }
             )
             await #expect(throws: LerroError.self) {
                 try await deliverer.deliver(
@@ -24,7 +24,6 @@ struct AccessibilityTextDelivererTests {
                         applicationName: "Editor",
                         processIdentifier: 42
                     ),
-                    replacingSelection: false,
                     targetPolicy: .requireCurrent
                 )
             }
@@ -44,7 +43,6 @@ struct AccessibilityTextDelivererTests {
             try await missingIdentity.deliver(
                 "output",
                 to: CapturedContext(applicationName: "Editor"),
-                replacingSelection: false,
                 targetPolicy: .requireCurrent
             )
         }
@@ -61,7 +59,6 @@ struct AccessibilityTextDelivererTests {
                     applicationName: "Editor",
                     processIdentifier: 42
                 ),
-                replacingSelection: false,
                 targetPolicy: .reactivateCaptured
             )
         }
@@ -81,14 +78,13 @@ struct AccessibilityTextDelivererTests {
                     selectionState: .knownEmpty
                 )
             },
-            pasteOverride: { text, _, _ in await recorder.recordPaste(text) }
+            pasteOverride: { text, _ in await recorder.recordPaste(text) }
         )
         try await deliverer.deliver(
             "Lerro delivery probe",
             to: CapturedContext(
                 applicationName: "Editor", processIdentifier: 42, bundleIdentifier: "com.example.Editor"
             ),
-            replacingSelection: false,
             targetPolicy: .requireCurrent
         )
         #expect(await recorder.pastedTexts() == ["Lerro delivery probe"])
@@ -103,7 +99,7 @@ struct AccessibilityTextDelivererTests {
                 return true
             },
             focusSnapshot: { DeliveryFocusSnapshot(safety: .safe, processIdentifier: 42) },
-            pasteOverride: { text, _, _ in await recorder.recordPaste(text) }
+            pasteOverride: { text, _ in await recorder.recordPaste(text) }
         )
         let delivery = Task {
             try await deliverer.deliver(
@@ -112,7 +108,6 @@ struct AccessibilityTextDelivererTests {
                     applicationName: "Editor",
                     processIdentifier: 42
                 ),
-                replacingSelection: false,
                 targetPolicy: .reactivateCaptured
             )
         }
@@ -128,20 +123,19 @@ struct AccessibilityTextDelivererTests {
         let deliverer = AccessibilityTextDeliverer(
             activateTarget: { _ in true },
             focusSnapshot: { DeliveryFocusSnapshot(safety: .safe, processIdentifier: 42, selectionState: .knownEmpty) },
-            pasteOverride: { text, _, _ in await blocker.paste(text) }
+            pasteOverride: { text, _ in await blocker.paste(text) }
         )
         let context = CapturedContext(applicationName: "Editor", processIdentifier: 42)
         let first = Task {
             try await deliverer.deliver(
                 "first",
                 to: context,
-                replacingSelection: false,
                 targetPolicy: .requireCurrent
             )
         }
         await blocker.waitUntilStarted()
         await #expect(throws: LerroError.self) {
-            try await deliverer.deliver("second", to: context, replacingSelection: false, targetPolicy: .requireCurrent)
+            try await deliverer.deliver("second", to: context, targetPolicy: .requireCurrent)
         }
         await blocker.resume()
         _ = try await first.value

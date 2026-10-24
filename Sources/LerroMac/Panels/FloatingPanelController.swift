@@ -189,10 +189,6 @@ public final class FloatingPanelController {
             panel.makeKeyAndOrderFront(nil)
         }
     }
-
-    var presentedPanelForTesting: NSPanel? {
-        panel
-    }
 }
 
 private final class KeyablePanel: NSPanel {

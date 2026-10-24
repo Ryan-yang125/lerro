@@ -9,12 +9,10 @@ public enum HistoryStatus: String, Codable, Sendable {
 
 public enum HistoryProcessingRoute: String, Codable, Sendable {
     case raw
-    case local
     case remote
-    case appleTranslation
 
     /// History files written by older versions may hold route names that no longer exist
-    /// (for example "localSnippet", which always produced raw text). They decode as `.raw`.
+    /// ("localSnippet", "local", "appleTranslation"). They decode as `.raw`.
     public init(from decoder: any Decoder) throws {
         let value = try decoder.singleValueContainer().decode(String.self)
         self = Self(rawValue: value) ?? .raw
@@ -191,10 +189,6 @@ public struct HistoryEntry: Codable, Identifiable, Hashable, Sendable {
         self.contextReceipt = contextReceipt
         self.phaseTimings = phaseTimings
         self.aiCall = aiCall
-    }
-
-    public var wordCount: Int {
-        finalText.split(whereSeparator: { $0.isWhitespace || $0.isPunctuation }).count
     }
 }
 

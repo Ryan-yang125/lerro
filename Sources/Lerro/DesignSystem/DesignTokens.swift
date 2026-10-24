@@ -22,7 +22,6 @@ enum LerroTheme {
     static let canvas = main
     static let sidebar = adaptive(light: rgb(0xF1F1F1), dark: rgb(0x1B1B1B))
     static let card = topLayer
-    static let elevated = adaptive(light: rgb(0xFFFFFF), dark: rgb(0x292929))
 
     // MARK: Text
 
@@ -103,8 +102,6 @@ enum LerroTheme {
     }
     static let focusBorder = accent
     static let selection = fillSelected
-    static let cardShadow = Color.black.opacity(0.07)
-    static let cardShadowHover = Color.black.opacity(0.13)
 
     // MARK: Actions and statuses
 
@@ -145,8 +142,6 @@ enum LerroTheme {
         adaptive(light: rgb(0x2F5BFF), dark: rgb(0x6F8BFF))
     ]
     static let primaryAction = accentButton
-    static let primaryActionHover = accentButton.opacity(0.88)
-    static let primaryActionPressed = accentButton.opacity(0.72)
     static let primaryActionForeground = Color.white
     static let success = Color(nsColor: .systemGreen)
     static let warning = Color(nsColor: .systemOrange)
@@ -179,9 +174,6 @@ enum LerroTheme {
     static let cardRadius: CGFloat = 16
     static let controlRadius: CGFloat = 8
 
-    static let navigationIconSize: CGFloat = 14
-    static let cardIconSize: CGFloat = 20
-
     // MARK: Typography
 
     static func font(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
@@ -190,18 +182,9 @@ enum LerroTheme {
 
 
     static let uiTracking: CGFloat = -0.15
-    static let titleSize: CGFloat = 24
-    static let bodySize: CGFloat = 14
-    static let labelSize: CGFloat = 13
-    static let captionSize: CGFloat = 12
 
     static let hoverDuration = 0.15
     static let pressDuration = 0.10
-    static let interactionSpring = Animation.spring(
-        response: 0.20,
-        dampingFraction: 1.0,
-        blendDuration: 0
-    )
 
     private static func adaptive(
         light: NSColor,

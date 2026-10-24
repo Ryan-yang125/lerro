@@ -22,7 +22,6 @@ public protocol TextDelivering: Sendable {
     func deliver(
         _ text: String,
         to context: CapturedContext,
-        replacingSelection: Bool,
         targetPolicy: TextDeliveryTargetPolicy,
         onCommit: @escaping TextDeliveryCommitHandler
     ) async throws -> TextDeliveryReceipt
@@ -33,13 +32,11 @@ public extension TextDelivering {
     func deliver(
         _ text: String,
         to context: CapturedContext,
-        replacingSelection: Bool,
         targetPolicy: TextDeliveryTargetPolicy
     ) async throws -> TextDeliveryReceipt {
         try await deliver(
             text,
             to: context,
-            replacingSelection: replacingSelection,
             targetPolicy: targetPolicy,
             onCommit: {}
         )

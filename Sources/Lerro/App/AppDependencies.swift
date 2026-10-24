@@ -703,7 +703,6 @@ private struct FixtureTextDeliverer: TextDelivering {
     func deliver(
         _ text: String,
         to context: CapturedContext,
-        replacingSelection: Bool,
         targetPolicy: TextDeliveryTargetPolicy,
         onCommit: @escaping TextDeliveryCommitHandler
     ) async throws -> TextDeliveryReceipt {
@@ -804,7 +803,6 @@ private struct FixtureIntelligence: IntelligenceProcessing {
         }
         return IntelligenceResult(
             text: request.transcript,
-            disposition: .insert,
             modelIdentifier: "fixture",
             source: .raw
         )

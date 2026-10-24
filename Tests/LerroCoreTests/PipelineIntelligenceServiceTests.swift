@@ -4,20 +4,19 @@ import Testing
 
 @Suite("Pipeline intelligence service")
 struct PipelineIntelligenceServiceTests {
-    @Test("Maps every task to its delivery disposition and token budget")
-    func mapsTaskDispositions() async throws {
-        let cases: [(IntelligenceTask, IntelligenceDisposition, Int)] = [
-            (.polish, .insert, 768),
-            (.translate, .insert, 768)
+    @Test("Maps every task to its token budget")
+    func mapsTaskTokenBudgets() async throws {
+        let cases: [(IntelligenceTask, Int)] = [
+            (.polish, 768),
+            (.translate, 768)
         ]
 
-        for (task, expectedDisposition, expectedMaxTokens) in cases {
+        for (task, expectedMaxTokens) in cases {
             let remote = FakeRemoteLanguageModelRuntime(output: "result")
             let service = makeRemoteService(remote: remote, usage: InMemoryAIUsageRepository())
-            let result = try await service.process(remoteRequest(task: task))
+            _ = try await service.process(remoteRequest(task: task))
             let events = await remote.recordedEvents()
 
-            #expect(result.disposition == expectedDisposition)
             let lastEvent = try #require(events.last)
             guard case .generate(_, _, _, let maxTokens) = lastEvent else {
                 Issue.record("Expected a generation event for \(task.rawValue)")

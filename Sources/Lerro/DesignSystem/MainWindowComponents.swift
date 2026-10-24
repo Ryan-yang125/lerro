@@ -319,33 +319,3 @@ struct LerroEmptyState: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
-
-struct LerroSectionHeader: View {
-    let title: String
-    let actionTitle: String?
-    let action: (() -> Void)?
-
-    init(title: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
-        self.title = title
-        self.actionTitle = actionTitle
-        self.action = action
-    }
-
-    var body: some View {
-        HStack {
-            Text(LocalizedStringKey(title))
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(LerroTheme.text)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 8)
-            if let actionTitle, let action {
-                Button(action: action) {
-                    Text(LocalizedStringKey(actionTitle))
-                        .font(LerroFont.caption)
-                        .foregroundStyle(LerroTheme.accentText)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-}
