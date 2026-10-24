@@ -21,6 +21,32 @@ export type LocalizedRelease = ReleaseCopy & Pick<Release, "version" | "build" |
 // distribution URL; older entries stay unchanged.
 export const releases: readonly Release[] = [
   {
+    version: "1.10.2",
+    build: "24",
+    publishedAt: "2026-10-24",
+    downloadUrl: "https://updates.lerroapp.com/releases/1.10.2/24/Lerro-macOS-arm64.dmg",
+    zh: {
+      publishedLabel: "2026 年 10 月 24 日",
+      summary: "中英文界面文字重新整理，英文界面不再夹带中文提示。",
+      highlights: [
+        "界面文字更短、叫法统一，比如词典里分成「自动记住」和「手动添加」，余额用完的提示会写清下一步。",
+        "界面设成英文时，胶囊里的出错提示、AI 服务和剪贴板相关的错误、窗口标题都显示英文。",
+        "英文单复数改对，例如「1 dictation」「Used 1 time」。",
+        "听写设置里麦克风旁边的音量条去掉了。",
+      ],
+    },
+    en: {
+      publishedLabel: "October 24, 2026",
+      summary: "Interface text is reworked in Chinese and English, and the English interface no longer shows Chinese messages.",
+      highlights: [
+        "Interface text is shorter and uses one name per thing. For example, the Dictionary is split into Learned and Added Manually, and the balance messages say what to do next.",
+        "With English selected, capsule errors, AI service and clipboard errors, and window titles all show in English.",
+        "English counts are fixed, for example \"1 dictation\" and \"Used 1 time\".",
+        "The level bars next to the microphone menu in Dictation settings are gone.",
+      ],
+    },
+  },
+  {
     version: "1.10.1",
     build: "23",
     publishedAt: "2026-10-22",

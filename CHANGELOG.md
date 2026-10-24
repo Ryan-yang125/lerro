@@ -6,6 +6,31 @@ All notable changes to Lerro will be documented here. The project follows
 
 ## [Unreleased]
 
+## [1.10.2] - 2026-10-24
+
+### Changed
+
+- Interface text in Chinese and English is shorter and more consistent. For
+  example, the Dictionary filters are "自动记住" / "Learned" and "手动添加" /
+  "Added Manually", and the balance messages say what to do next.
+- The microphone menu in the menu bar panel says "跟随系统" / "Follow System",
+  the same as Settings.
+
+### Removed
+
+- The microphone level bars next to the microphone menu in Dictation settings.
+- Support for reading preferences and history saved by Lerro 1.5 or earlier
+  that still contain the Ask mode.
+
+### Fixed
+
+- Error messages in the capsule, and errors from the AI service, the clipboard,
+  audio and CSV import, showed in Chinese while Lerro was set to English.
+- Window titles stayed in the system language after changing Lerro's interface
+  language.
+- English counts read "1 dictations" and "Used 1 times".
+- "Paste Last Result" wrapped onto two lines on the last onboarding step.
+
 ## [1.10.1] - 2026-10-22
 
 ### Changed
