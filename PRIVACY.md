@@ -57,7 +57,13 @@ save, and deleting all history also deletes these totals.
 
 Lerro requests two macOS permissions (Apple Speech needs no separate authorization):
 
-- Microphone, after an explicit Dictate or Translate action.
+- Microphone, after an explicit Dictate or Translate action. When that shortcut
+  is a single modifier key (for example ⌘ alone), Lerro opens the microphone as
+  soon as the key goes down, so speech right after the release is not lost. If
+  the press turns out to be part of another shortcut (⌘C, a mouse click, a hold
+  longer than one second), that audio is dropped from memory without being
+  written, transcribed, or saved. The macOS microphone indicator shows these
+  brief openings. Bluetooth input devices are not opened early.
 - Accessibility, for global shortcuts, limited target context, strict text
   delivery, failed-write protection, and observation of edits to the field that
   received the most recent AI-processed Dictate result.

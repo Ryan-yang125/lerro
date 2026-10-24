@@ -16,6 +16,7 @@ public actor AppleSpeechService: SpeechTranscribing {
     private var audioEngine: AVAudioEngine?
     private var audioEngineDeviceUID: String?
     private var warmEngine: WarmEngine?
+    private var prearmed: PrearmedMicrophone?
     private var analyzer: SpeechAnalyzer?
     private var transcriber: SpeechTranscriber?
     private var rawContinuation: AsyncStream<CapturedAudio>.Continuation?
@@ -37,6 +38,7 @@ public actor AppleSpeechService: SpeechTranscribing {
     private var milestoneReporter: CaptureMilestoneReporter?
     private var reportedFirstPartial = false
     private let applicationPaths: ApplicationPaths
+    private static let prearmTimeout: Duration = .seconds(2)
 
     public init(applicationPaths: ApplicationPaths = .live()) {
         self.applicationPaths = applicationPaths
@@ -49,7 +51,7 @@ public actor AppleSpeechService: SpeechTranscribing {
     /// Builds the audio engine for the next capture. The engine stays stopped,
     /// so the microphone and its system indicator remain off while idle.
     public func prewarmAudioInput(microphoneDeviceUID: String?) async {
-        guard sessionGeneration == nil, audioEngine == nil else { return }
+        guard sessionGeneration == nil, audioEngine == nil, prearmed == nil else { return }
         if let warmEngine, warmEngine.serves(deviceUID: microphoneDeviceUID) { return }
         let engine = AVAudioEngine()
         do {
@@ -61,19 +63,100 @@ public actor AppleSpeechService: SpeechTranscribing {
         adoptWarmEngine(engine, deviceUID: microphoneDeviceUID)
     }
 
+    /// Opens the microphone at modifier key-down, before the gesture is
+    /// confirmed, and keeps its audio in memory. `start` adopts it so speech
+    /// right after the release is captured; a combo discards it. Contains no
+    /// suspension point, so actor reentrancy cannot interleave it.
+    public func prearmMicrophone(microphoneDeviceUID: String?) async {
+        guard sessionGeneration == nil, audioEngine == nil, prearmed == nil else { return }
+        // Opening a Bluetooth input switches the headset profile, which
+        // degrades playback for a capture that may never happen.
+        guard !CoreAudioHardware.isBluetoothInput(uid: microphoneDeviceUID) else { return }
+
+        let prearmedAt = ContinuousClock.now
+        let engine: AVAudioEngine
+        if let warm = takeWarmEngine(deviceUID: microphoneDeviceUID) {
+            engine = warm
+        } else {
+            engine = AVAudioEngine()
+            do {
+                try selectInputDevice(uid: microphoneDeviceUID, inputNode: engine.inputNode)
+            } catch {
+                return
+            }
+        }
+        let inputNode = engine.inputNode
+        let engineCreatedAt = ContinuousClock.now
+        let naturalFormat = inputNode.outputFormat(forBus: 0)
+        guard naturalFormat.sampleRate > 0, naturalFormat.channelCount > 0 else { return }
+        let inputConfiguredAt = ContinuousClock.now
+
+        let relay = CapturedAudioRelay()
+        inputNode.installTap(onBus: 0, bufferSize: 2_048, format: naturalFormat) { buffer, _ in
+            relay.receive(buffer, at: .now)
+        }
+        engine.prepare()
+        do {
+            try engine.start()
+        } catch {
+            inputNode.removeTap(onBus: 0)
+            relay.drop()
+            return
+        }
+        let engineStartedAt = ContinuousClock.now
+
+        // Backstop: the microphone never stays open if no start or discard follows.
+        let generation = UUID()
+        let backstop = Task { [weak self] in
+            try? await Task.sleep(for: Self.prearmTimeout)
+            await self?.expirePrearm(generation: generation)
+        }
+        prearmed = PrearmedMicrophone(
+            generation: generation,
+            engine: engine,
+            deviceUID: microphoneDeviceUID,
+            relay: relay,
+            naturalFormat: naturalFormat,
+            prearmedAt: prearmedAt,
+            engineCreatedAt: engineCreatedAt,
+            inputConfiguredAt: inputConfiguredAt,
+            engineStartedAt: engineStartedAt,
+            backstop: backstop
+        )
+    }
+
+    /// Stops a prearmed microphone and drops its audio. Safe to call repeatedly.
+    public func discardPrearmedMicrophone() async {
+        discardPrearm(generation: nil)
+    }
+
     public func start(
         localeIdentifier: String,
         microphoneDeviceUID: String?,
         saveAudio: Bool,
         milestones: @escaping CaptureMilestoneReporter
     ) async throws -> AsyncThrowingStream<SpeechEvent, any Error> {
+        // Taken before `cancel()`, whose suspension would otherwise let it
+        // discard the prearm this start is about to adopt.
+        var takenPrearm = takePrearm()
+        // A configuration change (device switch) stops the engine; a stopped
+        // prearm would record silence, so the normal path opens it again.
+        if let prearm = takenPrearm,
+           prearm.deviceUID != microphoneDeviceUID || !prearm.engine.isRunning {
+            releasePrearm(prearm)
+            takenPrearm = nil
+        }
         await cancel()
         let generation = UUID()
         sessionGeneration = generation
         var didStart = false
         defer {
             if !didStart, sessionGeneration == generation { sessionGeneration = nil }
+            // An unadopted prearm stops the microphone and drops its audio.
+            if let prearm = takenPrearm { releasePrearm(prearm) }
         }
+        // A prearm created while `cancel()` was suspended would compete for the microphone.
+        discardPrearm(generation: nil)
 
         let requestedLocale = Locale(identifier: localeIdentifier)
         guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
@@ -83,21 +166,32 @@ public actor AppleSpeechService: SpeechTranscribing {
         milestones(.speechLocaleResolved, .now)
 
         // The microphone opens before any speech resource work. The analyzer
-        // is prepared afterwards while captured audio waits in memory.
+        // is prepared afterwards while captured audio waits in memory. A
+        // prearmed microphone is already open and holds its audio in the relay.
         let engine: AVAudioEngine
-        if let warm = takeWarmEngine(deviceUID: microphoneDeviceUID) {
-            engine = warm
+        let naturalFormat: AVAudioFormat
+        let relay: CapturedAudioRelay
+        let adoptedPrearm = takenPrearm
+        if let prearm = adoptedPrearm {
+            engine = prearm.engine
+            naturalFormat = prearm.naturalFormat
+            relay = prearm.relay
         } else {
-            engine = AVAudioEngine()
-            try selectInputDevice(uid: microphoneDeviceUID, inputNode: engine.inputNode)
+            if let warm = takeWarmEngine(deviceUID: microphoneDeviceUID) {
+                engine = warm
+            } else {
+                engine = AVAudioEngine()
+                try selectInputDevice(uid: microphoneDeviceUID, inputNode: engine.inputNode)
+            }
+            milestones(.audioEngineCreated, .now)
+            naturalFormat = engine.inputNode.outputFormat(forBus: 0)
+            guard naturalFormat.sampleRate > 0, naturalFormat.channelCount > 0 else {
+                throw LerroError.speechUnavailable("没有可用的麦克风输入格式")
+            }
+            milestones(.audioInputConfigured, .now)
+            relay = CapturedAudioRelay()
         }
         let inputNode = engine.inputNode
-        milestones(.audioEngineCreated, .now)
-        let naturalFormat = inputNode.outputFormat(forBus: 0)
-        guard naturalFormat.sampleRate > 0, naturalFormat.channelCount > 0 else {
-            throw LerroError.speechUnavailable("没有可用的麦克风输入格式")
-        }
-        milestones(.audioInputConfigured, .now)
 
         let recording: (writer: AudioFileWriter, relativePath: String)?
         if saveAudio {
@@ -118,39 +212,54 @@ public actor AppleSpeechService: SpeechTranscribing {
         let eventPair = AsyncThrowingStream<SpeechEvent, any Error>.makeStream()
 
         let firstBufferLatch = FirstEventLatch()
-        inputNode.installTap(onBus: 0, bufferSize: 2_048, format: naturalFormat) { buffer, _ in
-            if firstBufferLatch.claim() {
-                milestones(.firstAudioBuffer, .now)
-            }
-            recording?.writer.write(buffer)
-            // AVAudioEngine owns the tap buffer only for this callback.
-            // The analyzer pipeline consumes it later, so queue a copy.
-            guard let copied = copyPCMBuffer(buffer) else {
+        let recordingWriter = recording?.writer
+        let sink: CapturedAudioRelay.Sink = { event in
+            switch event {
+            case .copyFailed:
                 rawPair.continuation.finish()
                 eventPair.continuation.finish(
                     throwing: LerroError.speechUnavailable("无法复制麦克风音频")
                 )
-                return
+            case let .buffer(copied, arrivedAt):
+                if firstBufferLatch.claim() {
+                    milestones(.firstAudioBuffer, arrivedAt)
+                }
+                recordingWriter?.write(copied)
+                if case .dropped = rawPair.continuation.yield(CapturedAudio(buffer: copied)) {
+                    rawPair.continuation.finish()
+                    eventPair.continuation.finish(
+                        throwing: LerroError.speechUnavailable("语音处理速度不足，请缩短本次录音后重试")
+                    )
+                    return
+                }
+                eventPair.continuation.yield(.audioLevel(normalizedAudioLevel(copied)))
             }
-            if case .dropped = rawPair.continuation.yield(CapturedAudio(buffer: copied)) {
-                rawPair.continuation.finish()
-                eventPair.continuation.finish(
-                    throwing: LerroError.speechUnavailable("语音处理速度不足，请缩短本次录音后重试")
-                )
-                return
-            }
-            eventPair.continuation.yield(.audioLevel(normalizedAudioLevel(buffer)))
         }
 
-        engine.prepare()
-        do {
-            try engine.start()
-            milestones(.audioEngineStarted, .now)
-        } catch {
-            inputNode.removeTap(onBus: 0)
-            rawPair.continuation.finish()
-            if let path = recording?.relativePath { deleteRecording(relativePath: path) }
-            throw error
+        if let prearm = adoptedPrearm {
+            // Buffered key-down audio becomes the start of the capture.
+            milestones(.microphonePrearmed, prearm.prearmedAt)
+            milestones(.audioEngineCreated, prearm.engineCreatedAt)
+            milestones(.audioInputConfigured, prearm.inputConfiguredAt)
+            milestones(.audioEngineStarted, prearm.engineStartedAt)
+            relay.attach(sink)
+            takenPrearm = nil
+        } else {
+            relay.attach(sink)
+            inputNode.installTap(onBus: 0, bufferSize: 2_048, format: naturalFormat) { buffer, _ in
+                relay.receive(buffer, at: .now)
+            }
+            engine.prepare()
+            do {
+                try engine.start()
+                milestones(.audioEngineStarted, .now)
+            } catch {
+                inputNode.removeTap(onBus: 0)
+                relay.drop()
+                rawPair.continuation.finish()
+                if let path = recording?.relativePath { deleteRecording(relativePath: path) }
+                throw error
+            }
         }
 
         self.audioEngine = engine
@@ -288,6 +397,7 @@ public actor AppleSpeechService: SpeechTranscribing {
     }
 
     public func cancel() async {
+        discardPrearm(generation: nil)
         let generation = sessionGeneration
         let analyzerToCancel = analyzer
         let engine = audioEngine
@@ -425,6 +535,37 @@ public actor AppleSpeechService: SpeechTranscribing {
             }
         }
         inputPair.continuation.finish()
+    }
+
+    private func expirePrearm(generation: UUID) async {
+        discardPrearm(generation: generation)
+    }
+
+    /// Removes the prearm from the service and hands it to the caller, who
+    /// either adopts or releases it.
+    private func takePrearm() -> PrearmedMicrophone? {
+        guard let prearm = prearmed else { return nil }
+        prearmed = nil
+        prearm.backstop.cancel()
+        return prearm
+    }
+
+    /// Discards the current prearm, or only the one with `generation` when given.
+    private func discardPrearm(generation: UUID?) {
+        guard let prearm = prearmed else { return }
+        if let generation, prearm.generation != generation { return }
+        prearmed = nil
+        releasePrearm(prearm)
+    }
+
+    /// Stops the microphone, drops the buffered audio and returns the stopped
+    /// engine to the warm slot. Writes no audio anywhere.
+    private func releasePrearm(_ prearm: PrearmedMicrophone) {
+        prearm.backstop.cancel()
+        prearm.engine.inputNode.removeTap(onBus: 0)
+        prearm.engine.stop()
+        prearm.relay.drop()
+        adoptWarmEngine(prearm.engine, deviceUID: prearm.deviceUID)
     }
 
     private func adoptWarmEngine(_ engine: AVAudioEngine, deviceUID: String?) {
@@ -693,23 +834,6 @@ public actor AppleSpeechService: SpeechTranscribing {
     }
 }
 
-private func copyPCMBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
-    guard let copy = AVAudioPCMBuffer(
-        pcmFormat: buffer.format,
-        frameCapacity: buffer.frameLength
-    ) else { return nil }
-    copy.frameLength = buffer.frameLength
-    let sourceBuffers = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
-    let destinationBuffers = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
-    guard sourceBuffers.count == destinationBuffers.count else { return nil }
-    for index in sourceBuffers.indices {
-        guard let source = sourceBuffers[index].mData,
-              let destination = destinationBuffers[index].mData else { return nil }
-        memcpy(destination, source, Int(sourceBuffers[index].mDataByteSize))
-    }
-    return copy
-}
-
 func transcriptSeparator(after preceding: String, before following: String) -> String {
     guard let last = preceding.last, let first = following.first else { return "" }
     guard !last.isWhitespace, !first.isWhitespace else { return "" }
@@ -771,6 +895,21 @@ private struct WarmEngine {
         guard self.deviceUID == deviceUID else { return false }
         return deviceUID != nil || defaultInputDeviceID == CoreAudioHardware.defaultInputDeviceID()
     }
+}
+
+/// A running microphone opened at modifier key-down. Its audio waits in the
+/// relay until a capture adopts it or it is discarded.
+private struct PrearmedMicrophone {
+    let generation: UUID
+    let engine: AVAudioEngine
+    let deviceUID: String?
+    let relay: CapturedAudioRelay
+    let naturalFormat: AVAudioFormat
+    let prearmedAt: ContinuousClock.Instant
+    let engineCreatedAt: ContinuousClock.Instant
+    let inputConfiguredAt: ContinuousClock.Instant
+    let engineStartedAt: ContinuousClock.Instant
+    let backstop: Task<Void, Never>
 }
 
 /// Claims a one-shot event from the real-time audio thread.

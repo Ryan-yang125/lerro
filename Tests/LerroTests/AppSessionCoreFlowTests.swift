@@ -1195,6 +1195,177 @@ struct AppSessionCoreFlowTests {
         #expect(!harness.trace.markedMilestones(for: completed.id).contains(.analyzerPrepared))
     }
 
+    @Test("A modifier key-down arms the microphone without touching the HUD, trace or sounds")
+    @MainActor
+    func armedPrearmsMicrophoneSilently() async {
+        let harness = makeHarness(text: "hello")
+        await harness.session.start()
+        #expect(harness.session.microphonePermission && harness.session.accessibilityPermission)
+
+        harness.session.handleHotkey(hotkeyTrigger(.armed, activation: .toggle))
+        #expect(await waitUntil { harness.events.all().contains("speech.prearm") })
+        try? await Task.sleep(for: .milliseconds(100))
+
+        #expect(await harness.speech.prearms().count == 1)
+        #expect(harness.session.currentHUDVisualState == .idleHidden)
+        #expect(!harness.session.isStartingCapture)
+        #expect(harness.session.phase == .idle)
+        #expect(harness.trace.begunIDs().isEmpty)
+        let events = harness.events.all()
+        #expect(!events.contains("sound.start"))
+        #expect(!events.contains("speech.start"))
+        #expect(!events.contains("speech.lowerOtherAudio"))
+    }
+
+    @Test("A disarmed press discards the prearmed microphone and starts nothing", arguments: [ShortcutActivation.toggle, .hold])
+    @MainActor
+    func disarmedDiscardsPrearm(activation: ShortcutActivation) async {
+        var preferences = basePreferences()
+        preferences.muteOtherAudio = true
+        let harness = makeHarness(text: "hello", preferences: preferences)
+        await harness.session.start()
+
+        harness.session.handleHotkey(hotkeyTrigger(.armed, activation: activation))
+        harness.session.handleHotkey(hotkeyTrigger(.disarmed, activation: activation))
+        #expect(await waitUntil { harness.events.all().contains("speech.discardPrearm") })
+        try? await Task.sleep(for: .milliseconds(100))
+
+        let events = harness.events.all()
+        let prearm = events.firstIndex(of: "speech.prearm")
+        let discard = events.firstIndex(of: "speech.discardPrearm")
+        #expect(prearm != nil && discard != nil && prearm! < discard!)
+        #expect(!events.contains("speech.start"))
+        #expect(!events.contains("speech.lowerOtherAudio"))
+        #expect(!events.contains("sound.start"))
+        #expect(harness.session.phase == .idle)
+    }
+
+    @Test("A toggle press that is confirmed starts the capture after the prearm")
+    @MainActor
+    func toggleBeganStartsAfterPrearm() async {
+        let harness = makeHarness(text: "hello")
+        await harness.session.start()
+
+        harness.session.handleHotkey(hotkeyTrigger(.armed, activation: .toggle))
+        harness.session.handleHotkey(hotkeyTrigger(.began, activation: .toggle))
+        #expect(await waitUntil { harness.session.phase == .listening })
+
+        let events = harness.events.all()
+        let prearm = events.firstIndex(of: "speech.prearm")
+        let start = events.firstIndex(of: "speech.start")
+        #expect(prearm != nil && start != nil && prearm! < start!)
+        #expect(!events.contains("speech.discardPrearm"))
+
+        harness.session.handleHotkey(hotkeyTrigger(.began, activation: .toggle))
+        #expect(await waitUntil { harness.session.phase == .idle })
+    }
+
+    @Test("A hold press arms, begins and ends as a normal hold capture")
+    @MainActor
+    func holdArmedBeganEnded() async {
+        let harness = makeHarness(text: "hello")
+        await harness.session.start()
+
+        harness.session.handleHotkey(hotkeyTrigger(.armed, activation: .hold, definitionID: "dictate-hold"))
+        harness.session.handleHotkey(hotkeyTrigger(.began, activation: .hold, definitionID: "dictate-hold"))
+        #expect(await waitUntil { harness.session.phase == .listening })
+        let events = harness.events.all()
+        let prearm = events.firstIndex(of: "speech.prearm")
+        let start = events.firstIndex(of: "speech.start")
+        #expect(prearm != nil && start != nil && prearm! < start!)
+
+        harness.session.handleHotkey(hotkeyTrigger(.ended, activation: .hold, definitionID: "dictate-hold"))
+        #expect(await waitUntil { harness.session.phase == .idle })
+        #expect(await harness.delivery.values() == ["hello"])
+        #expect(!harness.events.all().contains("speech.discardPrearm"))
+    }
+
+    @Test("An armed press while a capture is active neither prearms nor blocks the stop press")
+    @MainActor
+    func armedWhileListeningIsIgnored() async {
+        let harness = makeHarness(text: "hello")
+        await harness.session.start()
+
+        harness.session.handleHotkey(hotkeyTrigger(.armed, activation: .toggle))
+        harness.session.handleHotkey(hotkeyTrigger(.began, activation: .toggle))
+        #expect(await waitUntil { harness.session.phase == .listening })
+        let prearmsBefore = harness.events.all().filter { $0 == "speech.prearm" }.count
+
+        harness.session.handleHotkey(hotkeyTrigger(.armed, activation: .toggle))
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(harness.events.all().filter { $0 == "speech.prearm" }.count == prearmsBefore)
+
+        harness.session.handleHotkey(hotkeyTrigger(.began, activation: .toggle))
+        #expect(await waitUntil { harness.session.phase == .idle })
+        #expect(harness.events.all().contains("speech.stop"))
+    }
+
+    @Test("An armed press without microphone permission does not prearm")
+    @MainActor
+    func armedWithoutMicrophonePermission() async {
+        let harness = makeHarness(text: "hello")
+        await harness.session.start()
+        harness.session.microphonePermission = false
+
+        harness.session.handleHotkey(hotkeyTrigger(.armed, activation: .toggle))
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(!harness.events.all().contains("speech.prearm"))
+        #expect(harness.session.phase == .idle)
+    }
+
+    @Test("A confirmed press rejected by shortcut configuration discards the prearm")
+    @MainActor
+    func beganRejectedByShortcutConfigurationDiscards() async {
+        let harness = makeHarness(text: "hello")
+        await harness.session.start()
+
+        harness.session.handleHotkey(hotkeyTrigger(.armed, activation: .toggle))
+        #expect(await waitUntil { harness.events.all().contains("speech.prearm") })
+        #expect(harness.session.beginShortcutConfiguration())
+        harness.session.handleHotkey(hotkeyTrigger(.began, activation: .toggle))
+
+        #expect(await waitUntil { harness.events.all().contains("speech.discardPrearm") })
+        #expect(!harness.events.all().contains("speech.start"))
+        #expect(harness.session.phase == .idle)
+    }
+
+    @Test("A disarmed press while a cancelled capture is cleaning up discards the prearm and queues nothing")
+    @MainActor
+    func disarmedWhileCleaningDiscards() async {
+        let harness = makeHarness(text: "hello")
+        await harness.session.start()
+
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.cancelCapture()
+        #expect(harness.session.isCleaningCapture)
+
+        harness.session.handleHotkey(hotkeyTrigger(.armed, activation: .toggle))
+        harness.session.handleHotkey(hotkeyTrigger(.disarmed, activation: .toggle))
+        #expect(await waitUntil { !harness.session.isCleaningCapture })
+        #expect(await waitUntil { harness.events.all().contains("speech.discardPrearm") })
+        try? await Task.sleep(for: .milliseconds(150))
+
+        let events = harness.events.all()
+        #expect(!events.contains("speech.prearm"))
+        #expect(events.filter { $0 == "speech.start" }.count == 1)
+        #expect(harness.session.phase == .cancelled)
+    }
+
+    private func hotkeyTrigger(
+        _ phase: HotkeyGesturePhase,
+        activation: ShortcutActivation,
+        definitionID: String? = nil
+    ) -> HotkeyTrigger {
+        HotkeyTrigger(
+            action: .dictate,
+            activation: activation,
+            phase: phase,
+            definitionID: definitionID,
+            pressedAt: ContinuousClock.now
+        )
+    }
+
     @MainActor
     private func dictate(_ session: AppSession) async {
         session.toggleCapture(.dictation)
@@ -1463,6 +1634,19 @@ private actor StubSpeech: SpeechTranscribing {
     }
 
     func prewarms() -> [String?] { prewarmedDevices }
+
+    private var prearmedDevices: [String?] = []
+
+    func prearmMicrophone(microphoneDeviceUID: String?) async {
+        events.append("speech.prearm")
+        prearmedDevices.append(microphoneDeviceUID)
+    }
+
+    func discardPrearmedMicrophone() async {
+        events.append("speech.discardPrearm")
+    }
+
+    func prearms() -> [String?] { prearmedDevices }
 
     func availableInputDevices() async -> [AudioInputDevice] { [] }
 

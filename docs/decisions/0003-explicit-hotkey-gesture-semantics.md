@@ -4,6 +4,7 @@
 - 日期：2026-07-31
 - 决策人：Lerro maintainers
 - 部分替代：[`0008`](0008-accessibility-owned-fn-shortcuts.md)（权限前提）
+- 补充：[`0018`](0018-microphone-prearm-at-modifier-key-down.md)（`armed` / `disarmed` 与预开麦）
 
 ## 背景
 
@@ -25,7 +26,7 @@ trigger 通过带 dispatch epoch 的单一 FIFO stream 消费，使快速 down/u
 
 `GlobalHotkeyMonitor` 使用 active event tap 监听 `flagsChanged`、`keyDown`、`keyUp`：
 
-- 单修饰键先进入 120 ms 候选；期间出现其他键时让系统 chord 继续执行。
+- 单修饰键先进入候选：hold 120 ms 后激活，toggle 在松开时确认、按住超过 1 秒作废；期间出现其他键或鼠标点击时让系统 chord 继续执行。
 - 命中的普通键 down、repeat 与 up 全部吞掉。
 - 重复 `start` 与相同 definitions 的 `update` 保持幂等。
 - 更具体的 chord 可以接管已激活的 modifier 前缀。
@@ -44,7 +45,7 @@ SwiftUI 录制器 reducer 分开保存 live、peak 和已验证的 chord、模�
 ## 后果
 
 - UI、持久化、event tap 与 `AppSession` 使用同一套模式语义；release 与 definition ID 绑定。
-- 单修饰键 hold 有 120 ms 意图确认延迟。
+- 单修饰键 hold 有 120 ms 意图确认延迟；按下时已预开麦克风（ADR 0018），这段时间的音频不丢失。
 - 外接键盘的 Fn/Globe 固件可能不向 macOS 发送事件，录制器会保持等待。
 
 ## 隐私

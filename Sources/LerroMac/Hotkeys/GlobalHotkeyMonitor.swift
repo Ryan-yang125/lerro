@@ -19,7 +19,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         enum ModifierTimerDirective {
             case none
             case cancel
-            case schedule(definitionID: String)
+            case schedule(definitionID: String, delay: TimeInterval)
         }
 
         var triggers: [HotkeyTrigger] = []
@@ -46,6 +46,9 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     private var currentEventAt: ContinuousClock.Instant?
     /// Receive time of the event that staged the pending modifier candidate.
     private var pendingModifierPressedAt: ContinuousClock.Instant?
+    /// True when `.armed` was emitted for the pending candidate, so clearing it
+    /// without a `.began` owes the app a matching `.disarmed`.
+    private var pendingModifierArmed = false
     private var activeModifierDefinition: HotkeyDefinition?
     private var activeKeyDefinitions: [Int64: HotkeyDefinition] = [:]
     private var claimedKeyCodes: Set<Int64> = []
@@ -70,10 +73,12 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     private var secureInputRecoveryPending = false
 
     private let modifierHoldDelay: TimeInterval
+    private let modifierTapTimeout: TimeInterval
     private let secureInputPollInterval: TimeInterval
     private let secureInputCheck: @Sendable () -> Bool
     private let physicalModifierFlags: @Sendable () -> CGEventFlags
     private let physicalKeyState: @Sendable (CGKeyCode) -> Bool
+    private let pointerPressedWithin: @Sendable (TimeInterval) -> Bool
     private let mainQueueScheduler: @Sendable (@escaping @Sendable () -> Void) -> Void
     private let eventTapRestartInstaller: (@Sendable () -> Bool)?
 
@@ -97,6 +102,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     public convenience init(
         definitions: [HotkeyDefinition] = UserPreferences.defaultHotkeys,
         modifierHoldDelay: TimeInterval = 0.12,
+        modifierTapTimeout: TimeInterval = 1.0,
         secureInputPollInterval: TimeInterval = 0.10,
         secureInputCheck: @escaping @Sendable () -> Bool = {
             IsSecureEventInputEnabled()
@@ -106,15 +112,22 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         },
         physicalKeyState: @escaping @Sendable (CGKeyCode) -> Bool = { keyCode in
             CGEventSource.keyState(.combinedSessionState, key: keyCode)
+        },
+        pointerPressedWithin: @escaping @Sendable (TimeInterval) -> Bool = { seconds in
+            [CGEventType.leftMouseDown, .rightMouseDown, .otherMouseDown].contains {
+                CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) < seconds
+            }
         }
     ) {
         self.init(
             definitions: definitions,
             modifierHoldDelay: modifierHoldDelay,
+            modifierTapTimeout: modifierTapTimeout,
             secureInputPollInterval: secureInputPollInterval,
             secureInputCheck: secureInputCheck,
             physicalModifierFlags: physicalModifierFlags,
             physicalKeyState: physicalKeyState,
+            pointerPressedWithin: pointerPressedWithin,
             mainQueueScheduler: { work in DispatchQueue.main.async(execute: work) },
             eventTapRestartInstaller: nil
         )
@@ -123,6 +136,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     init(
         definitions: [HotkeyDefinition] = UserPreferences.defaultHotkeys,
         modifierHoldDelay: TimeInterval = 0.12,
+        modifierTapTimeout: TimeInterval = 1.0,
         secureInputPollInterval: TimeInterval = 0.10,
         secureInputCheck: @escaping @Sendable () -> Bool = {
             IsSecureEventInputEnabled()
@@ -133,15 +147,22 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         physicalKeyState: @escaping @Sendable (CGKeyCode) -> Bool = { keyCode in
             CGEventSource.keyState(.combinedSessionState, key: keyCode)
         },
+        pointerPressedWithin: @escaping @Sendable (TimeInterval) -> Bool = { seconds in
+            [CGEventType.leftMouseDown, .rightMouseDown, .otherMouseDown].contains {
+                CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) < seconds
+            }
+        },
         mainQueueScheduler: @escaping @Sendable (@escaping @Sendable () -> Void) -> Void,
         eventTapRestartInstaller: (@Sendable () -> Bool)?
     ) {
         self.definitions = definitions.map(Self.normalized)
         self.modifierHoldDelay = modifierHoldDelay
+        self.modifierTapTimeout = modifierTapTimeout
         self.secureInputPollInterval = secureInputPollInterval
         self.secureInputCheck = secureInputCheck
         self.physicalModifierFlags = physicalModifierFlags
         self.physicalKeyState = physicalKeyState
+        self.pointerPressedWithin = pointerPressedWithin
         self.mainQueueScheduler = mainQueueScheduler
         self.eventTapRestartInstaller = eventTapRestartInstaller
     }
@@ -191,16 +212,18 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         let changed = lock.withLock { self.definitions != normalizedDefinitions }
         guard changed else { return }
         let interruption = interruptionTriggers()
-        beginPhysicalDrain()
+        let disarm = beginPhysicalDrain()
         lock.withLock { self.definitions = normalizedDefinitions }
-        interruption.forEach(emit)
+        ([disarm].compactMap { $0 } + interruption).forEach(emit)
     }
 
     /// Cancels logical gesture ownership while retaining every physical event
     /// already claimed by the active tap. Matching key-up and modifier-release
     /// events continue to drain without reaching the frontmost application.
     public func resetTransientState() {
-        beginPhysicalDrain()
+        if let disarm = beginPhysicalDrain() {
+            emit(disarm)
+        }
     }
 
     /// Stops dispatch and clears both logical and physical state. Once the tap
@@ -208,9 +231,12 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     public func stop() {
         stopSecureInputWatchdog()
         cancelEventTapRestart()
-        clearAllGestureState()
+        let disarm = clearAllGestureState()
         invalidateEventTap()
         secureInputObserved = false
+        if let disarm {
+            emit(disarm)
+        }
     }
 
     private func invalidateEventTap() {
@@ -256,8 +282,8 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     func receive(type: CGEventType, event: CGEvent) -> Bool {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             let interruption = interruptionTriggers()
-            beginPhysicalDrain()
-            interruption.forEach(emit)
+            let disarm = beginPhysicalDrain()
+            ([disarm].compactMap { $0 } + interruption).forEach(emit)
             scheduleEventTapRestart()
             return false
         }
@@ -403,6 +429,11 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         pollSecureInput()
     }
 
+    func expirePendingModifierForTesting() -> [HotkeyTrigger] {
+        [expirePendingModifier(expectedDefinitionID: pendingModifierDefinition?.id)]
+            .compactMap { $0 }
+    }
+
     private func processFlagsChanged(
         keyCode: Int64,
         flags: CGEventFlags,
@@ -484,22 +515,26 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         if let pending = pendingModifierDefinition,
            requiredFlags(for: pending) != current {
             let pendingPressedAt = pendingModifierPressedAt
-            pendingModifierDefinition = nil
-            pendingModifierPressedAt = nil
+            let wasArmed = pendingModifierArmed
+            let disarm = clearPendingModifier()
             result.timerDirective = .cancel
 
             if grew,
                let upgraded = modifierOnlyDefinition(flags: current) {
+                result.triggers.append(contentsOf: [disarm].compactMap { $0 })
                 stageModifierCandidate(upgraded, result: &result)
                 return finalizeModifierResult(result, current: current, ownedBeforeEvent: ownedBeforeEvent)
             }
 
             if pending.activation == .toggle,
                shrank,
-               !modifierSequenceBlocked {
+               !modifierSequenceBlocked,
+               !(wasArmed && pointerPressedDuringModifierHold(since: pendingPressedAt)) {
                 result.triggers.append(
                     trigger(for: pending, phase: .began, pressedAt: pendingPressedAt)
                 )
+            } else if let disarm {
+                result.triggers.append(disarm)
             }
             modifierSequenceBlocked = !current.isEmpty
             if current.isEmpty {
@@ -596,9 +631,57 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         pendingModifierDefinition = definition
         pendingModifierPressedAt = currentEventAt
         modifierSequenceOwned = true
-        if definition.activation == .hold {
-            result.timerDirective = .schedule(definitionID: definition.id)
+        // Only capture actions open the microphone early. Other modifier-only
+        // actions keep their previous behavior and never arm.
+        let arms = definition.action == .dictate || definition.action == .translate
+        pendingModifierArmed = arms
+        if arms {
+            result.triggers.append(
+                trigger(for: definition, phase: .armed, pressedAt: currentEventAt)
+            )
         }
+        if definition.activation == .hold {
+            result.timerDirective = .schedule(
+                definitionID: definition.id,
+                delay: modifierHoldDelay
+            )
+        } else if arms {
+            result.timerDirective = .schedule(
+                definitionID: definition.id,
+                delay: modifierTapTimeout
+            )
+        }
+    }
+
+    /// Drops the pending candidate without activating it. Returns the
+    /// `.disarmed` trigger when the candidate had been armed.
+    private func clearPendingModifier() -> HotkeyTrigger? {
+        guard let pending = pendingModifierDefinition else {
+            resetPendingModifierState()
+            return nil
+        }
+        let pressedAt = pendingModifierPressedAt
+        let wasArmed = pendingModifierArmed
+        resetPendingModifierState()
+        return wasArmed ? trigger(for: pending, phase: .disarmed, pressedAt: pressedAt) : nil
+    }
+
+    private func resetPendingModifierState() {
+        pendingModifierDefinition = nil
+        pendingModifierPressedAt = nil
+        pendingModifierArmed = false
+    }
+
+    /// Mouse and trackpad button presses count as a combo (Command-click,
+    /// Option-drag). Scroll is deliberately excluded: momentum scroll events
+    /// from a scroll that began before the press would cancel a legitimate tap.
+    private func pointerPressedDuringModifierHold(
+        since pressedAt: ContinuousClock.Instant?
+    ) -> Bool {
+        guard let pressedAt else { return false }
+        let components = pressedAt.duration(to: .now).components
+        let held = Double(components.seconds) + Double(components.attoseconds) / 1e18
+        return pointerPressedWithin(held)
     }
 
     private func activateModifierUpgrade(
@@ -640,11 +723,13 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
 
         if keyCode == 53 {
             let interruption = interruptionTriggers()
-            beginPhysicalDrain()
+            let disarm = beginPhysicalDrain()
             return ProcessingResult(
-                triggers: interruption.isEmpty
-                    ? [HotkeyTrigger(action: .cancel, activation: .toggle, phase: .began)]
-                    : interruption
+                triggers: [disarm].compactMap { $0 } + (
+                    interruption.isEmpty
+                        ? [HotkeyTrigger(action: .cancel, activation: .toggle, phase: .began)]
+                        : interruption
+                )
             )
         }
 
@@ -666,8 +751,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         var result = ProcessingResult()
 
         if pendingModifierDefinition != nil {
-            pendingModifierDefinition = nil
-            pendingModifierPressedAt = nil
+            result.triggers.append(contentsOf: [clearPendingModifier()].compactMap { $0 })
             modifierSequenceBlocked = !currentModifierFlags.isEmpty
             result.timerDirective = .cancel
             if let definition {
@@ -782,21 +866,21 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
             break
         case .cancel:
             cancelModifierTimer()
-        case let .schedule(definitionID):
+        case let .schedule(definitionID, delay):
             modifierTimerGeneration &+= 1
             let generation = modifierTimerGeneration
             pendingModifierActivation?.cancel()
             let workItem = DispatchWorkItem { [weak self] in
                 guard let self,
                       self.modifierTimerGeneration == generation,
-                      let trigger = self.activatePendingModifier(
+                      let trigger = self.firePendingModifierTimer(
                         expectedDefinitionID: definitionID
                       ) else { return }
                 self.emit(trigger)
             }
             pendingModifierActivation = workItem
             DispatchQueue.main.asyncAfter(
-                deadline: .now() + modifierHoldDelay,
+                deadline: .now() + delay,
                 execute: workItem
             )
         }
@@ -819,11 +903,45 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
             return nil
         }
         let pressedAt = pendingModifierPressedAt
-        pendingModifierDefinition = nil
-        pendingModifierPressedAt = nil
         pendingModifierActivation = nil
+        if pendingModifierArmed,
+           pointerPressedDuringModifierHold(since: pressedAt) {
+            // A pointer press during the hold makes this a combo.
+            modifierSequenceBlocked = true
+            return clearPendingModifier()
+        }
+        resetPendingModifierState()
         activeModifierDefinition = pending
         return trigger(for: pending, phase: .began, pressedAt: pressedAt)
+    }
+
+    /// Runs when the timer scheduled for the pending candidate fires: hold
+    /// candidates activate, toggle candidates expire.
+    private func firePendingModifierTimer(expectedDefinitionID: String) -> HotkeyTrigger? {
+        guard let pending = pendingModifierDefinition,
+              pending.id == expectedDefinitionID else { return nil }
+        switch pending.activation {
+        case .hold:
+            return activatePendingModifier(expectedDefinitionID: expectedDefinitionID)
+        case .toggle:
+            return expirePendingModifier(expectedDefinitionID: expectedDefinitionID)
+        }
+    }
+
+    /// A toggle press held past the tap timeout is no longer a tap. The later
+    /// release emits nothing, and ownership of the physical sequence is kept.
+    private func expirePendingModifier(expectedDefinitionID: String?) -> HotkeyTrigger? {
+        guard !physicalDrainRequested,
+              let expectedDefinitionID,
+              let pending = pendingModifierDefinition,
+              pending.id == expectedDefinitionID,
+              pending.activation == .toggle,
+              requiredFlags(for: pending) == currentModifierFlags else {
+            return nil
+        }
+        cancelModifierTimer()
+        modifierSequenceBlocked = true
+        return clearPendingModifier()
     }
 
     private func trigger(
@@ -873,10 +991,9 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         return [HotkeyTrigger(action: .cancel, activation: .toggle, phase: .began)]
     }
 
-    private func beginPhysicalDrain() {
+    private func beginPhysicalDrain() -> HotkeyTrigger? {
         cancelModifierTimer()
-        pendingModifierDefinition = nil
-        pendingModifierPressedAt = nil
+        let disarm = clearPendingModifier()
         activeModifierDefinition = nil
         activeKeyDefinitions.removeAll()
         physicalDrainRequested = !currentModifierFlags.isEmpty
@@ -885,6 +1002,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
             || !claimedModifierKeyCodes.isEmpty
             || modifierSequenceOwned
         modifierSequenceBlocked = !currentModifierFlags.isEmpty
+        return disarm
     }
 
     private func drainPhysicalEvent(
@@ -969,10 +1087,9 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         }
     }
 
-    private func clearAllGestureState() {
+    private func clearAllGestureState() -> HotkeyTrigger? {
         cancelModifierTimer()
-        pendingModifierDefinition = nil
-        pendingModifierPressedAt = nil
+        let disarm = clearPendingModifier()
         activeModifierDefinition = nil
         activeKeyDefinitions.removeAll()
         claimedKeyCodes.removeAll()
@@ -983,6 +1100,7 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         modifierSequenceBlocked = false
         physicalDrainRequested = false
         secureInputRecoveryPending = false
+        return disarm
     }
 
     private func startSecureInputWatchdog() {
@@ -1018,10 +1136,11 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         guard !secureInputObserved else { return [] }
         secureInputObserved = true
         secureInputRecoveryPending = false
-        beginPhysicalDrain()
+        let disarm = beginPhysicalDrain()
         // A toggle capture has no active physical definition after key-up, so
         // every secure-input transition emits one logical cancellation signal.
-        return [HotkeyTrigger(action: .cancel, activation: .toggle, phase: .began)]
+        return [disarm].compactMap { $0 }
+            + [HotkeyTrigger(action: .cancel, activation: .toggle, phase: .began)]
     }
 
     private func reconcileSecureInputEndIfNeeded() {

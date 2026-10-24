@@ -230,6 +230,7 @@ final class AppSession {
         let dispatchEpoch: UInt64
     }
     private var activeHotkeyOrigin: HotkeyCaptureOrigin?
+    private var microphonePrearmTask: Task<Void, Never>?
     private var pendingHotkeysAfterCancellation: [PendingCaptureHotkey] = []
     private var hotkeyTriggerContinuation: AsyncStream<QueuedHotkeyTrigger>.Continuation?
     private var hotkeyTriggerTask: Task<Void, Never>?
@@ -1518,7 +1519,12 @@ final class AppSession {
     }
 
     func handleHotkey(_ trigger: HotkeyTrigger) {
-        guard !isShortcutConfigurationActive else { return }
+        guard !isShortcutConfigurationActive else {
+            if trigger.action == .dictate || trigger.action == .translate, trigger.phase != .armed {
+                discardMicrophonePrearm()
+            }
+            return
+        }
         switch trigger.action {
         case .dictate:
             handleCaptureHotkey(trigger, mode: .dictation)
@@ -1544,17 +1550,34 @@ final class AppSession {
             return
         }
 
+        switch trigger.phase {
+        case .armed:
+            prearmMicrophoneIfAllowed()
+            return
+        case .disarmed:
+            discardMicrophonePrearm()
+            return
+        case .began, .ended:
+            break
+        }
+
         switch trigger.activation {
         case .hold:
             switch trigger.phase {
+            case .armed, .disarmed:
+                return
             case .began:
                 if hasActiveCapture {
-                    guard activeMode == mode, isHandsFreeCapture else { return }
+                    guard activeMode == mode, isHandsFreeCapture else {
+                        discardMicrophonePrearm()
+                        return
+                    }
                     activeHotkeyOrigin = nil
                     toggleCapture(mode)
                     return
                 }
                 guard phase == .idle || phase == .success || phase == .failed || phase == .cancelled else {
+                    discardMicrophonePrearm()
                     return
                 }
                 activeHotkeyOrigin = HotkeyCaptureOrigin(
@@ -1576,7 +1599,10 @@ final class AppSession {
         case .toggle:
             guard trigger.phase == .began else { return }
             if hasActiveCapture {
-                guard activeMode == mode else { return }
+                guard activeMode == mode else {
+                    discardMicrophonePrearm()
+                    return
+                }
                 activeHotkeyOrigin = nil
                 toggleCapture(mode)
                 return
@@ -1590,6 +1616,39 @@ final class AppSession {
                 )
                 return
             }
+            discardMicrophonePrearm()
+        }
+    }
+
+    private var canPrearmMicrophone: Bool {
+        !isShortcutConfigurationActive
+            && dependencies.startupStorageError == nil
+            && !isCleaningCapture
+            && !hasActiveCapture
+            && (phase == .idle || phase == .success || phase == .failed || phase == .cancelled)
+            && microphonePermission
+            && accessibilityPermission
+    }
+
+    private func prearmMicrophoneIfAllowed() {
+        guard canPrearmMicrophone else { return }
+        let uid = preferences.microphoneDeviceUID
+        let speech = dependencies.speech
+        enqueueMicrophonePrearmOperation { await speech.prearmMicrophone(microphoneDeviceUID: uid) }
+    }
+
+    private func discardMicrophonePrearm() {
+        let speech = dependencies.speech
+        enqueueMicrophonePrearmOperation { await speech.discardPrearmedMicrophone() }
+    }
+
+    /// Speech actor calls come from separate tasks, so prearm, discard and the
+    /// following `start` are chained to keep their key-event order.
+    private func enqueueMicrophonePrearmOperation(_ operation: @escaping @Sendable () async -> Void) {
+        let previous = microphonePrearmTask
+        microphonePrearmTask = Task {
+            await previous?.value
+            await operation()
         }
     }
 
@@ -1597,9 +1656,21 @@ final class AppSession {
         _ trigger: HotkeyTrigger,
         mode: CaptureMode
     ) {
+        switch trigger.phase {
+        case .armed:
+            return
+        case .disarmed:
+            discardMicrophonePrearm()
+            return
+        case .began, .ended:
+            break
+        }
+
         switch trigger.activation {
         case .hold:
             switch trigger.phase {
+            case .armed, .disarmed:
+                return
             case .began:
                 let alreadyQueued = pendingHotkeysAfterCancellation.contains {
                     $0.mode == mode
@@ -1664,16 +1735,27 @@ final class AppSession {
         pressedAt: ContinuousClock.Instant? = nil
     ) {
         guard !isShortcutConfigurationActive else {
+            discardMicrophonePrearm()
             currentError = "快捷键测试期间不会开始录音"
             return
         }
         guard dependencies.startupStorageError == nil else {
+            discardMicrophonePrearm()
             currentError = "本地存储尚未就绪，请稍后重试"
             return
         }
-        guard !isCleaningCapture else { return }
-        guard !hasActiveCapture else { return }
-        guard authorizeIntelligenceIfNeeded(for: mode) else { return }
+        guard !isCleaningCapture else {
+            discardMicrophonePrearm()
+            return
+        }
+        guard !hasActiveCapture else {
+            discardMicrophonePrearm()
+            return
+        }
+        guard authorizeIntelligenceIfNeeded(for: mode) else {
+            discardMicrophonePrearm()
+            return
+        }
         deliveredTextObservationTask?.cancel()
         Task { await dependencies.deliveredTextObserver.stopObserving() }
         recoveryDismissTask?.cancel()
@@ -1738,6 +1820,7 @@ final class AppSession {
         guard captureGeneration == generation, !Task.isCancelled else { return }
         guard await ensureCapturePermissions() else {
             if captureGeneration == generation {
+                discardMicrophonePrearm()
                 captureGeneration = nil
                 activeHotkeyOrigin = nil
                 isStartingCapture = false
@@ -1753,6 +1836,7 @@ final class AppSession {
             CGPoint(x: $0.midX, y: $0.midY)
         }
         guard CapturePrivacyPolicy.permitsCapture(in: context) else {
+            discardMicrophonePrearm()
             fail(LerroError.secureField)
             return
         }
@@ -1767,6 +1851,7 @@ final class AppSession {
             }
             markTrace(.speechResourcesReady, generation: generation)
             markTrace(.speechStartRequested, generation: generation)
+            await microphonePrearmTask?.value
             let stream = try await dependencies.speech.start(
                 localeIdentifier: preferences.recognitionLocaleIdentifier,
                 microphoneDeviceUID: preferences.microphoneDeviceUID,

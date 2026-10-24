@@ -5,6 +5,9 @@ import Foundation
 public enum CaptureMilestone: String, Codable, CaseIterable, Sendable {
     // Startup chain: physical key press until the microphone is capturing.
     case hotkeyPressed
+    /// The microphone started at the modifier key-down, before the gesture
+    /// was confirmed. Its engine milestones then precede `hotkeyHandled`.
+    case microphonePrearmed
     case hotkeyHandled
     case hudArmed
     case permissionsChecked
@@ -78,6 +81,8 @@ public struct CaptureTraceSegment: Hashable, Sendable {
 
     /// Key press until the HUD waveform is live and speech is captured.
     public static let readyToSpeak = Self(name: "readyToSpeak", from: .hotkeyPressed, to: .listening)
+    /// Key press until the microphone captures audio, with or without prearm.
+    public static let microphoneLive = Self(name: "microphoneLive", from: .hotkeyPressed, to: .audioEngineStarted)
     public static let hotkeyDispatch = Self(name: "hotkeyDispatch", from: .hotkeyPressed, to: .hotkeyHandled)
     public static let appPreparation = Self(name: "appPreparation", from: .hotkeyHandled, to: .speechStartRequested)
     public static let speechStartup = Self(name: "speechStartup", from: .speechStartRequested, to: .listening)
@@ -92,7 +97,7 @@ public struct CaptureTraceSegment: Hashable, Sendable {
     public static let stopToDelivered = Self(name: "stopToDelivered", from: .stopRequested, to: .deliveryCommitted)
 
     public static let summaries: [Self] = [
-        .readyToSpeak, .hotkeyDispatch, .appPreparation, .speechStartup, .analyzerStartup,
+        .readyToSpeak, .microphoneLive, .hotkeyDispatch, .appPreparation, .speechStartup, .analyzerStartup,
         .firstAudio, .firstPartial,
         .recording, .transcription, .processing, .delivery, .stopToDelivered
     ]
