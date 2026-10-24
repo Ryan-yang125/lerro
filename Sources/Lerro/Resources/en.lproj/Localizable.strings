@@ -73,7 +73,6 @@
 "删除这个词语？" = "Delete this phrase?";
 "进入免按住模式" = "Enter Hands-free Mode";
 "保存原始录音" = "Save Original Recordings";
-"本地 AI" = "Local AI";
 "触发方式" = "Activation";
 "按住说话" = "Hold to Speak";
 "按一下开关" = "Press to Toggle";
@@ -168,11 +167,9 @@
 "快捷键无法使用：" = "Shortcut unavailable: ";
 "正在准备按键检测…" = "Preparing key detection…";
 "正在听" = "Listening";
-"正在处理" = "Processing";
 "正在暂停生产快捷键并准备录制" = "Pausing active shortcuts and preparing recording";
 "每项功能最多设置四个快捷键" = "Each action supports up to four shortcuts";
 "每项功能至少保留一个快捷键" = "Keep at least one shortcut for each action";
-"系统麦克风" = "System Microphone";
 "编辑%@快捷键" = "Edit %@ shortcut";
 "编辑%@快捷键 %@" = "Edit %@ shortcut %@";
 "辅助功能" = "Accessibility";
@@ -192,12 +189,9 @@
 "本地数据处理失败：%@" = "Local data processing failed: %@";
 "远程模型暂不可用：%@" = "Remote model is unavailable: %@";
 "AI 模型暂不可用：%@" = "AI model is unavailable: %@";
-"设备端翻译暂不可用：%@" = "On-device translation is unavailable: %@";
-"选中文字最多支持 %lld 字符，请缩小选区后重试" = "Selected text supports up to %lld characters. Reduce the selection and try again.";
 "请先完成当前语音输入" = "Finish the current voice input first.";
 "这个快捷键已被使用" = "This shortcut is already in use.";
 "快捷键保存后未通过本地校验" = "The saved shortcut did not pass local validation.";
-"语音输入仍在清理，请稍后再设置快捷键" = "Voice input is still being cleaned up. Set the shortcut again shortly.";
 "本地数据目录尚未准备完成" = "The local data directory is not ready.";
 "这条记录没有可重试的转写文本" = "This entry has no transcript to retry.";
 "这条记录没有可下载的音频" = "This entry has no audio available for download.";
@@ -219,15 +213,10 @@
 "无法删除录音 %@：%@" = "Could not delete recording %@: %@";
 "无法完成录音目录清理：%@" = "Could not finish recording-directory cleanup: %@";
 "另一项文本写入仍在进行" = "Another text delivery is still in progress";
-"原输入应用已关闭或无法激活" = "The original input app is closed or cannot be activated";
-"原输入应用已激活，但尚未成为当前键盘目标" = "The original input app is active but is not yet the current keyboard target";
-"原输入应用已激活，但输入焦点尚未恢复" = "The original input app is active but input focus has not returned";
 "无法确认当前输入框的安全状态" = "The current input field's security state could not be confirmed";
 "焦点已切换到其他应用，结果已保留在历史记录中" = "Focus moved to another app. The result is retained in History";
 "捕获上下文缺少输入应用身份" = "Captured context has no input app identity";
 "无法确认当前输入框的焦点状态" = "The current input field's focus state could not be confirmed";
-"无法确认原选区，结果已保留在历史记录中" = "The original selection could not be confirmed. The result is retained in History";
-"原选区已变化，结果已保留在历史记录中" = "The original selection changed. The result is retained in History";
 "无法确认当前输入应用的进程身份" = "The current input app's process identity could not be confirmed";
 "无法确认当前输入应用" = "The current input app could not be confirmed";
 "无法生成粘贴事件" = "Could not create the paste event";
@@ -246,7 +235,6 @@
 "远程模型运行时尚未配置" = "The remote model runtime is not configured";
 "远程模型配置缺失" = "Remote model configuration is missing";
 "远程模型没有生成有效内容" = "The remote model did not generate valid content";
-"当前智能服务没有配置远程模型运行时" = "The current intelligence service has no remote model runtime";
 "没有可用的麦克风输入格式" = "No microphone input format is available";
 "无法协商音频格式" = "Could not negotiate an audio format";
 "无法创建音频格式转换器" = "Could not create the audio format converter";
@@ -266,15 +254,13 @@
 "音频导出失败" = "Audio export failed";
 "快捷键服务启动失败" = "Shortcut service could not start";
 "语音输入失败" = "Voice input failed";
-"指令" = "Command";
 "已停用" = "Disabled";
 "添加应用" = "Add App";
 "选择应用" = "Choose App";
 "启用" = "Enabled";
 "删除这个应用语气？" = "Delete this app style?";
 "新建" = "New";
-"已锁定，免按住指令进行中" = "Locked, hands-free Command in progress";
-"完成一次听写、翻译或指令后，记录会出现在这里。" = "Complete a Dictation, Translation, or Command and it will appear here.";
+"完成一次听写或翻译后，记录会出现在这里。" = "Complete a Dictation or Translation and it will appear here.";
 
 /* Lerro Live */
 "实时转写" = "Live Transcript";
@@ -282,19 +268,15 @@
 "已撤回 · %@" = "Undone · %@";
 "应用" = "App";
 "选中文字" = "Selected Text";
-"Apple 翻译" = "Apple Translation";
 "明天下午三点把新版发布清单发给设计和工程团队" = "Send the new release checklist to the design and engineering teams at 3 PM tomorrow";
 "明天下午三点把新版发布清单发给设计和工程团队。" = "Send the new release checklist to the design and engineering teams at 3 PM tomorrow.";
 "撤销" = "Undo";
 "暂停" = "Pause";
 "内容已复制到剪贴板" = "The text was copied to the clipboard";
-"历史指令仅供查看" = "Previous commands are read-only";
 "复制失败" = "Copy failed";
 "撤销词典学习失败" = "The learned dictionary entry could not be undone";
 "明天下午三点开会，请提前准备资料。" = "The meeting is at 3 PM tomorrow. Please prepare the materials in advance.";
 "未能写入 %@" = "Could not insert into %@";
-"此版本已关闭指令回答" = "Command answers are unavailable in this version";
-"此版本已关闭指令打开链接" = "Command links are unavailable in this version";
 "翻译需要启用 AI" = "Translation requires AI";
 "全局" = "Global";
 "关闭恢复提示" = "Dismiss recovery";
