@@ -45,7 +45,7 @@ holds the commands. `docs/architecture.md` describes the code.
 Follow the Release section of `docs/development.md`: version bump in
 `config/Info.plist`, `CHANGELOG.md`, and `site/src/data/releases.ts`; commit;
 `verify_release.sh` with `LERRO_SIGNING_MODE=developer-id`; website deploy;
-`publish_cloudflare_release.sh`; push, tag, and `gh release create` with the five
+`publish_cloudflare_release.sh`; push, tag, and `gh release create` with the six
 files from `outputs/`.
 
 ## Final report

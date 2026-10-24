@@ -23,7 +23,6 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         guard !rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw LerroError.emptyTranscription
         }
-        let disposition = Self.disposition(for: request.task)
 
         if request.mode == .raw {
             guard request.task == .polish else {
@@ -31,7 +30,6 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
             }
             return IntelligenceResult(
                 text: rawTranscript,
-                disposition: disposition,
                 modelIdentifier: "raw-transcript",
                 source: .raw
             )
@@ -86,7 +84,6 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
                 fallbackTranscript: rawTranscript,
                 task: request.task
             ),
-            disposition: disposition,
             modelIdentifier: RemoteProviderConfiguration.modelIdentifier,
             source: .remote,
             call: call
@@ -213,12 +210,6 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
             userPrompt: prompts.user,
             maxTokens: 768
         )
-    }
-
-    private nonisolated static func disposition(for task: IntelligenceTask) -> IntelligenceDisposition {
-        switch task {
-        case .polish, .translate: .insert
-        }
     }
 
     private nonisolated static func finalText(

@@ -54,7 +54,6 @@ enum LerroInterfaceLocalization {
             ("本地数据处理失败：", "本地数据处理失败：%@"),
             ("AI 模型暂不可用：", "AI 模型暂不可用：%@"),
             ("远程模型暂不可用：", "远程模型暂不可用：%@"),
-            ("设备端翻译暂不可用：", "设备端翻译暂不可用：%@"),
             ("应用目录准备失败：", "应用目录准备失败：%@"),
             ("设置文件读取失败，已使用安全默认值。原文件保持不变：", "设置文件读取失败，已使用安全默认值。原文件保持不变：%@"),
             ("词典读取失败：", "词典读取失败：%@"),
@@ -66,7 +65,6 @@ enum LerroInterfaceLocalization {
             ("无法确认录音索引状态，已保留文件等待下次对账：", "无法确认录音索引状态，已保留文件等待下次对账：%@"),
             ("自动词典保存失败：", "自动词典保存失败：%@"),
             ("无法完成录音目录清理：", "无法完成录音目录清理：%@"),
-            ("麦克风测试错误：", "麦克风测试错误：%@"),
             ("音频导出失败：", "音频导出失败：%@"),
             ("快捷键服务启动失败：", "快捷键服务启动失败：%@"),
             ("AI 整理失败：", "AI 整理失败：%@"),
@@ -107,17 +105,6 @@ enum LerroInterfaceLocalization {
         if message.hasPrefix("无法使用所选麦克风（"), message.hasSuffix("）") {
             let status = String(message.dropFirst("无法使用所选麦克风（".count).dropLast())
             return format("无法使用所选麦克风（%@）", locale: locale, arguments: status)
-        }
-
-        let selectionPrefix = "选中文字最多支持 "
-        let selectionSuffix = " 字符，请缩小选区后重试"
-        if message.hasPrefix(selectionPrefix), message.hasSuffix(selectionSuffix),
-           let maximum = Int64(message.dropFirst(selectionPrefix.count).dropLast(selectionSuffix.count)) {
-            return format(
-                "选中文字最多支持 %lld 字符，请缩小选区后重试",
-                locale: locale,
-                arguments: maximum
-            )
         }
 
         return nil

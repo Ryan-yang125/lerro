@@ -96,17 +96,4 @@ public extension IntelligenceProcessing {
         _ = request
         throw LerroError.modelUnavailable("当前智能服务不支持自动词典学习")
     }
-
-    func testRemoteConnection(
-        configuration: RemoteProviderConfiguration
-    ) async throws -> RemoteConnectionTestOutcome {
-        throw LerroError.remoteUnavailable("当前智能服务没有配置远程模型运行时")
-    }
-
-    func remoteBalance(
-        configuration: RemoteProviderConfiguration
-    ) async throws -> DeepSeekBalance {
-        _ = configuration
-        throw LerroError.modelUnavailable("当前智能服务不支持查询余额")
-    }
 }

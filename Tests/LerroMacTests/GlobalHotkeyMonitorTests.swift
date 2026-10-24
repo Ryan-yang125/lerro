@@ -64,31 +64,31 @@ struct GlobalHotkeyMonitorTests {
             activation: .hold,
             displayName: "Fn"
         )
-        let ask = HotkeyDefinition(
-            action: .ask,
+        let chord = HotkeyDefinition(
+            action: .translate,
             keyCode: 49,
             modifiers: CGEventFlags.maskSecondaryFn.rawValue,
             usesFunctionKey: true,
             activation: .hold,
             displayName: "Fn Space"
         )
-        let monitor = GlobalHotkeyMonitor(definitions: [fn, ask], modifierHoldDelay: 60)
+        let monitor = GlobalHotkeyMonitor(definitions: [fn, chord], modifierHoldDelay: 60)
         #expect(monitor.process(type: .flagsChanged, keyCode: 63, flags: [.maskSecondaryFn]).suppressEvent)
         let spaceDown = monitor.process(type: .keyDown, keyCode: 49, flags: [.maskSecondaryFn])
         #expect(spaceDown.suppressEvent)
         #expect(spaceDown.triggers == [HotkeyTrigger(
-            action: .ask,
+            action: .translate,
             activation: .hold,
             phase: .began,
-            definitionID: ask.id
+            definitionID: chord.id
         )])
         #expect(monitor.activatePendingModifierForTesting() == nil)
         let spaceUp = monitor.process(type: .keyUp, keyCode: 49, flags: [.maskSecondaryFn])
         #expect(spaceUp.triggers == [HotkeyTrigger(
-            action: .ask,
+            action: .translate,
             activation: .hold,
             phase: .ended,
-            definitionID: ask.id
+            definitionID: chord.id
         )])
     }
 

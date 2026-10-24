@@ -24,8 +24,7 @@ mark, the ink-blue accent and the ink-black capsule HUD. Brand sources and usage
 - Native `NavigationSplitView`, `List`, `Table`, `Form`, and a separate Settings
   window. Primary actions are pill buttons. Hover fades fill in 150 ms; pointer-down
   drops opacity to 0.8 in 100 ms. Reduce Motion keeps the same opacity feedback.
-- Icons: product concepts use `LerroGlyph` (16 pt grid, 1.4 pt round strokes, ink-blue
-  cursor), generic actions use outline SF Symbols, status and playback use filled.
+- Icons: outline SF Symbols; status and playback use filled.
 - HUD: a fixed ink-black Liquid Glass capsule, 40 pt high and at most 480 pt wide.
   All states morph inside the same capsule; the recording state shows an ink-blue
   cursor and a nine-bar waveform ([ADR 0013](docs/decisions/0013-brand-capsule-hud.md)).

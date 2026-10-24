@@ -55,8 +55,6 @@ struct MenuBarPanelPresentationTests {
         #expect(tile(.translation, .listening) == .cancel)
         #expect(tile(.dictation, .listening, active: .translation) == .cancel)
         #expect(tile(.translation, .listening, active: .translation) == .finish)
-        #expect(tile(.dictation, .listening, active: .ask) == .finish)
-        #expect(tile(.translation, .listening, active: .ask) == .cancel)
         #expect(tile(.dictation, .transcribing) == .disabled)
         #expect(tile(.translation, .enhancing) == .disabled)
         #expect(tile(.dictation, .inserting) == .disabled)

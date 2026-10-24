@@ -72,10 +72,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         saveAudio && historyRetention != .never
     }
 
-    public var isAutomaticDictionaryLearningActive: Bool {
-        automaticDictionaryLearningEnabled && intelligenceMode != .raw
-    }
-
     public init(
         recognitionLocaleIdentifier: String = "zh_CN",
         translationLanguageIdentifier: String = "en_US",
@@ -282,7 +278,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         }
         var signatures = Set<HotkeySignature>()
         return normalized.filter { definition in
-            guard definition.action != .ask else { return false }
             return signatures.insert(definition.signature).inserted
         }
     }

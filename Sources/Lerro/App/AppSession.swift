@@ -45,15 +45,6 @@ final class AppSession {
         var count: Int
     }
 
-    static let syntheticDeliveryProbeText = "Lerro delivery probe 7F3C2A"
-    static let deliveryProbeArgument = "--lerro-delivery-probe-token"
-    static let deliveryProbeNotificationPrefix = "app.lerro.mac.delivery-probe."
-
-    struct DeliveryProbeConfiguration: Equatable {
-        var payload: String
-        var notificationName: Notification.Name
-    }
-
     var destination: SidebarDestination = .home
     var phase: CapturePhase = .idle
     var activeMode: CaptureMode = .dictation
@@ -102,7 +93,6 @@ final class AppSession {
     var historyFocusID: UUID?
     var aiCallHighlightID: UUID?
     var dictionarySearch = ""
-    var dictionarySourceFilter: DictionaryEntrySource?
     var isStarted = false
     var microphonePermission = false
     var accessibilityPermission = false
@@ -111,10 +101,6 @@ final class AppSession {
         sourceLanguageIdentifier: "zh_CN",
         message: "正在检查语音资源"
     )
-
-    var activeCaptureApplicationName: String? {
-        activeSession?.context.applicationName
-    }
 
     var activeCaptureBundleIdentifier: String? {
         activeSession?.context.bundleIdentifier
@@ -125,7 +111,6 @@ final class AppSession {
         return switch activeSession.mode {
         case .translation: true
         case .dictation: activeSession.intelligenceMode != .raw
-        case .ask: false
         }
     }
 
@@ -160,11 +145,6 @@ final class AppSession {
         preferences.hotkeys.first(where: { $0.action == .dictate })?.activation ?? .hold
     }
 
-    func preferredActivation(for mode: CaptureMode) -> ShortcutActivation {
-        let action = hotkeyAction(for: mode)
-        return preferences.hotkeys.first(where: { $0.action == action })?.activation ?? .hold
-    }
-
     var shortcutConfigurationAvailable: Bool {
         !hasActiveCapture && !isCleaningCapture
     }
@@ -173,7 +153,6 @@ final class AppSession {
         switch mode {
         case .dictation: .dictate
         case .translation: .translate
-        case .ask: .ask
         }
     }
 
@@ -238,7 +217,6 @@ final class AppSession {
     private var loadedHistoryMode: CaptureMode?
     private var hasLoadedHistoryPage = false
     private let historyPageSize = 50
-    private var deliveryProbeObserver: NSObjectProtocol?
     private struct HotkeyCaptureOrigin {
         var definitionID: String?
         var mode: CaptureMode
@@ -328,14 +306,6 @@ final class AppSession {
         historyUsageEntries.count
     }
 
-    var currentMicrophoneName: String {
-        if let uid = preferences.microphoneDeviceUID,
-           let device = audioInputDevices.first(where: { $0.uid == uid }) {
-            return device.name
-        }
-        return audioInputDevices.first(where: \.isDefault)?.name ?? localized("系统麦克风")
-    }
-
     func selectMicrophone(uid: String?) {
         guard preferences.microphoneDeviceUID != uid else { return }
         preferences.microphoneDeviceUID = uid
@@ -411,7 +381,6 @@ final class AppSession {
         }
 
         updateHUD()
-        configureDeliveryProbeIfRequested()
         configureVisualFixtureIfRequested()
     }
 
@@ -717,22 +686,6 @@ final class AppSession {
         isShortcutConfigurationActive = true
         stopHotkeyMonitoring()
         return true
-    }
-
-    func prepareShortcutConfigurationAfterCancellingCapture() async -> Bool {
-        if hasActiveCapture {
-            cancelCapture()
-        }
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: .seconds(2))
-        while hasActiveCapture || isCleaningCapture {
-            guard clock.now < deadline else {
-                currentError = "语音输入仍在清理，请稍后再设置快捷键"
-                return false
-            }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-        return beginShortcutConfiguration()
     }
 
     func endShortcutConfiguration() {
@@ -1062,9 +1015,7 @@ final class AppSession {
                 }
                 _ = try await dependencies.textDelivery.deliver(
                     text,
-                    to: context,
-                    replacingSelection: false,
-                    targetPolicy: .requireCurrent
+                    to: context
                 )
             } catch {
                 currentError = userFacingError(error, context: "文本写入失败")
@@ -1145,17 +1096,6 @@ final class AppSession {
             availableApplications = applications
             applicationDictationCounts = counts
         }
-    }
-
-    private func updateHistoryEntry(
-        id: UUID,
-        update: (inout HistoryEntry) -> Void
-    ) async throws {
-        let entries = try await dependencies.history.entries()
-        guard var entry = entries.first(where: { $0.id == id }) else { return }
-        update(&entry)
-        try await dependencies.history.save(entry)
-        await refreshHistoryAndUsage()
     }
 
     func savePreferences() {
@@ -1405,10 +1345,6 @@ final class AppSession {
             currentError = "这条记录没有可重试的转写文本"
             return
         }
-        if entry.mode == .ask {
-            currentError = "历史指令仅供查看"
-            return
-        }
         guard authorizeIntelligenceIfNeeded(for: entry.mode, requiresAI: true) else {
             return
         }
@@ -1421,7 +1357,7 @@ final class AppSession {
                 bundleIdentifier: entry.bundleIdentifier,
                 windowTitle: entry.windowTitle
             )
-            let task = intelligenceTask(mode: entry.mode, transcript: entry.rawText, context: context)
+            let task = intelligenceTask(mode: entry.mode)
             let request = IntelligenceRequest(
                 task: task,
                 mode: intelligenceMode,
@@ -1588,8 +1524,6 @@ final class AppSession {
             handleCaptureHotkey(trigger, mode: .dictation)
         case .translate:
             handleCaptureHotkey(trigger, mode: .translation)
-        case .ask:
-            return
         case .pasteLastResult:
             if trigger.phase == .began { pasteLastResult() }
         case .cancel:
@@ -1739,7 +1673,6 @@ final class AppSession {
         }
         guard !isCleaningCapture else { return }
         guard !hasActiveCapture else { return }
-        guard mode != .ask else { return }
         guard authorizeIntelligenceIfNeeded(for: mode) else { return }
         deliveredTextObservationTask?.cancel()
         Task { await dependencies.deliveredTextObserver.stopObserving() }
@@ -2002,11 +1935,7 @@ final class AppSession {
         transcription: SpeechTranscription
     ) async throws {
         let processingTranscript = transcription.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let task = intelligenceTask(
-            mode: session.mode,
-            transcript: processingTranscript,
-            context: session.context
-        )
+        let task = intelligenceTask(mode: session.mode)
         let request = IntelligenceRequest(
             task: task,
             mode: session.intelligenceMode,
@@ -2073,30 +2002,21 @@ final class AppSession {
         var systemReceipt: TextDeliveryReceipt?
 
         do {
-            switch result.disposition {
-            case .showAnswer:
-                throw LerroError.modelUnavailable("此版本已关闭指令回答")
-            case .insert, .replaceSelection:
-                phase = .inserting
-                committedTextDeliverySessionID = nil
-                updateHUD()
-                systemReceipt = try await dependencies.textDelivery.deliver(
-                    result.text,
-                    to: session.context,
-                    replacingSelection: result.disposition == .replaceSelection,
-                    targetPolicy: .requireCurrent,
-                    onCommit: { [weak self] in
-                        guard let self,
-                              self.activeSession?.id == session.id else { return }
-                        self.markTrace(.deliveryCommitted, generation: generation)
-                        self.committedTextDeliverySessionID = session.id
-                        self.presentDeliveryFeedback(deliveryFeedback, fallbackMessage: deliveryFallbackMessage)
-                    }
-                )
-                markTrace(.deliveryFinished, generation: generation)
-            case .openURL:
-                throw LerroError.modelUnavailable("此版本已关闭指令打开链接")
-            }
+            phase = .inserting
+            committedTextDeliverySessionID = nil
+            updateHUD()
+            systemReceipt = try await dependencies.textDelivery.deliver(
+                result.text,
+                to: session.context,
+                onCommit: { [weak self] in
+                    guard let self,
+                          self.activeSession?.id == session.id else { return }
+                    self.markTrace(.deliveryCommitted, generation: generation)
+                    self.committedTextDeliverySessionID = session.id
+                    self.presentDeliveryFeedback(deliveryFeedback, fallbackMessage: deliveryFallbackMessage)
+                }
+            )
+            markTrace(.deliveryFinished, generation: generation)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -2514,14 +2434,10 @@ final class AppSession {
         return true
     }
 
-    private func intelligenceTask(mode: CaptureMode, transcript: String, context: CapturedContext) -> IntelligenceTask {
+    private func intelligenceTask(mode: CaptureMode) -> IntelligenceTask {
         switch mode {
-        case .dictation:
-            return .polish
-        case .translation:
-            return .translate
-        case .ask:
-            return .polish
+        case .dictation: .polish
+        case .translation: .translate
         }
     }
 
@@ -2536,7 +2452,6 @@ final class AppSession {
         guard !output.isEmpty else { throw LerroError.emptyTranscription }
         return IntelligenceResult(
             text: output,
-            disposition: .insert,
             modelIdentifier: "raw-apple-speech",
             source: .raw
         )
@@ -2849,45 +2764,6 @@ final class AppSession {
             ),
             targetLanguage: mode == .translation ? "en" : nil,
             intelligenceMode: intelligenceMode
-        )
-    }
-
-    private func configureDeliveryProbeIfRequested() {
-        if let configuration = Self.deliveryProbeConfiguration(
-            arguments: ProcessInfo.processInfo.arguments
-        ) {
-            lastResult = configuration.payload
-            deliveryProbeObserver = DistributedNotificationCenter.default().addObserver(
-                forName: configuration.notificationName,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.consumeDeliveryProbe()
-                }
-            }
-        }
-    }
-
-    private func consumeDeliveryProbe() {
-        guard let deliveryProbeObserver else { return }
-        DistributedNotificationCenter.default().removeObserver(deliveryProbeObserver)
-        self.deliveryProbeObserver = nil
-        pasteLastResult()
-    }
-
-    static func deliveryProbeConfiguration(
-        arguments: [String]
-    ) -> DeliveryProbeConfiguration? {
-        guard let argumentIndex = arguments.firstIndex(of: deliveryProbeArgument),
-              arguments.indices.contains(argumentIndex + 1) else {
-            return nil
-        }
-        let token = arguments[argumentIndex + 1]
-        guard UUID(uuidString: token) != nil else { return nil }
-        return DeliveryProbeConfiguration(
-            payload: syntheticDeliveryProbeText,
-            notificationName: Notification.Name(deliveryProbeNotificationPrefix + token)
         )
     }
 

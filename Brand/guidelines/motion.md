@@ -59,7 +59,6 @@ HUD 的形状、状态和文案由
 
 - 浮层从动作来源或当前输入区域出现，返回沿同一路径。
 - passive HUD 保持非激活并维持原应用焦点。
-- Ask 面板获得键盘焦点后提供清晰关闭路径。
 - material 的 blur、opacity 与 scale 同步建立，层级变化保持连贯。
 
 ## Reduce Motion

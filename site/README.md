@@ -33,7 +33,7 @@ npm run deploy   # build, then wrangler deploy
 
 - `src/layouts/Base.astro`: head metadata, nav, footer.
 - `src/components/`: `HomePage` (assembles the home sections), `ChangelogPage`, `Nav` (floating pill), `Footer`.
-- `src/components/home/`: one component per home section (`Intro`, `Story`, `Apps`, `Speed`, `Features`, `Steps`, `Pricing`, `Privacy`, `Faq`, `TryIt`), plus `Icon` and `avatars.ts` (hand-drawn chat avatars). Sections that animate carry their own `<script>`: `Story` (pinned scroll story WeChat, Mail, Notes), `Speed` (typing race), `Features` (learning meters), `TryIt` (hold the fn key). Shared helpers are in `src/scripts/onview.ts`.
+- `src/components/home/`: one component per home section (`Intro`, `Story`, `Apps`, `Speed`, `Features`, `Steps`, `Pricing`, `Compare`, `Privacy`, `Faq`, `TryIt`), plus `Icon` and `avatars.ts` (hand-drawn chat avatars). Sections that animate carry their own `<script>`: `Story` (pinned scroll story WeChat, Mail, Notes), `Speed` (typing race), `Features` (learning meters), `TryIt` (hold the fn key). Shared helpers are in `src/scripts/onview.ts`.
 - `src/data/home.ts`: home page copy in both languages (`home.zh`, `home.en`) and the demo content shown inside the mock app windows (`demo`, Chinese on both pages because the dictation examples are Chinese). `src/data/chrome.ts`: footer copy.
 - `src/data/releases.ts`: release history.
 - `src/styles/global.css`: design tokens, buttons, nav, footer. `home.css`: home page sections. `changelog.css`: changelog page.

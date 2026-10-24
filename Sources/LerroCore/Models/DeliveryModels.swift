@@ -20,12 +20,4 @@ public struct TextDeliveryReceipt: Equatable, Sendable {
         self.focusedValueFingerprint = focusedValueFingerprint
         self.focusedElementFingerprint = focusedElementFingerprint
     }
-
-    public var canUndo: Bool {
-        context.processIdentifier != nil
-            && context.bundleIdentifier != nil
-            && focusedValueFingerprint != nil
-            && focusedElementFingerprint != nil
-            && !context.isSecureField
-    }
 }

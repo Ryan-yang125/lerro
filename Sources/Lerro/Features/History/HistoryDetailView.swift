@@ -300,11 +300,9 @@ struct HistoryDetailView: View {
         let key: String
         switch entry.processingRoute {
         case .raw: key = "原始听写"
-        case .local: key = "本地 AI"
         case .remote:
             if let model = entry.modelIdentifier, !model.isEmpty { return model }
             key = "AI 整理"
-        case .appleTranslation: key = "Apple 翻译"
         case nil: key = entry.wasEnhanced ? "AI 整理" : "原始听写"
         }
         return HistoryPresentation.localized(key, locale: locale)

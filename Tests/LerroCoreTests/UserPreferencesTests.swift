@@ -24,7 +24,6 @@ struct UserPreferencesTests {
         #expect(preferences.remoteProvider == RemoteProviderConfiguration())
         #expect(preferences.appToneProfiles.isEmpty)
         #expect(preferences.automaticDictionaryLearningEnabled)
-        #expect(!preferences.isAutomaticDictionaryLearningActive)
         #expect(!preferences.hasCompletedOnboarding)
         #expect(preferences.onboardingStepIndex == nil)
         #expect(IntelligenceMode.allCases == [.raw, .remote])
@@ -90,14 +89,13 @@ struct UserPreferencesTests {
         #expect(paste.activation == .toggle)
     }
 
-    @Test("Modifier key codes and the Fn flag normalize on load and the removed Ask shortcut is dropped")
+    @Test("Modifier key codes and the Fn flag normalize on load")
     func normalizesHotkeysOnLoad() throws {
         let saved = Data(#"""
         {
           "hotkeys": [
             {"action":"dictate","keyCode":null,"modifiers":0,"usesFunctionKey":true,"activation":"hold","displayName":"Fn"},
             {"action":"translate","keyCode":56,"modifiers":8388608,"usesFunctionKey":true,"activation":"hold","displayName":"Fn Left Shift"},
-            {"action":"ask","keyCode":2,"modifiers":1048576,"usesFunctionKey":false,"activation":"toggle","displayName":"⌘D"},
             {"action":"pasteLastResult","keyCode":9,"modifiers":1310720,"usesFunctionKey":false,"activation":"toggle","displayName":"⌃⌘V"}
           ]
         }
@@ -113,7 +111,6 @@ struct UserPreferencesTests {
         #expect(translate.activation == .hold)
         #expect(translate.keyCode == nil)
         #expect(translate.modifiers == (1 << 23) | (1 << 17))
-        #expect(!preferences.hotkeys.contains { $0.action == .ask })
         #expect(paste.activation == .toggle)
     }
 
@@ -123,7 +120,7 @@ struct UserPreferencesTests {
         {
           "hotkeys": [
             {"action":"dictate","keyCode":63,"modifiers":0,"usesFunctionKey":false,"activation":"hold","displayName":"Fn key"},
-            {"action":"ask","keyCode":null,"modifiers":8388608,"usesFunctionKey":true,"activation":"toggle","displayName":"Fn flag"}
+            {"action":"translate","keyCode":null,"modifiers":8388608,"usesFunctionKey":true,"activation":"toggle","displayName":"Fn flag"}
           ]
         }
         """#.utf8)
@@ -168,7 +165,14 @@ struct UserPreferencesTests {
             intelligenceMode: .remote,
             remoteProvider: RemoteProviderConfiguration(
                 apiKey: "secret-test-key",
-                contextSharing: .minimal
+                contextSharing: RemoteContextSharing(
+                    application: false,
+                    windowTitle: false,
+                    nearbyText: false,
+                    selectedText: false,
+                    dictionary: false,
+                    tone: false
+                )
             ),
             hasCompletedOnboarding: false,
             onboardingStepIndex: 17
@@ -182,7 +186,6 @@ struct UserPreferencesTests {
         #expect(decoded.onboardingStepIndex == 17)
         #expect(decoded.appLanguage == .english)
         #expect(decoded.automaticDictionaryLearningEnabled)
-        #expect(decoded.isAutomaticDictionaryLearningActive)
     }
 
     @Test("Capture sounds default to on when missing and keep a saved off value")
@@ -273,18 +276,6 @@ struct UserPreferencesTests {
 
         #expect(decoded.intelligenceMode == .raw)
         #expect(decoded.hasCompletedOnboarding)
-    }
-
-    @Test("Automatic dictionary learning requires an active AI mode")
-    func gatesAutomaticDictionaryLearning() {
-        var preferences = UserPreferences()
-        #expect(!preferences.isAutomaticDictionaryLearningActive)
-
-        preferences.intelligenceMode = .remote
-        #expect(preferences.isAutomaticDictionaryLearningActive)
-
-        preferences.automaticDictionaryLearningEnabled = false
-        #expect(!preferences.isAutomaticDictionaryLearningActive)
     }
 
     @Test("The insufficient balance error names DeepSeek")

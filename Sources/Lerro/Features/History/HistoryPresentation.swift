@@ -32,7 +32,7 @@ enum HistoryTab: String, CaseIterable, Identifiable {
         self = switch mode {
         case .dictation: .dictation
         case .translation: .translation
-        case .ask, nil: .all
+        case nil: .all
         }
     }
 
@@ -86,7 +86,6 @@ enum HistoryPresentation {
         switch mode {
         case .dictation: "听写"
         case .translation: "翻译"
-        case .ask: "指令"
         }
     }
 
@@ -119,7 +118,6 @@ enum HistoryPresentation {
         var parts = [entry.applicationName, time(entry.createdAt, locale: locale)]
         switch entry.mode {
         case .translation: parts.append(localized("翻译", locale: locale))
-        case .ask: parts.append(localized("指令", locale: locale))
         case .dictation:
             if entry.wasEnhanced { parts.append(localized("AI 整理", locale: locale)) }
         }
@@ -162,12 +160,10 @@ struct HistoryEntryMenuItems: View {
             } label: {
                 Label("复制原始转写", systemImage: "text.quote")
             }
-            if entry.mode != .ask {
-                Button {
-                    session.retryHistoryEntry(entry)
-                } label: {
-                    Label("用 AI 重新处理", systemImage: "sparkles")
-                }
+            Button {
+                session.retryHistoryEntry(entry)
+            } label: {
+                Label("用 AI 重新处理", systemImage: "sparkles")
             }
         }
         if entry.audioRelativePath != nil {

@@ -89,14 +89,12 @@ enum CaptureHUDAnnouncement {
             switch mode {
             case .dictation: "正在听写"
             case .translation: "正在翻译"
-            case .ask: "正在听写"
             }
         case .listening: nil
         case .processing:
             switch mode {
             case .dictation: "正在处理听写"
             case .translation: "正在翻译"
-            case .ask: "正在处理"
             }
         case .deliveredRawFallback: "AI 未响应，已写入原文"
         case .error: errorMessage ?? "听写失败，可以重试"

@@ -451,8 +451,6 @@ struct ShortcutCaptureSheet: View {
             "听写"
         case .translate:
             "翻译"
-        case .ask:
-            "指令"
         case .pasteLastResult:
             "粘贴上次结果"
         case .cancel:

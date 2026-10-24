@@ -1518,8 +1518,6 @@ private actor StubDelivery: TextDelivering {
     func deliver(
         _ text: String,
         to context: CapturedContext,
-        replacingSelection: Bool,
-        targetPolicy: TextDeliveryTargetPolicy,
         onCommit: @escaping TextDeliveryCommitHandler
     ) async throws -> TextDeliveryReceipt {
         delivered.append(text)
@@ -1599,7 +1597,6 @@ private actor StubIntelligence: IntelligenceProcessing {
         if fails { throw TestFailure.intelligence }
         return IntelligenceResult(
             text: resultText,
-            disposition: .insert,
             modelIdentifier: "test-model",
             source: request.mode == .remote ? .remote : .raw,
             call: request.mode == .remote
@@ -1668,13 +1665,6 @@ private struct StubApplicationCatalog: ApplicationCataloging {
 
 private struct StubMicrophoneTester: MicrophoneLevelTesting {
     func availableInputDevices() async -> [AudioInputDevice] { [] }
-    func start(microphoneDeviceUID: String?) async throws -> MicrophoneLevelTestSession {
-        MicrophoneLevelTestSession(
-            id: UUID(),
-            levels: AsyncThrowingStream { $0.finish() }
-        )
-    }
-    func stop(sessionID: UUID) async {}
 }
 
 private final class StubHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {

@@ -10,7 +10,6 @@ public enum SidebarDestination: String, CaseIterable, Codable, Sendable {
 public enum CaptureMode: String, CaseIterable, Codable, Sendable, Identifiable {
     case dictation
     case translation
-    case ask
 
     public var id: String { rawValue }
 }
@@ -291,7 +290,6 @@ public struct AudioInputDevice: Codable, Hashable, Identifiable, Sendable {
 public enum HotkeyAction: String, CaseIterable, Codable, Sendable {
     case dictate
     case translate
-    case ask
     case pasteLastResult
     case cancel
 }

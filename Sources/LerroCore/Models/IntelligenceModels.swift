@@ -182,17 +182,8 @@ public struct DictionaryLearningDecision: Codable, Equatable, Sendable {
     }
 }
 
-public enum IntelligenceDisposition: String, Codable, Sendable {
-    case insert
-    case replaceSelection
-    case showAnswer
-    case openURL
-}
-
 public struct IntelligenceResult: Sendable, Equatable {
     public var text: String
-    public var disposition: IntelligenceDisposition
-    public var url: URL?
     public var modelIdentifier: String
     public var source: IntelligenceResultSource
     /// The remote call behind this result; nil for raw results.
@@ -200,15 +191,11 @@ public struct IntelligenceResult: Sendable, Equatable {
 
     public init(
         text: String,
-        disposition: IntelligenceDisposition,
-        url: URL? = nil,
         modelIdentifier: String,
         source: IntelligenceResultSource = .remote,
         call: AICallTrace? = nil
     ) {
         self.text = text
-        self.disposition = disposition
-        self.url = url
         self.modelIdentifier = modelIdentifier
         self.source = source
         self.call = call
@@ -224,8 +211,6 @@ public enum LerroError: LocalizedError, Sendable {
     case localData(String)
     case modelUnavailable(String)
     case remoteUnavailable(String)
-    case translationUnavailable(String)
-    case selectionTooLong(Int)
     case insufficientBalance
     case invalidAPIKey
     case cancelled
@@ -248,10 +233,6 @@ public enum LerroError: LocalizedError, Sendable {
             "AI 模型暂不可用：\(message)"
         case .remoteUnavailable(let message):
             "远程模型暂不可用：\(message)"
-        case .translationUnavailable(let message):
-            "设备端翻译暂不可用：\(message)"
-        case .selectionTooLong(let maximumCharacters):
-            "选中文字最多支持 \(maximumCharacters) 字符，请缩小选区后重试"
         case .insufficientBalance:
             "DeepSeek 余额用完了"
         case .invalidAPIKey:

@@ -366,25 +366,6 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
         lock.withLock { self.handler = handler }
     }
 
-    @discardableResult
-    func processAndEmitForTesting(
-        type: CGEventType,
-        keyCode: Int64,
-        flags: CGEventFlags,
-        isRepeat: Bool = false
-    ) -> Bool {
-        let result = processEvent(
-            type: type,
-            keyCode: keyCode,
-            flags: flags,
-            isRepeat: isRepeat,
-            eventSourceUserData: 0,
-            modifierKeyIsDown: nil
-        )
-        apply(result)
-        return result.suppressEvent
-    }
-
     private func processEvent(
         type: CGEventType,
         keyCode: Int64,
@@ -420,14 +401,6 @@ public final class GlobalHotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
 
     func pollSecureInputForTesting() -> [HotkeyTrigger] {
         pollSecureInput()
-    }
-
-    func eventTapRestartPendingForTesting() -> Bool {
-        eventTapRestartPending
-    }
-
-    func regularKeyAction(keyCode: Int64, flags: CGEventFlags) -> HotkeyAction? {
-        regularKeyDefinition(keyCode: keyCode, flags: flags)?.action
     }
 
     private func processFlagsChanged(

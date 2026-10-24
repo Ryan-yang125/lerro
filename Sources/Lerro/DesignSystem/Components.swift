@@ -1,62 +1,6 @@
 import AppKit
 import SwiftUI
 
-enum LerroTextRole {
-    case title
-    case heading
-    case body
-    case label
-    case secondary
-    case caption
-    case captionMedium
-
-    var size: CGFloat {
-        switch self {
-        case .title: LerroTheme.titleSize
-        case .heading, .body: LerroTheme.bodySize
-        case .label, .secondary: LerroTheme.labelSize
-        case .caption, .captionMedium: LerroTheme.captionSize
-        }
-    }
-
-    var weight: Font.Weight {
-        switch self {
-        case .title, .heading, .label, .captionMedium: .medium
-        case .body, .secondary, .caption: .regular
-        }
-    }
-}
-
-private struct LerroTypographyModifier: ViewModifier {
-    let role: LerroTextRole
-
-    func body(content: Content) -> some View {
-        content
-            .font(.system(size: role.size, weight: role.weight))
-            .tracking(LerroTheme.uiTracking)
-    }
-}
-
-extension View {
-    func lerroTypography(_ role: LerroTextRole) -> some View {
-        modifier(LerroTypographyModifier(role: role))
-    }
-}
-
-enum LerroInteractiveFeedback {
-    static let pressedOffset: CGFloat = 1
-    static let disabledOpacity = 0.48
-
-    static func offset(isPressed: Bool, reduceMotion: Bool) -> CGFloat {
-        isPressed && !reduceMotion ? pressedOffset : 0
-    }
-
-    static func opacity(isPressed: Bool, isEnabled: Bool) -> Double {
-        let pressedOpacity = isPressed ? 0.92 : 1
-        return pressedOpacity * (isEnabled ? 1 : disabledOpacity)
-    }
-}
-
 struct LerroMark: View {
     let height: CGFloat
     var blinksOnAppear = false
