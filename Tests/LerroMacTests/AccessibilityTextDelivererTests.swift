@@ -14,7 +14,7 @@ struct AccessibilityTextDelivererTests {
             DeliveryFocusSnapshot(safety: .secure, processIdentifier: 42),
         ] {
             let deliverer = AccessibilityTextDeliverer(
-                activateTarget: { _ in true }, focusSnapshot: { snapshot },
+                focusSnapshot: { snapshot },
                 pasteOverride: { text, _ in await recorder.recordPaste(text) }
             )
             await #expect(throws: LerroError.self) {
@@ -23,18 +23,16 @@ struct AccessibilityTextDelivererTests {
                     to: CapturedContext(
                         applicationName: "Editor",
                         processIdentifier: 42
-                    ),
-                    targetPolicy: .requireCurrent
+                    )
                 )
             }
         }
         #expect(await recorder.pastedTexts().isEmpty)
     }
 
-    @Test("Strict insertion rejects a missing capture identity and failed activation")
-    func strictInsertionRejectsMissingIdentityAndActivationFailure() async {
+    @Test("Strict insertion rejects a missing capture identity")
+    func strictInsertionRejectsMissingIdentity() async {
         let missingIdentity = AccessibilityTextDeliverer(
-            activateTarget: { _ in true },
             focusSnapshot: {
                 DeliveryFocusSnapshot(safety: .safe, processIdentifier: 42)
             }
@@ -42,24 +40,7 @@ struct AccessibilityTextDelivererTests {
         await #expect(throws: LerroError.self) {
             try await missingIdentity.deliver(
                 "output",
-                to: CapturedContext(applicationName: "Editor"),
-                targetPolicy: .requireCurrent
-            )
-        }
-        let activationFailure = AccessibilityTextDeliverer(
-            activateTarget: { _ in false },
-            focusSnapshot: {
-                DeliveryFocusSnapshot(safety: .safe, processIdentifier: 42)
-            }
-        )
-        await #expect(throws: LerroError.self) {
-            try await activationFailure.deliver(
-                "output",
-                to: CapturedContext(
-                    applicationName: "Editor",
-                    processIdentifier: 42
-                ),
-                targetPolicy: .reactivateCaptured
+                to: CapturedContext(applicationName: "Editor")
             )
         }
     }
@@ -68,7 +49,6 @@ struct AccessibilityTextDelivererTests {
     func matchingCurrentInsertCommits() async throws {
         let recorder = DeliveryInvocationRecorder()
         let deliverer = AccessibilityTextDeliverer(
-            activateTarget: { _ in true },
             focusSnapshot: {
                 DeliveryFocusSnapshot(
                     safety: .safe,
@@ -84,58 +64,25 @@ struct AccessibilityTextDelivererTests {
             "Lerro delivery probe",
             to: CapturedContext(
                 applicationName: "Editor", processIdentifier: 42, bundleIdentifier: "com.example.Editor"
-            ),
-            targetPolicy: .requireCurrent
+            )
         )
         #expect(await recorder.pastedTexts() == ["Lerro delivery probe"])
-    }
-
-    @Test("Cancellation after activation stops before Command-V")
-    func cancellationAfterActivationStopsDelivery() async {
-        let recorder = DeliveryInvocationRecorder()
-        let deliverer = AccessibilityTextDeliverer(
-            activateTarget: { _ in
-                try? await Task.sleep(for: .seconds(5))
-                return true
-            },
-            focusSnapshot: { DeliveryFocusSnapshot(safety: .safe, processIdentifier: 42) },
-            pasteOverride: { text, _ in await recorder.recordPaste(text) }
-        )
-        let delivery = Task {
-            try await deliverer.deliver(
-                "output",
-                to: CapturedContext(
-                    applicationName: "Editor",
-                    processIdentifier: 42
-                ),
-                targetPolicy: .reactivateCaptured
-            )
-        }
-        try? await Task.sleep(for: .milliseconds(20))
-        delivery.cancel()
-        await #expect(throws: CancellationError.self) { _ = try await delivery.value }
-        #expect(await recorder.pastedTexts().isEmpty)
     }
 
     @Test("Concurrent insertions cannot interleave their clipboard transactions")
     func concurrentDeliveriesAreRejected() async throws {
         let blocker = BlockingPasteProbe()
         let deliverer = AccessibilityTextDeliverer(
-            activateTarget: { _ in true },
             focusSnapshot: { DeliveryFocusSnapshot(safety: .safe, processIdentifier: 42, selectionState: .knownEmpty) },
             pasteOverride: { text, _ in await blocker.paste(text) }
         )
         let context = CapturedContext(applicationName: "Editor", processIdentifier: 42)
         let first = Task {
-            try await deliverer.deliver(
-                "first",
-                to: context,
-                targetPolicy: .requireCurrent
-            )
+            try await deliverer.deliver("first", to: context)
         }
         await blocker.waitUntilStarted()
         await #expect(throws: LerroError.self) {
-            try await deliverer.deliver("second", to: context, targetPolicy: .requireCurrent)
+            try await deliverer.deliver("second", to: context)
         }
         await blocker.resume()
         _ = try await first.value

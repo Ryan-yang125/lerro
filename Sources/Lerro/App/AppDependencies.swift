@@ -703,7 +703,6 @@ private struct FixtureTextDeliverer: TextDelivering {
     func deliver(
         _ text: String,
         to context: CapturedContext,
-        targetPolicy: TextDeliveryTargetPolicy,
         onCommit: @escaping TextDeliveryCommitHandler
     ) async throws -> TextDeliveryReceipt {
         await onCommit()

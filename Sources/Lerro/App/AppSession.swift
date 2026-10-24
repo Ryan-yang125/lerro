@@ -1017,8 +1017,7 @@ final class AppSession {
                 }
                 _ = try await dependencies.textDelivery.deliver(
                     text,
-                    to: context,
-                    targetPolicy: .requireCurrent
+                    to: context
                 )
             } catch {
                 currentError = userFacingError(error, context: "文本写入失败")
@@ -2022,7 +2021,6 @@ final class AppSession {
             systemReceipt = try await dependencies.textDelivery.deliver(
                 result.text,
                 to: session.context,
-                targetPolicy: .requireCurrent,
                 onCommit: { [weak self] in
                     guard let self,
                           self.activeSession?.id == session.id else { return }

@@ -1518,7 +1518,6 @@ private actor StubDelivery: TextDelivering {
     func deliver(
         _ text: String,
         to context: CapturedContext,
-        targetPolicy: TextDeliveryTargetPolicy,
         onCommit: @escaping TextDeliveryCommitHandler
     ) async throws -> TextDeliveryReceipt {
         delivered.append(text)

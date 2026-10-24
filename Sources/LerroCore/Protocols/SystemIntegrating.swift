@@ -4,17 +4,6 @@ public protocol ContextCapturing: Sendable {
     func captureCurrentContext() async -> CapturedContext
 }
 
-public enum TextDeliveryTargetPolicy: Sendable, Equatable {
-    /// Automatic capture results are delivered only while the captured app is
-    /// still the current keyboard target. This prevents a late result from
-    /// stealing focus or writing into an app the user switched to.
-    case requireCurrent
-
-    /// Explicit user actions, such as inserting from the Ask card, may restore
-    /// the app captured with that card before delivery.
-    case reactivateCaptured
-}
-
 public typealias TextDeliveryCommitHandler = @MainActor @Sendable () -> Void
 
 public protocol TextDelivering: Sendable {
@@ -22,7 +11,6 @@ public protocol TextDelivering: Sendable {
     func deliver(
         _ text: String,
         to context: CapturedContext,
-        targetPolicy: TextDeliveryTargetPolicy,
         onCommit: @escaping TextDeliveryCommitHandler
     ) async throws -> TextDeliveryReceipt
 }
@@ -31,13 +19,11 @@ public extension TextDelivering {
     @discardableResult
     func deliver(
         _ text: String,
-        to context: CapturedContext,
-        targetPolicy: TextDeliveryTargetPolicy
+        to context: CapturedContext
     ) async throws -> TextDeliveryReceipt {
         try await deliver(
             text,
             to: context,
-            targetPolicy: targetPolicy,
             onCommit: {}
         )
     }

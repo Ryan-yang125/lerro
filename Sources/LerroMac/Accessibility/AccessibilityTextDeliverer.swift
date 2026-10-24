@@ -12,58 +12,26 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         category: "text-delivery"
     )
 
-    private let activateTarget: @Sendable (CapturedContext) async -> Bool
     private let focusSnapshot: @Sendable () -> DeliveryFocusSnapshot
-    private let activationPollAttempts: Int
-    private let activationPollInterval: Duration
     private let pasteOverride: (@Sendable (String, CapturedContext) async throws -> Void)?
-    private let receiptActionOverride: (
-        @Sendable (ReceiptAction, TextDeliveryReceipt) async throws -> Void
-    )?
     private var activeTransactionIdentifier: UUID?
 
     public init() {
-        activateTarget = activateCapturedApplication
         focusSnapshot = currentDeliveryFocusSnapshot
-        activationPollAttempts = 25
-        activationPollInterval = .milliseconds(40)
         pasteOverride = nil
-        receiptActionOverride = nil
-    }
-
-    init(secureFieldCheck: @escaping @Sendable () -> Bool) {
-        activateTarget = { _ in true }
-        focusSnapshot = {
-            DeliveryFocusSnapshot(safety: secureFieldCheck() ? .secure : .safe)
-        }
-        activationPollAttempts = 1
-        activationPollInterval = .zero
-        pasteOverride = nil
-        receiptActionOverride = nil
     }
 
     init(
-        activateTarget: @escaping @Sendable (CapturedContext) async -> Bool,
         focusSnapshot: @escaping @Sendable () -> DeliveryFocusSnapshot,
-        activationPollAttempts: Int = 1,
-        activationPollInterval: Duration = .zero,
-        pasteOverride: (@Sendable (String, CapturedContext) async throws -> Void)? = nil,
-        receiptActionOverride: (
-            @Sendable (ReceiptAction, TextDeliveryReceipt) async throws -> Void
-        )? = nil
+        pasteOverride: (@Sendable (String, CapturedContext) async throws -> Void)? = nil
     ) {
-        self.activateTarget = activateTarget
         self.focusSnapshot = focusSnapshot
-        self.activationPollAttempts = max(1, activationPollAttempts)
-        self.activationPollInterval = activationPollInterval
         self.pasteOverride = pasteOverride
-        self.receiptActionOverride = receiptActionOverride
     }
 
     public func deliver(
         _ text: String,
         to context: CapturedContext,
-        targetPolicy: TextDeliveryTargetPolicy,
         onCommit: @escaping TextDeliveryCommitHandler
     ) async throws -> TextDeliveryReceipt {
         guard activeTransactionIdentifier == nil else {
@@ -77,39 +45,19 @@ public actor AccessibilityTextDeliverer: TextDelivering {
             }
         }
 
-        let policyName = targetPolicy == .requireCurrent ? "require-current" : "reactivate-captured"
         let targetBundle = context.bundleIdentifier ?? "unknown"
         var stage = "privacy"
         Self.logger.info(
-            "delivery-start policy=\(policyName, privacy: .public) target=\(targetBundle, privacy: .public)"
+            "delivery-start target=\(targetBundle, privacy: .public)"
         )
 
         do {
-            if targetPolicy == .reactivateCaptured {
-                stage = "paste"
-                try await reactivateCapturedApplicationForPlainInsertion(context)
-                if let pasteOverride {
-                    try await pasteOverride(text, context)
-                    await onCommit()
-                    return makeDeliveryReceipt(fallback: context)
-                } else {
-                    return try await pasteAtCurrentKeyboardFocus(
-                        text,
-                        fallbackContext: context,
-                        onCommit: onCommit
-                    )
-                }
-            }
-
             guard CapturePrivacyPolicy.permitsCapture(in: context) else {
                 throw LerroError.secureField
             }
 
             stage = "target"
-            let deliveryTarget = try await prepareDeliveryTarget(
-                context,
-                policy: targetPolicy
-            )
+            let deliveryTarget = try prepareDeliveryTarget(context)
             try Task.checkCancellation()
 
             stage = "paste"
@@ -135,144 +83,10 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         }
     }
 
-    public func undo(_ receipt: TextDeliveryReceipt) async throws {
-        try await performReceiptAction(
-            receipt,
-            action: .undo,
-            keyCode: keyCode(for: "z") ?? CGKeyCode(0x06)
-        )
-    }
-
-    public func correct(
-        _ text: String,
-        using receipt: TextDeliveryReceipt
-    ) async throws -> TextDeliveryReceipt {
-        guard activeTransactionIdentifier == nil else {
-            throw LerroError.insertionFailed("另一项文本写入仍在进行")
-        }
-        guard receipt.canUndo else {
-            throw LerroError.insertionFailed("当前输入框无法安全执行该操作")
-        }
-        let transactionIdentifier = UUID()
-        activeTransactionIdentifier = transactionIdentifier
-        defer {
-            if activeTransactionIdentifier == transactionIdentifier {
-                activeTransactionIdentifier = nil
-            }
-        }
-
-        _ = try await settledReceiptFocus(receipt)
-        if let receiptActionOverride {
-            try validateReceiptFocus(focusSnapshot(), receipt: receipt)
-            try await receiptActionOverride(.correct(text), receipt)
-            return makeDeliveryReceipt(
-                fallback: receipt.context,
-                continuing: receipt
-            )
-        }
-        let snapshotProvider = focusSnapshot
-        let transaction = try await MainActor.run {
-            try Task.checkCancellation()
-            try validateReceiptFocus(snapshotProvider(), receipt: receipt)
-            guard CGPreflightPostEventAccess() else {
-                throw LerroError.permissionRequired("辅助功能")
-            }
-            let transaction = try CurrentFocusPasteboardTransaction.begin(text: text)
-            do {
-                let (undoDown, undoUp) = try makeLerroPasteKeyEvents(
-                    keyCode: keyCode(for: "z") ?? CGKeyCode(0x06)
-                )
-                let (pasteDown, pasteUp) = try makeLerroPasteKeyEvents()
-                undoDown.post(tap: .cghidEventTap)
-                undoUp.post(tap: .cghidEventTap)
-                pasteDown.post(tap: .cghidEventTap)
-                pasteUp.post(tap: .cghidEventTap)
-                return transaction
-            } catch {
-                try? transaction.restore()
-                throw error
-            }
-        }
-        try await finalizeCommittedPasteDelivery(
-            waitForConsumption: {
-                try? await Task.sleep(for: .milliseconds(500))
-            },
-            restorePasteboard: {
-                await MainActor.run {
-                    try? transaction.restore()
-                }
-            }
-        )
-        return makeDeliveryReceipt(
-            fallback: receipt.context,
-            continuing: receipt
-        )
-    }
-
-    private func reactivateCapturedApplicationForPlainInsertion(
-        _ context: CapturedContext
-    ) async throws {
-        guard await activateTarget(context) else {
-            throw LerroError.insertionFailed("原输入应用已关闭或无法激活")
-        }
-        for attempt in 0..<activationPollAttempts {
-            try Task.checkCancellation()
-            if attempt > 0 {
-                try await Task.sleep(for: activationPollInterval)
-            }
-            if focusMatchesTarget(focusSnapshot(), context: context) {
-                return
-            }
-        }
-        throw LerroError.insertionFailed("原输入应用已激活，但尚未成为当前键盘目标")
-    }
-
-    private func pasteAtCurrentKeyboardFocus(
-        _ text: String,
-        fallbackContext: CapturedContext,
-        onCommit: @escaping TextDeliveryCommitHandler
-    ) async throws -> TextDeliveryReceipt {
-        let transaction = try await MainActor.run {
-            try Task.checkCancellation()
-            guard CGPreflightPostEventAccess() else {
-                throw LerroError.permissionRequired("辅助功能")
-            }
-            let transaction = try CurrentFocusPasteboardTransaction.begin(text: text)
-            do {
-                let (keyDown, keyUp) = try makeLerroPasteKeyEvents()
-                try Task.checkCancellation()
-                keyDown.post(tap: .cghidEventTap)
-                keyUp.post(tap: .cghidEventTap)
-                onCommit()
-                return transaction
-            } catch {
-                try? transaction.restore()
-                throw error
-            }
-        }
-        Self.logger.debug("delivery-paste-event submitted mode=current-focus")
-
-        // Keep transient pasteboard contents alive for 500 ms after posting
-        // Command-V, then restore the archived clipboard.
-        try await finalizeCommittedPasteDelivery(
-            waitForConsumption: {
-                try? await Task.sleep(for: .milliseconds(500))
-            },
-            restorePasteboard: {
-                await MainActor.run {
-                    try? transaction.restore()
-                }
-            }
-        )
-        Self.logger.info("delivery-complete stage=paste mode=current-focus")
-        return makeDeliveryReceipt(fallback: fallbackContext)
-    }
-
     private func prepareDeliveryTarget(
-        _ context: CapturedContext,
-        policy: TextDeliveryTargetPolicy
-    ) async throws -> ResolvedDeliveryTarget {
-        var snapshot = focusSnapshot()
+        _ context: CapturedContext
+    ) throws -> ResolvedDeliveryTarget {
+        let snapshot = focusSnapshot()
         let currentBundle = snapshot.bundleIdentifier ?? "unknown"
         let pidMatches = context.processIdentifier.map {
             snapshot.processIdentifier == $0
@@ -291,39 +105,8 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         Self.logger.info(
             "delivery-target match pid=\(pidMatches, privacy: .public) bundle=\(bundleMatches, privacy: .public)"
         )
-        if focusMatchesTarget(snapshot, context: context) {
-            try validateExpectedFocus(snapshot, context: context)
-            Self.logger.debug("delivery-target already-current")
-            return try resolveDeliveryTarget(snapshot, context: context)
-        }
-
-        guard policy == .reactivateCaptured else {
-            try validateExpectedFocus(snapshot, context: context)
-            return try resolveDeliveryTarget(snapshot, context: context)
-        }
-
-        guard await activateTarget(context) else {
-            throw LerroError.insertionFailed("原输入应用已关闭或无法激活")
-        }
-        Self.logger.debug("delivery-target activation-requested")
-
-        for attempt in 0..<activationPollAttempts {
-            try Task.checkCancellation()
-            if attempt > 0 {
-                try await Task.sleep(for: activationPollInterval)
-            }
-            snapshot = focusSnapshot()
-            guard focusMatchesTarget(snapshot, context: context) else { continue }
-            do {
-                try validateExpectedFocus(snapshot, context: context)
-            } catch {
-                continue
-            }
-            Self.logger.debug("delivery-target activation-settled attempt=\(attempt, privacy: .public)")
-            return try resolveDeliveryTarget(snapshot, context: context)
-        }
-
-        throw LerroError.insertionFailed("原输入应用已激活，但输入焦点尚未恢复")
+        try validateExpectedFocus(snapshot, context: context)
+        return try resolveDeliveryTarget(snapshot, context: context)
     }
 
     private func pasteUsingClipboard(
@@ -376,36 +159,24 @@ public actor AccessibilityTextDeliverer: TextDelivering {
     }
 
     private func makeDeliveryReceipt(
-        fallback: CapturedContext,
-        continuing previousReceipt: TextDeliveryReceipt? = nil
+        fallback: CapturedContext
     ) -> TextDeliveryReceipt {
         let snapshot = focusSnapshot()
-        let identityMatches: Bool
-        if let previousReceipt {
-            identityMatches = receiptFocusMatches(snapshot, receipt: previousReceipt)
-                && snapshot.focusedElementFingerprint
-                    == previousReceipt.focusedElementFingerprint
-        } else {
-            identityMatches = focusMatchesTarget(snapshot, context: fallback)
-        }
-        let context = if previousReceipt != nil && !identityMatches {
-            fallback
-        } else {
-            CapturedContext(
-                applicationName: snapshot.applicationName ?? fallback.applicationName,
-                processIdentifier: snapshot.processIdentifier,
-                bundleIdentifier: snapshot.bundleIdentifier,
-                windowTitle: fallback.windowTitle,
-                selectionState: snapshot.selectionState,
-                role: snapshot.role ?? fallback.role,
-                subrole: snapshot.subrole ?? fallback.subrole,
-                isSecureField: snapshot.safety == .secure,
-                focusedElementAvailable: snapshot.focusedElementAvailable,
-                focusedElementFingerprint: snapshot.focusedElementFingerprint,
-                focusedValueFingerprint: snapshot.focusedValueFingerprint,
-                selectedRange: snapshot.selectedRange
-            )
-        }
+        let identityMatches = focusMatchesTarget(snapshot, context: fallback)
+        let context = CapturedContext(
+            applicationName: snapshot.applicationName ?? fallback.applicationName,
+            processIdentifier: snapshot.processIdentifier,
+            bundleIdentifier: snapshot.bundleIdentifier,
+            windowTitle: fallback.windowTitle,
+            selectionState: snapshot.selectionState,
+            role: snapshot.role ?? fallback.role,
+            subrole: snapshot.subrole ?? fallback.subrole,
+            isSecureField: snapshot.safety == .secure,
+            focusedElementAvailable: snapshot.focusedElementAvailable,
+            focusedElementFingerprint: snapshot.focusedElementFingerprint,
+            focusedValueFingerprint: snapshot.focusedValueFingerprint,
+            selectedRange: snapshot.selectedRange
+        )
         return TextDeliveryReceipt(
             context: context,
             focusedValueFingerprint: identityMatches && snapshot.safety == .safe
@@ -415,82 +186,6 @@ public actor AccessibilityTextDeliverer: TextDelivering {
                 ? snapshot.focusedElementFingerprint
                 : nil
         )
-    }
-
-    private func performReceiptAction(
-        _ receipt: TextDeliveryReceipt,
-        action: ReceiptAction,
-        keyCode: CGKeyCode,
-        flags: CGEventFlags = .maskCommand
-    ) async throws {
-        guard activeTransactionIdentifier == nil else {
-            throw LerroError.insertionFailed("另一项文本写入仍在进行")
-        }
-        guard receipt.canUndo else {
-            throw LerroError.insertionFailed("当前输入框无法安全执行该操作")
-        }
-        let transactionIdentifier = UUID()
-        activeTransactionIdentifier = transactionIdentifier
-        defer {
-            if activeTransactionIdentifier == transactionIdentifier {
-                activeTransactionIdentifier = nil
-            }
-        }
-
-        _ = try await settledReceiptFocus(receipt)
-        if let receiptActionOverride {
-            try validateReceiptFocus(focusSnapshot(), receipt: receipt)
-            try await receiptActionOverride(action, receipt)
-            return
-        }
-        try await MainActor.run {
-            try Task.checkCancellation()
-            guard CGPreflightPostEventAccess() else {
-                throw LerroError.permissionRequired("辅助功能")
-            }
-            guard let keyDown = CGEvent(
-                keyboardEventSource: nil,
-                virtualKey: keyCode,
-                keyDown: true
-            ), let keyUp = CGEvent(
-                keyboardEventSource: nil,
-                virtualKey: keyCode,
-                keyDown: false
-            ) else {
-                throw LerroError.insertionFailed("无法生成键盘事件")
-            }
-            keyDown.flags = flags
-            keyUp.flags = flags
-            keyDown.setIntegerValueField(
-                .eventSourceUserData,
-                value: LerroGeneratedEvent.pasteSourceUserData
-            )
-            keyUp.setIntegerValueField(
-                .eventSourceUserData,
-                value: LerroGeneratedEvent.pasteSourceUserData
-            )
-            keyDown.post(tap: .cghidEventTap)
-            keyUp.post(tap: .cghidEventTap)
-        }
-    }
-
-    private func settledReceiptFocus(
-        _ receipt: TextDeliveryReceipt
-    ) async throws -> DeliveryFocusSnapshot {
-        var snapshot = focusSnapshot()
-        if !receiptFocusMatches(snapshot, receipt: receipt) {
-            guard await activateTarget(receipt.context) else {
-                throw LerroError.insertionFailed("原输入应用已关闭或无法激活")
-            }
-            for attempt in 0..<activationPollAttempts {
-                try Task.checkCancellation()
-                if attempt > 0 { try await Task.sleep(for: activationPollInterval) }
-                snapshot = focusSnapshot()
-                if receiptFocusMatches(snapshot, receipt: receipt) { break }
-            }
-        }
-        try validateReceiptFocus(snapshot, receipt: receipt)
-        return snapshot
     }
 
     private func restorePasteboard(_ transaction: PasteboardTransaction) async throws {
@@ -529,11 +224,6 @@ func finalizeCommittedPasteDelivery(
         await waitForConsumption()
         try await restorePasteboard()
     }.value
-}
-
-enum ReceiptAction: Equatable, Sendable {
-    case undo
-    case correct(String)
 }
 
 struct ResolvedDeliveryTarget: Equatable, Sendable {
@@ -584,34 +274,6 @@ struct DeliveryFocusSnapshot: Equatable, Sendable {
         self.selectedRange = selectedRange
         self.role = role
         self.subrole = subrole
-    }
-}
-
-func receiptFocusMatches(
-    _ snapshot: DeliveryFocusSnapshot,
-    receipt: TextDeliveryReceipt
-) -> Bool {
-    snapshot.processIdentifier == receipt.context.processIdentifier
-        && snapshot.bundleIdentifier == receipt.context.bundleIdentifier
-}
-
-func validateReceiptFocus(
-    _ snapshot: DeliveryFocusSnapshot,
-    receipt: TextDeliveryReceipt
-) throws {
-    guard receiptFocusMatches(snapshot, receipt: receipt) else {
-        throw LerroError.insertionFailed("焦点已切换，回执操作已停用")
-    }
-    guard snapshot.safety == .safe, snapshot.focusedElementAvailable else {
-        throw LerroError.insertionFailed("无法确认当前输入框的安全状态")
-    }
-    guard let expected = receipt.focusedValueFingerprint,
-          snapshot.focusedValueFingerprint == expected else {
-        throw LerroError.insertionFailed("输入内容已经变化，回执操作已停用")
-    }
-    guard let expectedElement = receipt.focusedElementFingerprint,
-          snapshot.focusedElementFingerprint == expectedElement else {
-        throw LerroError.insertionFailed("当前输入框已变化，回执操作已停用")
     }
 }
 
@@ -845,24 +507,6 @@ private func axApplication(_ application: AXUIElement, matches context: Captured
     return hasExpectedIdentity
 }
 
-@MainActor
-private func activateCapturedApplication(_ context: CapturedContext) -> Bool {
-    let application: NSRunningApplication?
-    if let processIdentifier = context.processIdentifier {
-        application = NSRunningApplication(processIdentifier: processIdentifier)
-    } else if let bundleIdentifier = context.bundleIdentifier {
-        application = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first
-    } else {
-        return true
-    }
-    guard let application, !application.isTerminated else { return false }
-    if let expectedBundle = context.bundleIdentifier,
-       application.bundleIdentifier != expectedBundle {
-        return false
-    }
-    return application.activate(options: [.activateAllWindows])
-}
-
 private func pasteKeyCode() -> CGKeyCode {
     keyCode(for: "v") ?? CGKeyCode(0x09)
 }
@@ -1076,19 +720,6 @@ struct PasteboardSnapshot: Sendable {
         return PasteboardSnapshot(items: capturedItems)
     }
 
-    static func captureBestEffort(from pasteboard: NSPasteboard) -> PasteboardSnapshot {
-        let capturedItems = (pasteboard.pasteboardItems ?? []).map { item in
-            Item(
-                representations: item.types.compactMap { type in
-                    item.data(forType: type).map {
-                        Representation(rawType: type.rawValue, data: $0)
-                    }
-                }
-            )
-        }
-        return PasteboardSnapshot(items: capturedItems)
-    }
-
     func makePasteboardItems() throws -> [NSPasteboardItem] {
         try items.map { snapshot -> NSPasteboardItem in
             let item = NSPasteboardItem()
@@ -1168,46 +799,6 @@ struct PasteboardSnapshot: Sendable {
 
     private func restorationFailure() -> LerroError {
         LerroError.insertionFailed("文本可能已写入，但原剪贴板内容恢复失败")
-    }
-}
-
-@MainActor
-struct CurrentFocusPasteboardTransaction: Sendable {
-    var snapshot: PasteboardSnapshot
-    var pasteboardName: String
-
-    static func begin(
-        text: String,
-        pasteboard: NSPasteboard = .general,
-        writer: PasteboardWriter = systemPasteboardWrite
-    ) throws -> CurrentFocusPasteboardTransaction {
-        let temporaryItem = NSPasteboardItem()
-        guard temporaryItem.setString(text, forType: .string),
-              temporaryItem.setData(Data(), forType: PasteboardSnapshot.transientType) else {
-            throw LerroError.insertionFailed("无法准备临时剪贴板内容")
-        }
-
-        let transaction = CurrentFocusPasteboardTransaction(
-            snapshot: PasteboardSnapshot.captureBestEffort(from: pasteboard),
-            pasteboardName: pasteboard.name.rawValue
-        )
-        _ = pasteboard.prepareForNewContents(with: .currentHostOnly)
-        guard writer(pasteboard, [temporaryItem]) else {
-            try? transaction.restore(writer: writer)
-            throw LerroError.insertionFailed("无法写入临时剪贴板内容")
-        }
-        return transaction
-    }
-
-    func restore(
-        writer: PasteboardWriter = systemPasteboardWrite
-    ) throws {
-        let pasteboard = NSPasteboard(name: NSPasteboard.Name(pasteboardName))
-        let items = try snapshot.makePasteboardItems()
-        _ = pasteboard.prepareForNewContents(with: [])
-        guard items.isEmpty || writer(pasteboard, items) else {
-            throw LerroError.insertionFailed("文本可能已写入，但原剪贴板内容恢复失败")
-        }
     }
 }
 
