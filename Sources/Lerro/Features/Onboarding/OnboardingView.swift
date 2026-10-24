@@ -613,7 +613,8 @@ struct OnboardingView: View {
             Text(LocalizedStringKey(title))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(LerroTheme.text)
-                .frame(width: 110, alignment: .leading)
+                .lineLimit(1)
+                .frame(width: 150, alignment: .leading)
             Group {
                 if let shortcut {
                     LerroShortcutKeys(displayName: shortcut.displayName)

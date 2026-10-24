@@ -44,7 +44,7 @@ struct CaptureHUDView: View {
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .contain)
         .accessibilityHidden(visualState == .idleHidden)
-        .accessibilityLabel(localized(accessibilityLabel))
+        .accessibilityLabel(accessibilityLabel)
         .accessibilityActions {
             if canEnterHandsFree {
                 Button("进入免按住模式") {
@@ -166,7 +166,7 @@ struct CaptureHUDView: View {
         case .error:
             HStack(spacing: LerroTheme.hudContentSpacing) {
                 HUDDot(color: LerroTheme.hudError)
-                Text(verbatim: session.captureError ?? localized("没有听到声音"))
+                Text(verbatim: localized(session.captureError ?? "没有听到声音"))
                     .font(LerroTheme.font(14))
                     .foregroundStyle(LerroTheme.hudPaper)
                     .lineLimit(1)
@@ -399,6 +399,18 @@ struct CaptureHUDView: View {
 
     private var accessibilityLabel: String {
         switch visualState {
+        case .deliveredRawFallback:
+            // hudFallbackMessage is already localized by AppSession.
+            session.hudFallbackMessage ?? localized("AI 未响应，已写入原文")
+        case .error:
+            localized(session.captureError ?? "听写失败，请重试")
+        default:
+            localized(accessibilityLabelKey)
+        }
+    }
+
+    private var accessibilityLabelKey: String {
+        switch visualState {
         case .idleHidden: "Lerro 已就绪"
         case .arming:
             session.isWaitingForSpeechResources ? "正在准备语音资源" : "正在准备麦克风"
@@ -412,8 +424,8 @@ struct CaptureHUDView: View {
             case .dictation: "正在处理听写"
             case .translation: "正在翻译"
             }
-        case .deliveredRawFallback: session.hudFallbackMessage ?? "AI 未响应，已写入原文"
-        case .error: session.captureError ?? "听写失败，请重试"
+        case .deliveredRawFallback: "AI 未响应，已写入原文"
+        case .error: "听写失败，请重试"
         case .recovery: "写入失败，已复制到剪贴板"
         case .dictionaryLearned: "已将修正加入词典"
         }

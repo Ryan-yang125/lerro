@@ -162,9 +162,7 @@
 "请在语音输入结束后再修改快捷键" = "Change shortcuts after voice input finishes";
 "完成翻译" = "Stop Translation";
 "就绪" = "Ready";
-"已识别快捷键 " = "Shortcut recognized ";
 "快捷键保存失败，请重新选择后再试。" = "The shortcut could not be saved. Choose another shortcut and try again.";
-"快捷键无法使用：" = "Shortcut unavailable: ";
 "正在准备按键检测…" = "Preparing key detection…";
 "正在听" = "Listening";
 "正在暂停当前快捷键并准备录制" = "Pausing current shortcuts and preparing to record";
@@ -412,7 +410,7 @@
 "当前连续" = "Current streak";
 "最长连续" = "Longest streak";
 "今天 %@" = "Today %@";
-"%@ · %@ 字 · %@ 次" = "%@ · %@ words · %@ dictations";
+"%@ · %@ 字 · %lld 次" = "%@ · %@ words · %lld dictations";
 "%@ · 没有听写" = "%@ · No dictations";
 "过去一年 · %@ 天有听写" = "Past year · %@ active days";
 "少" = "Less";
@@ -622,3 +620,37 @@
 "未开启" = "Off";
 "DeepSeek 没有返回用量" = "DeepSeek did not report usage";
 "你说的" = "You said";
+
+/* Error and status messages */
+"为保护敏感信息，密码输入框中已停用语音输入" = "Dictation is turned off in password fields";
+"连接成功" = "Connected";
+"当前智能服务不支持自动词典学习" = "This AI service can't learn Dictionary words automatically";
+"自动词典学习需要启用 AI" = "Turn on AI cleanup to learn Dictionary words automatically";
+"规定模型怎么返回结果：先列出改了哪些词，再标出其中的专有名词，最后给最终文字。Lerro 按这个格式读取。" = "Tells the model how to reply: first the words it changed, then which of them are proper nouns, then the final text. Lerro reads replies in this format.";
+"CSV 文件为空" = "The CSV file is empty";
+"CSV 文件中没有可导入的词条" = "The CSV file has no entries to import";
+"当前编辑器无法绑定刚写入的文本" = "Couldn't find the inserted text in this editor";
+"焦点已离开原输入应用" = "You switched to another app";
+"当前编辑器不支持修正观察" = "This editor doesn't support tracking edits";
+"焦点已离开原输入框" = "The cursor left the original text field";
+"当前输入内容已变化，结果已保留在历史记录中" = "The text field changed. The result is saved in History.";
+"当前光标或选区已变化，结果已保留在历史记录中" = "The cursor or selection changed. The result is saved in History.";
+"临时剪贴板写入失败，原剪贴板内容可能未恢复" = "Couldn't write to the clipboard. Its previous contents may not have been restored.";
+"临时剪贴板写入后所有权发生变化，原剪贴板内容可能未恢复" = "Another app changed the clipboard during insertion. Its previous contents may not have been restored.";
+"临时剪贴板验证期间所有权发生变化，原剪贴板内容可能未恢复" = "Another app changed the clipboard during insertion. Its previous contents may not have been restored.";
+"临时剪贴板验证失败，原剪贴板内容可能未恢复" = "Couldn't verify the clipboard. Its previous contents may not have been restored.";
+"无法把结果保存到剪贴板" = "Couldn't copy the result to the clipboard";
+"无法复制麦克风音频" = "Couldn't read microphone audio";
+"音频格式转换失败" = "Couldn't convert the audio format";
+"API Key 为空" = "No API Key entered";
+"模型服务拒绝了请求参数" = "The AI service rejected the request";
+"模型名称不可用" = "The model name isn't available";
+"模型服务请求过于频繁，请稍后重试" = "Too many requests. Try again later.";
+"模型服务暂时不可用" = "The AI service is temporarily unavailable";
+"模型服务返回了不安全的重定向" = "The AI service returned an unsafe redirect";
+"模型服务连接超时" = "The connection to the AI service timed out";
+"模型服务返回的数据超出安全上限" = "The AI service returned too much data";
+"模型服务返回了无法识别的数据" = "The AI service returned data Lerro can't read";
+"模型服务没有返回有效文本" = "The AI service returned no usable text";
+"当前无法连接模型服务" = "Can't connect to the AI service. Check your network connection.";
+"模型请求已取消" = "The AI request was canceled";

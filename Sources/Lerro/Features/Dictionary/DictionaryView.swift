@@ -87,7 +87,7 @@ struct DictionaryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(LerroTheme.main)
-        .navigationTitle(Text("词典"))
+        .navigationTitle(Text(verbatim: localized("词典")))
         .searchable(text: $session.dictionarySearch, prompt: Text("搜索词典"))
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -374,7 +374,7 @@ struct DictionaryView: View {
             session.currentError = LerroInterfaceLocalization.format(
                 "词典导入失败：%@",
                 locale: locale,
-                arguments: error.localizedDescription
+                arguments: localized(error.localizedDescription)
             )
         }
     }
@@ -397,7 +397,7 @@ struct DictionaryView: View {
             session.currentError = LerroInterfaceLocalization.format(
                 "词典导出失败：%@",
                 locale: locale,
-                arguments: error.localizedDescription
+                arguments: localized(error.localizedDescription)
             )
         }
     }

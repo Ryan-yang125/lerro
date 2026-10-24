@@ -190,6 +190,7 @@ required_resources=(
     AppIcon.icns
     Assets.car
     en.lproj/Localizable.strings
+    en.lproj/Localizable.stringsdict
     en.lproj/InfoPlist.strings
     zh-Hans.lproj/Localizable.strings
     zh-Hans.lproj/InfoPlist.strings
@@ -220,6 +221,7 @@ for relative_path in "${required_resources[@]}"; do
 done
 for localization_resource in \
     en.lproj/Localizable.strings \
+    en.lproj/Localizable.stringsdict \
     en.lproj/InfoPlist.strings \
     zh-Hans.lproj/Localizable.strings \
     zh-Hans.lproj/InfoPlist.strings; do

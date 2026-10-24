@@ -23,7 +23,7 @@ struct HistoryView: View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(LerroTheme.main)
-            .navigationTitle(Text("历史"))
+            .navigationTitle(Text(verbatim: LerroInterfaceLocalization.string("历史", locale: locale)))
             .searchable(text: $searchText, prompt: Text("搜索历史"))
             .toolbar {
                 ToolbarItem {

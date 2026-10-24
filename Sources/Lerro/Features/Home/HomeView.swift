@@ -20,7 +20,7 @@ struct HomeView: View {
             }
         }
         .background(LerroTheme.main.ignoresSafeArea())
-        .navigationTitle("首页")
+        .navigationTitle(Text(verbatim: LerroInterfaceLocalization.string("首页", locale: locale)))
         .toolbar {
             // A toolbar item keeps the full-height toolbar, so the sidebar
             // holds the traffic lights like on the other pages.

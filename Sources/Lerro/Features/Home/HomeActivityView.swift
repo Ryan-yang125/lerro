@@ -248,11 +248,11 @@ private struct HomeHeatmap: View {
         let date = day.date.formatted(.dateTime.month().day().locale(locale))
         if day.dictations > 0 || day.words > 0 {
             return LerroInterfaceLocalization.format(
-                "%@ · %@ 字 · %@ 次",
+                "%@ · %@ 字 · %lld 次",
                 locale: locale,
                 arguments: date,
                 day.words.formatted(.number.locale(locale)),
-                day.dictations.formatted(.number.locale(locale))
+                day.dictations
             )
         }
         return LerroInterfaceLocalization.format("%@ · 没有听写", locale: locale, arguments: date)

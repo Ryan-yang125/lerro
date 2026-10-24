@@ -82,7 +82,7 @@ struct AppTonesView: View {
             .padding(.bottom, 24)
         }
         .background(LerroTheme.main)
-        .navigationTitle(Text("应用语气"))
+        .navigationTitle(Text(verbatim: localized("应用语气")))
         .toolbar {
             ToolbarItem {
                 Button {

@@ -699,18 +699,18 @@ struct ShortcutRecorderCard: View {
         let unavailablePrefix = "快捷键无法使用："
         if message.hasPrefix(unavailablePrefix) {
             let detail = String(message.dropFirst(unavailablePrefix.count))
-            return String(
-                format: localized("快捷键无法使用：%@"),
+            return LerroInterfaceLocalization.format(
+                "快捷键无法使用：%@",
                 locale: locale,
-                localized(detail)
+                arguments: localized(detail)
             )
         }
         let recognizedPrefix = "已识别快捷键 "
         if message.hasPrefix(recognizedPrefix) {
-            return String(
-                format: localized("已识别快捷键 %@"),
+            return LerroInterfaceLocalization.format(
+                "已识别快捷键 %@",
                 locale: locale,
-                String(message.dropFirst(recognizedPrefix.count))
+                arguments: String(message.dropFirst(recognizedPrefix.count))
             )
         }
         return localized(message)

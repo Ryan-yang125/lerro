@@ -192,20 +192,17 @@ struct DictationSettingsTab: View {
     private var microphoneSection: some View {
         Section("麦克风") {
             LabeledContent("麦克风") {
-                HStack(spacing: 10) {
-                    MicrophoneLevelBars(level: session.audioLevel)
-                    Picker("麦克风", selection: microphoneSelection) {
-                        Text("跟随系统").tag("")
-                        ForEach(session.audioInputDevices) { device in
-                            Text(verbatim: device.isDefault
-                                ? LerroInterfaceLocalization.format("%@（默认）", locale: locale, arguments: device.name)
-                                : device.name)
-                                .tag(device.uid)
-                        }
+                Picker("麦克风", selection: microphoneSelection) {
+                    Text("跟随系统").tag("")
+                    ForEach(session.audioInputDevices) { device in
+                        Text(verbatim: device.isDefault
+                            ? LerroInterfaceLocalization.format("%@（默认）", locale: locale, arguments: device.name)
+                            : device.name)
+                            .tag(device.uid)
                     }
-                    .labelsHidden()
-                    .fixedSize()
                 }
+                .labelsHidden()
+                .fixedSize()
             }
 
             Toggle("录音时降低其他声音", isOn: $session.preferences.muteOtherAudio)
@@ -289,30 +286,6 @@ struct DictationSettingsTab: View {
         } set: { presented in
             if !presented { recordingAction = nil }
         }
-    }
-}
-
-/// Six bars that follow the live microphone level; all dim while idle.
-private struct MicrophoneLevelBars: View {
-    let level: Float
-
-    private static let barCount = 6
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<Self.barCount, id: \.self) { index in
-                Capsule()
-                    .fill(isLit(index) ? LerroTheme.success : LerroTheme.fillContainerTough)
-                    .frame(width: 3, height: 6 + CGFloat(index) * 2)
-            }
-        }
-        .frame(height: 16, alignment: .bottom)
-        .animation(.easeOut(duration: 0.08), value: level)
-        .accessibilityHidden(true)
-    }
-
-    private func isLit(_ index: Int) -> Bool {
-        Float(index + 1) / Float(Self.barCount) <= min(max(level, 0), 1) + 0.0001
     }
 }
 

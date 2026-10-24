@@ -97,6 +97,11 @@ enum LerroInterfaceLocalization {
             )
         }
 
+        if message.hasPrefix("未能写入 ") {
+            let applicationName = String(message.dropFirst("未能写入 ".count))
+            return format("未能写入 %@", locale: locale, arguments: applicationName)
+        }
+
         if message.hasPrefix("不支持语言 ") {
             let identifier = String(message.dropFirst("不支持语言 ".count))
             return format("不支持语言 %@", locale: locale, arguments: identifier)
