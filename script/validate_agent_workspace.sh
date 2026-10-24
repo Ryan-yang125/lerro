@@ -24,7 +24,8 @@ for relative in "${required_files[@]}"; do
     }
 done
 
-if find .agents .claude -type l -print -quit | grep -q .; then
+# .claude/worktrees holds other sessions' git worktrees (with .build symlinks).
+if find .agents .claude -path .claude/worktrees -prune -o -type l -print -quit | grep -q .; then
     print -u2 "Project agent entrypoints must use regular files."
     exit 1
 fi
