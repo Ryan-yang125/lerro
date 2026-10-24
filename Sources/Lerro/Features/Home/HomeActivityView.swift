@@ -74,7 +74,9 @@ private struct HomeHeatmap: View {
     let weeks: [[HomeStatistics.Day]]
     let monthLabels: [HomeStatistics.MonthLabel]
     @Environment(\.locale) private var locale
-    @State private var gridWidth: CGFloat = 736
+    /// Changes only when the fitted cell size changes, so resizing the window
+    /// while the cells are at full size does not update or redraw the heatmap.
+    @State private var cell: CGFloat = 11
     @State private var hovered: Position?
     @State private var tooltipSize: CGSize = .zero
 
@@ -91,11 +93,13 @@ private struct HomeHeatmap: View {
 
     private var columns: Int { max(weeks.count, 1) }
 
-    private var cell: CGFloat {
-        let fitted = (gridWidth - 2 * margin - gap * CGFloat(columns - 1)) / CGFloat(columns)
-        return max(6, min(maximumCell, fitted))
+    /// Cell size for the available width, rounded down to a quarter point.
+    private func fittedCell(for width: CGFloat) -> CGFloat {
+        let fitted = (width - 2 * margin - gap * CGFloat(columns - 1)) / CGFloat(columns)
+        return max(6, min(maximumCell, (fitted * 4).rounded(.down) / 4))
     }
 
+    private var gridWidth: CGFloat { 2 * margin + CGFloat(columns) * cell + gap * CGFloat(columns - 1) }
     private var pitch: CGFloat { cell + gap }
     private var gridHeight: CGFloat { 7 * cell + 6 * gap }
 
@@ -106,7 +110,7 @@ private struct HomeHeatmap: View {
                 monthRow
                 grid
             }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
+            .onGeometryChange(for: CGFloat.self) { fittedCell(for: $0.size.width) } action: { cell = $0 }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: accessibilitySummary))
@@ -204,6 +208,9 @@ private struct HomeHeatmap: View {
             }
         }
         .frame(height: gridHeight + 2 * margin)
+        // Never wider than the cells, and free to shrink so the card width
+        // decides the cell size (onGeometryChange above).
+        .frame(maxWidth: gridWidth, alignment: .leading)
         .contentShape(Rectangle())
         .onContinuousHover(coordinateSpace: .local) { phase in
             switch phase {

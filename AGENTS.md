@@ -36,12 +36,12 @@ Lerro -> LerroIntelligence -> LerroCore
 
 ## 核心链路不变量
 
-- 流程：权限 → 上下文冻结 → 收音 → 转写 → raw/remote 处理 → 严格目标交付 → 持久化 → 完成。
+- 流程：权限 → 上下文冻结 → 收音 → 转写 → raw/remote 处理 → 严格目标交付 → 完成。交付完成后 session 立即回到 `idle`，历史、用量和词典持久化在后台串行执行。
 - 麦克风先打开，音频在内存中缓冲到 `SpeechTranscriber` 就绪。词典不发给 Apple Speech，只进入 AI 提示词。
 - 捕获快捷键只有 `hold` 与 `toggle`；hold 的 release 必须匹配启动时的 definition ID。`transcribing`、`enhancing`、`inserting` 阶段忽略重复开始或停止。
 - capture 启动时冻结智能模式、Provider 配置、API Key 与上下文开关。Dictate 的模型失败回退原始 transcript，Translate 保持明确失败。
 - 开始录音前检查安全输入框。交付前校验目标应用、元素、完整值、选区和安全状态指纹，任一漂移都停止写入，最终文本留在剪贴板。
-- 文本通过剪贴板加合成 Command-V 交付；Command-V down/up 发布完成是 commit point，之后忽略取消并完成剪贴板恢复；Lerro 合成的按键带 source marker 并始终透传。
+- 文本通过剪贴板加合成 Command-V 交付；Command-V down/up 发布完成是 commit point，交付随即返回并忽略之后的取消；剪贴板恢复（固定等待 500 ms）在后台完成，下一次交付先等待上一次恢复结束；Lerro 合成的按键带 source marker 并始终透传。
 - 取消、失败和过期 session 清理未持久化录音、释放已按下的按键、恢复输出音频、阻止旧结果提交。
 - 捕获、识别、模型和交付错误只进入 HUD 失败态；设置和存储错误使用 app 级提示。
 - 删除带录音的历史时先删音频再移除索引。
@@ -57,7 +57,7 @@ Lerro -> LerroIntelligence -> LerroCore
 
 ## UI 规则
 
-- 主窗口使用 `NavigationSplitView`，设置在独立的 `Settings` 窗口；列表、表格和表单使用原生控件。
+- 主窗口是固定宽度侧栏加页面，每页顶部用 `LerroPageHeader`（[ADR 0017](docs/decisions/0017-fixed-sidebar.md)），设置在独立的 `Settings` 窗口；列表、表格和表单使用原生控件。
 - 颜色来自 `LerroTheme`（自适应灰阶 + 墨水蓝强调色），字号来自 `LerroFont`；改动先更新 [`DesignTokens.swift`](Sources/Lerro/DesignSystem/DesignTokens.swift) 或共享组件，再更新页面。
 - 图标：一律使用 SF Symbols 描边版本，状态和播放控制用实心；不自绘产品图标。
 - HUD 是固定墨黑的单胶囊，所有状态在同一胶囊内形变；外观规则见 [ADR 0013](docs/decisions/0013-brand-capsule-hud.md)。

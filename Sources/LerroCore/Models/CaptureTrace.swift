@@ -34,7 +34,6 @@ public enum CaptureMilestone: String, Codable, CaseIterable, Sendable {
     case processingFinished
     case deliveryCommitted
     case deliveryFinished
-    case historySaved
     case finished
 
     public static let startupChain: [CaptureMilestone] = [
@@ -51,7 +50,7 @@ public enum CaptureMilestone: String, Codable, CaseIterable, Sendable {
 
     public static let finishChain: [CaptureMilestone] = [
         .stopRequested, .transcriptionFinished, .processingFinished, .deliveryCommitted,
-        .deliveryFinished, .historySaved, .finished
+        .deliveryFinished, .finished
     ]
 }
 

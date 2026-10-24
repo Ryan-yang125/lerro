@@ -29,62 +29,8 @@ struct AppTonesView: View {
 
     var body: some View {
         let target = currentTarget
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                    AppToneCard(
-                        name: localized("其他所有应用"),
-                        bundleIdentifier: nil,
-                        instruction: session.preferences.defaultToneInstruction,
-                        footer: "默认",
-                        isSelected: target.kind == .defaultTone,
-                        isEnabled: nil,
-                        select: { selection = .defaultTone }
-                    )
-
-                    ForEach(session.preferences.appToneProfiles) { profile in
-                        AppToneCard(
-                            name: profile.applicationName,
-                            bundleIdentifier: profile.bundleIdentifier,
-                            instruction: profile.instruction,
-                            footer: profile.enabled ? "已启用" : "已停用",
-                            isSelected: target.kind == .app && target.bundleIdentifier == profile.bundleIdentifier,
-                            isEnabled: enabledBinding(for: profile.bundleIdentifier),
-                            select: { selection = .app(profile.bundleIdentifier) }
-                        )
-                    }
-
-                    if let pendingApplication {
-                        AppToneCard(
-                            name: pendingApplication.name,
-                            bundleIdentifier: pendingApplication.bundleIdentifier,
-                            instruction: "",
-                            footer: "未保存",
-                            isSelected: target.kind == .pending,
-                            isEnabled: nil,
-                            select: { selection = .pending }
-                        )
-                    }
-
-                    addTile
-                }
-
-                AppToneEditor(
-                    session: session,
-                    target: target,
-                    save: { save($0, for: target) },
-                    remove: { remove(target) }
-                )
-                .id(target.id)
-            }
-            .padding(.horizontal, LerroTheme.contentHorizontalPadding)
-            .padding(.top, 20)
-            .padding(.bottom, 24)
-        }
-        .background(LerroTheme.main)
-        .navigationTitle(Text(verbatim: localized("应用语气")))
-        .toolbar {
-            ToolbarItem {
+        LerroSplitLayout(axis: .vertical, firstLength: LerroTheme.pageHeaderHeight) {
+            LerroPageHeader(localized("应用语气")) {
                 Button {
                     isPickerPresented = true
                 } label: {
@@ -92,9 +38,62 @@ struct AppTonesView: View {
                 }
                 .buttonStyle(LerroButtonStyle(.primary))
             }
-            .sharedBackgroundVisibility(.hidden)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                        AppToneCard(
+                            name: localized("其他所有应用"),
+                            bundleIdentifier: nil,
+                            instruction: session.preferences.defaultToneInstruction,
+                            footer: "默认",
+                            isSelected: target.kind == .defaultTone,
+                            isEnabled: nil,
+                            select: { selection = .defaultTone }
+                        )
+
+                        ForEach(session.preferences.appToneProfiles) { profile in
+                            AppToneCard(
+                                name: profile.applicationName,
+                                bundleIdentifier: profile.bundleIdentifier,
+                                instruction: profile.instruction,
+                                footer: profile.enabled ? "已启用" : "已停用",
+                                isSelected: target.kind == .app && target.bundleIdentifier == profile.bundleIdentifier,
+                                isEnabled: enabledBinding(for: profile.bundleIdentifier),
+                                select: { selection = .app(profile.bundleIdentifier) }
+                            )
+                        }
+
+                        if let pendingApplication {
+                            AppToneCard(
+                                name: pendingApplication.name,
+                                bundleIdentifier: pendingApplication.bundleIdentifier,
+                                instruction: "",
+                                footer: "未保存",
+                                isSelected: target.kind == .pending,
+                                isEnabled: nil,
+                                select: { selection = .pending }
+                            )
+                        }
+
+                        addTile
+                    }
+
+                    AppToneEditor(
+                        session: session,
+                        target: target,
+                        save: { save($0, for: target) },
+                        remove: { remove(target) }
+                    )
+                    .id(target.id)
+                }
+                .padding(.horizontal, LerroTheme.contentHorizontalPadding)
+                .padding(.top, 20)
+                .padding(.bottom, 24)
+            }
         }
-        .task {
+        .background(LerroTheme.main)
+        .onLerroPageVisibilityChange(.appTones, in: session) { visible in
+            guard visible else { return }
             session.refreshAvailableApplications()
             if session.visualFixturePresentation == "app-tone-picker" {
                 isPickerPresented = true
@@ -337,6 +336,23 @@ private struct DefaultToneIcon: View {
 
 // MARK: - Editor
 
+/// The TextEditor exists only while the AppTones page is visible, because a
+/// hidden TextEditor stays in the Tab order whatever modifier is applied.
+private struct AppToneInstructionText: View {
+    let session: AppSession
+    @Binding var draft: String
+
+    var body: some View {
+        if session.destination == .appTones {
+            TextEditor(text: $draft)
+                .font(LerroFont.body)
+                .scrollContentBackground(.hidden)
+        } else {
+            Color.clear
+        }
+    }
+}
+
 private struct AppToneEditor: View {
     let session: AppSession
     let target: ToneTarget
@@ -388,6 +404,11 @@ private struct AppToneEditor: View {
                 .strokeBorder(LerroTheme.thinBorder, lineWidth: 1)
         }
         .onDisappear { previewTask?.cancel() }
+        // The page is built at launch, before preferences load, so the saved
+        // instruction can change under an untouched draft.
+        .onChange(of: target.instruction) { old, new in
+            if draft == old { draft = new }
+        }
         .onChange(of: draft) { _, _ in
             previewResult = nil
             previewFailed = false
@@ -438,9 +459,7 @@ private struct AppToneEditor: View {
             Text("语气要求")
                 .font(LerroFont.sectionLabel)
                 .foregroundStyle(LerroTheme.secondaryText)
-            TextEditor(text: $draft)
-                .font(LerroFont.body)
-                .scrollContentBackground(.hidden)
+            AppToneInstructionText(session: session, draft: $draft)
                 .padding(8)
                 .frame(minHeight: 150, maxHeight: .infinity)
                 .background(
@@ -463,6 +482,7 @@ private struct AppToneEditor: View {
                 TextField("示例句子", text: $sample, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...3)
+                    .lerroPageTextInput(.appTones, in: session)
 
                 previewResultBox
 

@@ -6,29 +6,21 @@ struct HomeView: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        // One ScrollView for both states: the window toolbar picks its
-        // background from the first scroll view it sees, so swapping an
-        // empty state for a ScrollView after history loads left a stale
-        // toolbar background in dark mode.
-        ScrollView {
-            if session.homeStatistics.totalDictations == 0 {
-                LerroEmptyState(title: emptyTitle, hint: nil)
-                    .frame(maxWidth: .infinity)
-                    .containerRelativeFrame(.vertical)
-            } else {
-                content
+        LerroSplitLayout(axis: .vertical, firstLength: LerroTheme.pageHeaderHeight) {
+            LerroPageHeader(LerroInterfaceLocalization.string("首页", locale: locale)) {
+                HomeShortcutsView(hotkeys: session.preferences.hotkeys)
+            }
+            ScrollView {
+                if session.homeStatistics.totalDictations == 0 {
+                    LerroEmptyState(title: emptyTitle, hint: nil)
+                        .frame(maxWidth: .infinity)
+                        .containerRelativeFrame(.vertical)
+                } else {
+                    content
+                }
             }
         }
         .background(LerroTheme.main.ignoresSafeArea())
-        .navigationTitle(Text(verbatim: LerroInterfaceLocalization.string("首页", locale: locale)))
-        .toolbar {
-            // A toolbar item keeps the full-height toolbar, so the sidebar
-            // holds the traffic lights like on the other pages.
-            ToolbarItem(placement: .primaryAction) {
-                HomeShortcutsView(hotkeys: session.preferences.hotkeys)
-            }
-            .sharedBackgroundVisibility(.hidden)
-        }
     }
 
     private var content: some View {
@@ -50,11 +42,10 @@ struct HomeView: View {
                 }
             }
             HomeActivityCard(statistics: statistics)
-            HStack(alignment: .top, spacing: 12) {
+            LerroEqualColumns(spacing: 12) {
                 HomeTopAppsCard(apps: statistics.topApps)
                 HomeHoursCard(hourCounts: statistics.hourCounts, peakHour: statistics.peakHour)
             }
-            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, 4)
         .padding(.bottom, 28)

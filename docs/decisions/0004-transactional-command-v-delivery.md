@@ -19,8 +19,8 @@ DOM value 不变，系统调用状态因此不能证明文本已经到达目标�
 3. 提交前再次检查任务取消、事件发布权限、目标身份和剪贴板所有权。
 4. 带 Lerro source marker 的 Command-V keyDown/keyUp 连续发布到 HID event tap。两个事件发布完成是 commit point，随后同步调用
    `TextDeliveryCommitHandler`。
-5. `inserting` 阶段在 commit 前保留取消入口；commit 后撤下取消入口，由交付任务完成约 500 ms 的消费等待、剪贴板恢复、历史写入和 UI 收尾。
-   等待运行在 detached task 中，调用方取消不会缩短临时剪贴板的寿命。
+5. `inserting` 阶段在 commit 前保留取消入口；commit 后撤下取消入口，交付立即返回，session 回到 `idle`。约 500 ms 的消费等待和剪贴板恢复
+   运行在 deliverer 持有的 detached task 中，调用方取消不会缩短临时剪贴板的寿命；下一次交付先等待该任务结束。历史写入在 `AppSession` 的后台串行队列中完成。
 6. 恢复只执行一次；marker 或 change count 已变化时保留新的外部内容。
 
 依赖方向为 `Lerro -> LerroMac -> LerroCore`：`TextDelivering` 在 Core 声明，`LerroMac` 产生提交事件，`AppSession` 持有产品状态。

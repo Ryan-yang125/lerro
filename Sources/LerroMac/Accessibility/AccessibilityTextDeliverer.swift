@@ -15,6 +15,7 @@ public actor AccessibilityTextDeliverer: TextDelivering {
     private let focusSnapshot: @Sendable () -> DeliveryFocusSnapshot
     private let pasteOverride: (@Sendable (String, CapturedContext) async throws -> Void)?
     private var activeTransactionIdentifier: UUID?
+    private var pendingRestore: Task<Void, Never>?
 
     public init() {
         focusSnapshot = currentDeliveryFocusSnapshot
@@ -44,6 +45,10 @@ public actor AccessibilityTextDeliverer: TextDelivering {
                 activeTransactionIdentifier = nil
             }
         }
+        // The previous delivery restores the clipboard in the background. Wait
+        // for it so this delivery snapshots the user's clipboard, not Lerro's
+        // previous text.
+        await pendingRestore?.value
 
         let targetBundle = context.bundleIdentifier ?? "unknown"
         var stage = "privacy"
@@ -142,16 +147,24 @@ public actor AccessibilityTextDeliverer: TextDelivering {
             throw error
         }
 
-        // Posting Command-V is the delivery commit point. Once both events have
-        // been submitted, keep the temporary clipboard alive for the target even
-        // if the caller's task is cancelled, then restore it exactly once.
+        // Posting Command-V is the delivery commit point. Delivery returns
+        // here; the temporary clipboard stays alive for the target app and is
+        // restored exactly once in the background, independent of the caller's
+        // task.
         Self.logger.debug("delivery-paste-event submitted")
-        try await finalizeCommittedPasteDelivery(
+        pendingRestore = scheduleCommittedPasteRestore(
             waitForConsumption: {
                 try? await Task.sleep(for: .milliseconds(500))
             },
             restorePasteboard: { [self] in
-                try await restorePasteboard(transaction)
+                do {
+                    try await restorePasteboard(transaction)
+                } catch {
+                    let errorType = String(reflecting: type(of: error))
+                    Self.logger.error(
+                        "delivery-pasteboard restore-failed type=\(errorType, privacy: .public)"
+                    )
+                }
             }
         )
         Self.logger.info("delivery-complete stage=paste")
@@ -216,14 +229,14 @@ public actor AccessibilityTextDeliverer: TextDelivering {
     }
 }
 
-func finalizeCommittedPasteDelivery(
+func scheduleCommittedPasteRestore(
     waitForConsumption: @escaping @Sendable () async -> Void,
-    restorePasteboard: @escaping @Sendable () async throws -> Void
-) async throws {
-    try await Task.detached {
+    restorePasteboard: @escaping @Sendable () async -> Void
+) -> Task<Void, Never> {
+    Task.detached {
         await waitForConsumption()
-        try await restorePasteboard()
-    }.value
+        await restorePasteboard()
+    }
 }
 
 struct ResolvedDeliveryTarget: Equatable, Sendable {

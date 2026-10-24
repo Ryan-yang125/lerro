@@ -397,6 +397,28 @@ struct FileRepositoriesTests {
         #expect(try await legacyRepository.entries() == [entry])
     }
 
+    @Test("History written with the removed Ask mode still loads")
+    func removedAskModeLoads() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fileURL = directory.appending(path: "history.json")
+        let entry = makeHistoryEntry(
+            id: UUID(),
+            createdAt: Date(timeIntervalSince1970: 42),
+            text: "asked"
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let encoded = try encoder.encode([entry])
+        var objects = try #require(JSONSerialization.jsonObject(with: encoded) as? [[String: Any]])
+        objects[0]["mode"] = "ask"
+        try JSONSerialization.data(withJSONObject: objects).write(to: fileURL)
+
+        let entries = try await FileHistoryRepository(fileURL: fileURL).entries()
+        #expect(entries.map(\.id) == [entry.id])
+        #expect(entries.first?.mode == .dictation)
+    }
+
     @Test("Dictionary repository persists updates and merges imports by scoped phrase")
     func dictionaryLifecycleAndImport() async throws {
         let directory = try makeTemporaryDirectory()

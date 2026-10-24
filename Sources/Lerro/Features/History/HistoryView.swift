@@ -20,13 +20,9 @@ struct HistoryView: View {
     }
 
     var body: some View {
-        content
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(LerroTheme.main)
-            .navigationTitle(Text(verbatim: LerroInterfaceLocalization.string("历史", locale: locale)))
-            .searchable(text: $searchText, prompt: Text("搜索历史"))
-            .toolbar {
-                ToolbarItem {
+        LerroSplitLayout(axis: .vertical, firstLength: LerroTheme.pageHeaderHeight) {
+            LerroPageHeader(LerroInterfaceLocalization.string("历史", locale: locale)) {
+                HStack(spacing: 8) {
                     Picker("历史类型", selection: $tab) {
                         ForEach(HistoryTab.allCases) { item in
                             Text(LocalizedStringKey(item.title)).tag(item)
@@ -34,31 +30,37 @@ struct HistoryView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                    LerroSearchField(text: $searchText, prompt: "搜索历史")
+                        .lerroPageTextInput(.history, in: session)
                 }
             }
-            .task(id: searchText) {
-                await applyQuery(debounced: true)
-            }
-            .task(id: session.historyFocusID) {
-                await focusRequestedEntry()
-            }
-            .onChange(of: tab) { _, _ in
-                Task { await applyQuery(debounced: false) }
-            }
-            .confirmationDialog(
-                Text("删除这条记录？"),
-                isPresented: Binding(
-                    get: { entryPendingDeletion != nil },
-                    set: { if !$0 { entryPendingDeletion = nil } }
-                ),
-                titleVisibility: .visible,
-                presenting: entryPendingDeletion
-            ) { entry in
-                Button("删除", role: .destructive) { delete(entry) }
-                Button("取消", role: .cancel) {}
-            } message: { _ in
-                Text("这条记录及其录音将被永久删除。")
-            }
+            content
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(LerroTheme.main)
+        .task(id: searchText) {
+            await applyQuery(debounced: true)
+        }
+        .task(id: session.historyFocusID) {
+            await focusRequestedEntry()
+        }
+        .onChange(of: tab) { _, _ in
+            Task { await applyQuery(debounced: false) }
+        }
+        .confirmationDialog(
+            Text("删除这条记录？"),
+            isPresented: Binding(
+                get: { entryPendingDeletion != nil },
+                set: { if !$0 { entryPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: entryPendingDeletion
+        ) { entry in
+            Button("删除", role: .destructive) { delete(entry) }
+            Button("取消", role: .cancel) {}
+        } message: { _ in
+            Text("这条记录及其录音将被永久删除。")
+        }
     }
 
     // MARK: Content
@@ -77,7 +79,7 @@ struct HistoryView: View {
             }
         } else {
             let selected = entries.first { $0.id == selectedID } ?? entries[0]
-            HStack(spacing: 0) {
+            LerroSplitLayout(axis: .horizontal, firstLength: Self.listWidth) {
                 HistoryListView(
                     session: session,
                     groups: HistoryPresentation.groups(from: entries, locale: locale),
@@ -85,14 +87,16 @@ struct HistoryView: View {
                     select: { selectedID = $0 },
                     requestDelete: { entryPendingDeletion = $0 }
                 )
-                .frame(width: Self.listWidth)
-                Divider()
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(LerroTheme.thinBorder)
+                        .frame(width: 0.5)
+                }
                 HistoryDetailView(
                     entry: selected,
                     session: session,
                     requestDelete: { entryPendingDeletion = $0 }
                 )
-                .frame(maxWidth: .infinity)
             }
         }
     }

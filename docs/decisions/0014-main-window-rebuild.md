@@ -22,7 +22,7 @@ V1.6 主窗口使用自绘 sidebar、卡片、pill 与窗口内设置浮层。�
 
 ## 方案
 
-- 主窗口使用 `NavigationSplitView`。侧栏含 wordmark、首页 / 历史 / 词典 / 应用语气（带数量 badge），
+- 主窗口使用 `NavigationSplitView`（已由 [ADR 0017](0017-fixed-sidebar.md) 改为固定侧栏）。侧栏含 wordmark、首页 / 历史 / 词典 / 应用语气（带数量 badge），
   底部为 AI 状态行（`AppSession.aiStatus`）、设置齿轮与版本号。
   `SidebarDestination` 为 `home`、`history`、`dictionary`、`appTones`；个性化更名为应用语气。
 - 首页：今天 / 近 7 天 / 全部三档统计（`UsageStatistics`）、7 天柱状图、快捷键键帽、麦克风菜单、

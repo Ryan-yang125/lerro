@@ -33,10 +33,10 @@ struct LerroApp: App {
                     Task { await session.applicationDidBecomeActive() }
                 }
         }
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1080, height: 750)
         .windowResizability(.contentMinSize)
         .commands {
-            SidebarCommands()
             LerroCommands(session: session)
         }
 

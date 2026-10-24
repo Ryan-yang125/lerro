@@ -67,6 +67,9 @@ struct HistoryDetailView: View {
         }
         .onChange(of: entry.id) { _, _ in player.stop() }
         .onDisappear { player.stop() }
+        .onLerroPageVisibilityChange(.history, in: session) { visible in
+            if !visible { player.stop() }
+        }
     }
 
     // MARK: Header

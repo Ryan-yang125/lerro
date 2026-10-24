@@ -228,7 +228,8 @@ for localization_resource in \
     packaged_localization="$app_path/Contents/Resources/$localization_resource"
     source_localization="$project_dir/Sources/Lerro/Resources/$localization_resource"
     plutil -lint "$packaged_localization"
-    cmp -s "$packaged_localization" "$source_localization" || {
+    [[ "$(head -c 8 "$packaged_localization")" == "bplist00" ]] || { print -u2 "Packaged localization is not a binary plist: $localization_resource"; exit 1; }
+    cmp -s <(plutil -convert xml1 -o - "$packaged_localization") <(plutil -convert xml1 -o - "$source_localization") || {
         print -u2 "Packaged localization differs from source: $localization_resource"
         exit 1
     }

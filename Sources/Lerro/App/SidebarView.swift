@@ -7,51 +7,49 @@ struct SidebarView: View {
     @Environment(\.openSettings) private var openSettingsWindow
 
     var body: some View {
-        List(selection: $session.destination) {
-            row(.home, title: "首页", systemImage: "house")
-            row(.history, title: "历史", systemImage: "clock.arrow.circlepath", count: session.historyAllCount)
-            row(
-                .dictionary,
-                title: "词典",
-                systemImage: "character.book.closed",
-                count: session.dictionaryEntries.count
-            )
-            row(
-                .appTones,
-                title: "应用语气",
-                systemImage: "text.bubble",
-                count: session.preferences.appToneProfiles.count
-            )
-        }
-        .listStyle(.sidebar)
-        .safeAreaInset(edge: .top, spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             LerroWordmark(height: 18)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 20)
-                .padding(.top, 4)
-                .padding(.bottom, 10)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+                .padding(.top, LerroTheme.pageHeaderHeight + 4)
+                .padding(.bottom, 14)
+            VStack(spacing: 2) {
+                row(.home, title: "首页", systemImage: "house")
+                row(.history, title: "历史", systemImage: "clock.arrow.circlepath", count: session.historyAllCount)
+                row(
+                    .dictionary,
+                    title: "词典",
+                    systemImage: "character.book.closed",
+                    count: session.dictionaryEntries.count
+                )
+                row(
+                    .appTones,
+                    title: "应用语气",
+                    systemImage: "text.bubble",
+                    count: session.preferences.appToneProfiles.count
+                )
+            }
+            .padding(.horizontal, 10)
+            Spacer(minLength: 0)
             footer
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background { Color.clear.contentShape(Rectangle()).gesture(WindowDragGesture()) }
     }
 
-    @ViewBuilder
     private func row(
         _ destination: SidebarDestination,
         title: String,
         systemImage: String,
         count: Int? = nil
     ) -> some View {
-        let label = Label(localized(title), systemImage: systemImage)
-        Group {
-            if let count {
-                label.badge(count)
-            } else {
-                label
-            }
+        SidebarRow(
+            title: localized(title),
+            systemImage: systemImage,
+            count: count,
+            isSelected: session.destination == destination
+        ) {
+            session.destination = destination
         }
-        .tag(destination)
     }
 
     private var footer: some View {
@@ -223,5 +221,47 @@ struct SidebarView: View {
 
     private func localized(_ key: String) -> String {
         LerroInterfaceLocalization.string(key, locale: locale)
+    }
+}
+
+private struct SidebarRow: View {
+    let title: String
+    let systemImage: String
+    let count: Int?
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14))
+                    .foregroundStyle(isSelected ? LerroTheme.accent : LerroTheme.secondaryText)
+                    .frame(width: 20)
+                Text(verbatim: title)
+                    .font(isSelected ? LerroFont.bodyEmphasis : LerroFont.body)
+                    .foregroundStyle(LerroTheme.text)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if let count {
+                    Text(verbatim: count.formatted())
+                        .font(LerroFont.footnote.monospacedDigit())
+                        .foregroundStyle(LerroTheme.tertiaryText)
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(
+                isSelected ? LerroTheme.fillSelected : isHovered ? LerroTheme.fillHover : Color.clear,
+                in: RoundedRectangle(cornerRadius: LerroTheme.navigationRadius, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: LerroTheme.navigationRadius, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: LerroTheme.hoverDuration), value: isHovered)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityValue(count.map(String.init) ?? "")
     }
 }

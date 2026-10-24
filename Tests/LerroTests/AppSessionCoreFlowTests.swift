@@ -112,6 +112,7 @@ struct AppSessionCoreFlowTests {
         harness.session.toggleCapture(.dictation)
         #expect(await waitUntil { harness.session.phase == .idle })
         #expect(await harness.delivery.values() == ["hello Lerro"])
+        await harness.session.waitForPendingPersistence()
         #expect(await harness.history.entries().first?.finalText == "hello Lerro")
         #expect(harness.session.recoveryPresentation == nil)
         #expect(harness.session.dictionaryLearningToast == nil)
@@ -273,6 +274,7 @@ struct AppSessionCoreFlowTests {
         #expect(harness.session.phase == .failed)
         #expect(harness.session.recoveryPresentation?.text == "keep this text")
         #expect(await harness.recovery.values() == ["keep this text"])
+        await harness.session.waitForPendingPersistence()
         #expect(await harness.history.entries().first?.status == .failed)
 
         harness.session.recopyRecoveryText()
@@ -1097,11 +1099,30 @@ struct AppSessionCoreFlowTests {
         let trace = try #require(finished.first)
         #expect(trace.outcome == .completed)
         #expect(trace.processingRoute == .raw)
-        #expect(trace.offset(of: .historySaved) != nil)
         #expect(trace.offset(of: .finished) != nil)
         let chain = CaptureMilestone.startupChain + CaptureMilestone.finishChain
         let offsets = chain.compactMap { trace.offset(of: $0) }
         #expect(offsets == offsets.sorted())
+    }
+
+    @Test("The session is idle after delivery while history persistence is still pending")
+    @MainActor
+    func sessionIdlesBeforePersistenceCompletes() async {
+        let gate = HistorySaveGate()
+        let harness = makeHarness(text: "persist later", historyGate: gate)
+        await harness.session.start()
+
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .listening })
+        harness.session.toggleCapture(.dictation)
+        #expect(await waitUntil { harness.session.phase == .idle })
+        #expect(await waitUntil { await gate.waitingCount() == 1 })
+        #expect(await harness.delivery.values() == ["persist later"])
+        #expect(await harness.history.entries().isEmpty)
+
+        await gate.open()
+        await harness.session.waitForPendingPersistence()
+        #expect(await harness.history.entries().first?.finalText == "persist later")
     }
 
     @Test("Cancelling during startup or listening finishes the trace as cancelled and saves nothing")
@@ -1160,6 +1181,7 @@ struct AppSessionCoreFlowTests {
         #expect(await waitUntil { harness.trace.finishedTraces().count == 1 })
 
         #expect(harness.trace.finishedTraces().first?.outcome == .deliveryFailed)
+        await harness.session.waitForPendingPersistence()
         let entry = try #require(await harness.history.entries().first)
         #expect(entry.status == .failed)
         #expect(entry.phaseTimings?.outcome == .deliveryFailed)
@@ -1185,6 +1207,7 @@ struct AppSessionCoreFlowTests {
         try? await Task.sleep(for: .milliseconds(50))
         harness.session.toggleCapture(.dictation)
         #expect(await waitUntil { harness.trace.finishedTraces().count == 2 })
+        await harness.session.waitForPendingPersistence()
 
         let entry = try #require(await harness.history.entries().first)
         let timings = try #require(entry.phaseTimings)
@@ -1201,6 +1224,7 @@ struct AppSessionCoreFlowTests {
         _ = await waitUntil { session.phase == .listening }
         session.toggleCapture(.dictation)
         _ = await waitUntil { session.phase == .idle }
+        await session.waitForPendingPersistence()
     }
 
     @MainActor
@@ -1215,6 +1239,7 @@ struct AppSessionCoreFlowTests {
         applications: [ApplicationDescriptor] = [],
         intelligenceFails: Bool = false,
         historyEntries: [HistoryEntry] = [],
+        historyGate: HistorySaveGate? = nil,
         classificationDelay: Duration? = nil,
         resourcesReady: Bool = true,
         aiUsageRecords: [AIUsageRecord] = [],
@@ -1251,6 +1276,9 @@ struct AppSessionCoreFlowTests {
         let aiUsage = InMemoryAIUsageRepository(records: aiUsageRecords)
         let preferences = preferences ?? basePreferences()
         let preferencesRepository = InMemoryPreferencesRepository(value: preferences)
+        let historyRepository: any HistoryRepository = historyGate.map {
+            GatedHistoryRepository(base: history, gate: $0)
+        } ?? history
         let dependencies = AppDependencies(
             applicationPaths: nil,
             startupStorageError: nil,
@@ -1265,7 +1293,7 @@ struct AppSessionCoreFlowTests {
             hotkeys: StubHotkeyMonitor(),
             permissions: StubPermissions(),
             loginItem: StubLoginItem(),
-            history: history,
+            history: historyRepository,
             dictionary: dictionary,
             preferences: preferencesRepository,
             aiUsage: aiUsage,
@@ -1328,6 +1356,42 @@ struct AppSessionCoreFlowTests {
             try? await Task.sleep(for: .milliseconds(20))
         }
         return await condition()
+    }
+}
+
+private actor HistorySaveGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func waitUntilOpen() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func waitingCount() -> Int { waiters.count }
+
+    func open() {
+        isOpen = true
+        waiters.forEach { $0.resume() }
+        waiters.removeAll()
+    }
+}
+
+/// Delegates to an in-memory repository and suspends `save` until the gate opens.
+private struct GatedHistoryRepository: HistoryRepository {
+    let base: InMemoryHistoryRepository
+    let gate: HistorySaveGate
+
+    func entries() async throws -> [HistoryEntry] { await base.entries() }
+    func page(_ request: HistoryPageRequest) async throws -> HistoryPage { await base.page(request) }
+    func save(_ entry: HistoryEntry) async throws {
+        await gate.waitUntilOpen()
+        await base.save(entry)
+    }
+    func delete(id: UUID) async throws { await base.delete(id: id) }
+    func deleteAll() async throws { await base.deleteAll() }
+    func applyRetention(_ retention: HistoryRetention, now: Date) async throws {
+        await base.applyRetention(retention, now: now)
     }
 }
 

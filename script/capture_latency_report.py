@@ -37,7 +37,7 @@ ANALYZER_CHAIN = [
 ]
 FINISH_CHAIN = [
     "stopRequested", "transcriptionFinished", "processingFinished", "deliveryCommitted",
-    "deliveryFinished", "historySaved", "finished",
+    "deliveryFinished", "finished",
 ]
 
 # (name, from, to)

@@ -182,6 +182,7 @@ final class AppSession {
     private var eventTask: Task<Void, Never>?
     private var completionTask: Task<Void, Never>?
     private var deliveredTextObservationTask: Task<Void, Never>?
+    private var persistenceTask: Task<Void, Never>?
     private var dictionaryLearningToastTask: Task<Void, Never>?
     private var recoveryDismissTask: Task<Void, Never>?
     private var hudDeliveryFeedbackTask: Task<Void, Never>?
@@ -1093,8 +1094,12 @@ final class AppSession {
             for case let bundleIdentifier? in entries.map(\.bundleIdentifier) where !bundleIdentifier.isEmpty {
                 counts[bundleIdentifier, default: 0] += 1
             }
-            availableApplications = applications
-            applicationDictationCounts = counts
+            if availableApplications != applications {
+                availableApplications = applications
+            }
+            if applicationDictationCounts != counts {
+                applicationDictationCounts = counts
+            }
         }
     }
 
@@ -1906,22 +1911,10 @@ final class AppSession {
         } catch {
             var reportedError: any Error = error
             if let recordedAudioRelativePath {
-                let wasPersisted: Bool
                 do {
-                    wasPersisted = try await dependencies.history.entries()
-                        .contains { $0.id == session.id }
+                    try await deleteAudioFile(relativePath: recordedAudioRelativePath)
                 } catch {
-                    wasPersisted = true
-                    reportedError = LerroError.localData(
-                        "无法确认录音索引状态，已保留文件等待下次对账：\(error.localizedDescription)"
-                    )
-                }
-                if !wasPersisted {
-                    do {
-                        try await deleteAudioFile(relativePath: recordedAudioRelativePath)
-                    } catch {
-                        reportedError = error
-                    }
+                    reportedError = error
                 }
             }
             guard activeSession?.id == session.id else { return }
@@ -2030,18 +2023,15 @@ final class AppSession {
                 text: result.text,
                 message: "内容已复制到剪贴板"
             ))
-            history.phaseTimings = traceRecorder.current.map {
+            let finishedTrace = finishTrace(.deliveryFailed, generation: generation)
+            finishCaptureState(phase: .failed, message: "未能写入 \(session.context.applicationName)")
+            history.phaseTimings = finishedTrace.map {
                 HistoryPhaseTimings(trace: $0, outcome: .deliveryFailed)
             }
-            if preferences.historyRetention == .never {
-                try await deleteAudioFile(relativePath: history.audioRelativePath)
-            } else {
-                try await dependencies.history.save(history)
+            let failedHistory = history
+            enqueuePersistence { [weak self] in
+                await self?.persistDeliveryFailure(failedHistory)
             }
-            markTrace(.historySaved, generation: generation)
-            await refreshHistoryAndUsage()
-            finishTrace(.deliveryFailed, generation: generation)
-            finishCaptureState(phase: .failed, message: "未能写入 \(session.context.applicationName)")
             return
         }
 
@@ -2052,25 +2042,6 @@ final class AppSession {
             savePreferences()
         }
         lastResult = result.text
-        let outcome: CaptureTraceOutcome = usedRawFallback ? .completedWithRawFallback : .completed
-        history.phaseTimings = traceRecorder.current.map {
-            HistoryPhaseTimings(trace: $0, outcome: outcome)
-        }
-        if preferences.historyRetention == .never {
-            try await deleteAudioFile(relativePath: history.audioRelativePath)
-        } else {
-            try await dependencies.history.save(history)
-        }
-        await recordDailyUsage(history)
-        markTrace(.historySaved, generation: generation)
-        try await applyRetentionAndClean(preferences.historyRetention, now: .now)
-        await refreshHistoryAndUsage()
-        if session.mode == .dictation {
-            await recordDictionaryUsage(in: result.text)
-            if preferences.historyRetention != .never {
-                await learnTerms(from: history)
-            }
-        }
         if let systemReceipt,
            session.mode == .dictation,
            session.intelligenceMode != .raw,
@@ -2081,8 +2052,75 @@ final class AppSession {
                 historyEntryID: preferences.historyRetention == .never ? nil : history.id
             )
         }
-        finishTrace(outcome, generation: generation)
+        let outcome: CaptureTraceOutcome = usedRawFallback ? .completedWithRawFallback : .completed
+        let finishedTrace = finishTrace(outcome, generation: generation)
         finishCaptureState(phase: .idle)
+        history.phaseTimings = finishedTrace.map {
+            HistoryPhaseTimings(trace: $0, outcome: outcome)
+        }
+        let completedHistory = history
+        let mode = session.mode
+        let finalText = result.text
+        enqueuePersistence { [weak self] in
+            await self?.persistCompletedCapture(completedHistory, mode: mode, finalText: finalText)
+        }
+    }
+
+    /// Runs persistence jobs one after another in submission order, off the
+    /// capture's critical path.
+    private func enqueuePersistence(_ job: @escaping @MainActor @Sendable () async -> Void) {
+        let previous = persistenceTask
+        persistenceTask = Task { @MainActor in
+            await previous?.value
+            await job()
+        }
+    }
+
+    func waitForPendingPersistence() async {
+        await persistenceTask?.value
+    }
+
+    private func saveHistoryOrDiscardAudio(_ history: HistoryEntry) async throws {
+        guard preferences.historyRetention != .never else {
+            try await deleteAudioFile(relativePath: history.audioRelativePath)
+            return
+        }
+        do {
+            try await dependencies.history.save(history)
+        } catch {
+            try? await deleteAudioFile(relativePath: history.audioRelativePath)
+            throw error
+        }
+    }
+
+    private func persistCompletedCapture(
+        _ history: HistoryEntry,
+        mode: CaptureMode,
+        finalText: String
+    ) async {
+        do {
+            try await saveHistoryOrDiscardAudio(history)
+            await recordDailyUsage(history)
+            try await applyRetentionAndClean(preferences.historyRetention, now: .now)
+            await refreshHistoryAndUsage()
+            if mode == .dictation {
+                await recordDictionaryUsage(in: finalText)
+                if preferences.historyRetention != .never {
+                    await learnTerms(from: history)
+                }
+            }
+        } catch {
+            currentError = userFacingError(error, context: "本地数据处理失败，请重试")
+        }
+    }
+
+    private func persistDeliveryFailure(_ history: HistoryEntry) async {
+        do {
+            try await saveHistoryOrDiscardAudio(history)
+        } catch {
+            currentError = userFacingError(error, context: "本地数据处理失败，请重试")
+        }
+        await refreshHistoryAndUsage()
     }
 
     private func finishCaptureState(phase finalPhase: CapturePhase, message: String? = nil) {
@@ -2575,6 +2613,8 @@ final class AppSession {
 
     private func reconcileOrphanedAudioFiles() async {
         guard let audioFileStore else { return }
+        // Recordings of just-completed captures are indexed by pending persistence.
+        await persistenceTask?.value
         let allEntries: [HistoryEntry]
         do {
             allEntries = try await dependencies.history.entries()
@@ -2780,18 +2820,20 @@ final class AppSession {
 
     /// Finishes the open trace. With a `generation`, only that generation's
     /// trace is finished.
+    @discardableResult
     private func finishTrace(
         _ outcome: CaptureTraceOutcome,
         error: (any Error)? = nil,
         generation: UUID? = nil
-    ) {
-        if let generation, traceRecorder.current?.id != generation { return }
+    ) -> CaptureTrace? {
+        if let generation, traceRecorder.current?.id != generation { return nil }
         guard let trace = traceRecorder.finish(
             outcome,
             errorKind: error.map(CaptureTrace.errorKind(of:)),
             at: ContinuousClock.now
-        ) else { return }
+        ) else { return nil }
         dependencies.captureTrace.captureTraceDidFinish(trace)
+        return trace
     }
 
     private func userFacingError(_ error: any Error, context: String) -> String {

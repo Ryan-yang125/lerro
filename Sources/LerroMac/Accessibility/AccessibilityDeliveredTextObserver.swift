@@ -7,6 +7,9 @@ import LerroCore
 public actor AccessibilityDeliveredTextObserver: DeliveredTextObserving {
     static let debounceDuration: Duration = .milliseconds(800)
     static let pollInterval: Duration = .milliseconds(100)
+    /// Observation starts at the paste commit point, so the target app may not
+    /// have applied the text yet.
+    static let baselineDeadline: Duration = .milliseconds(1_500)
     static let maximumObservedUTF16Length = 65_536
 
     private var observationTask: Task<Void, Never>?
@@ -21,9 +24,15 @@ public actor AccessibilityDeliveredTextObserver: DeliveredTextObserving {
         timeout: Duration
     ) async throws -> AsyncThrowingStream<DeliveredTextEdit, any Error> {
         await stopObserving()
-        let baseline = try await observedTargetValue(receipt: receipt)
-        guard baseline.contains(text) else {
-            throw LerroError.insertionFailed("当前编辑器无法绑定刚写入的文本")
+        let clock = ContinuousClock()
+        let baselineDeadline = clock.now.advanced(by: Self.baselineDeadline)
+        var baseline = try await observedTargetValue(receipt: receipt)
+        while !baseline.contains(text) {
+            guard clock.now < baselineDeadline else {
+                throw LerroError.insertionFailed("当前编辑器无法绑定刚写入的文本")
+            }
+            try await Task.sleep(for: Self.pollInterval)
+            baseline = try await observedTargetValue(receipt: receipt)
         }
         let pair = AsyncThrowingStream<DeliveredTextEdit, any Error>.makeStream()
         continuation = pair.continuation

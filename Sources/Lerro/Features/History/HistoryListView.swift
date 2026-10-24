@@ -51,7 +51,7 @@ struct HistoryListView: View {
                 .padding(.horizontal, 10)
                 .padding(.bottom, 16)
             }
-            .focusable()
+            .lerroPageFocusable(.history, in: session)
             .focused($isFocused)
             .focusEffectDisabled()
             .onKeyPress(.upArrow) { moveSelection(by: -1) }

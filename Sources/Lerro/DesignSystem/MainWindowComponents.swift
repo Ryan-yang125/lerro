@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import LerroCore
 
 // MARK: Buttons
 
@@ -317,5 +318,225 @@ struct LerroEmptyState: View {
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: Split layout
+
+/// Two children along one axis: the first gets `firstLength`, the second gets
+/// the rest. It fills the proposed size and never measures its children. An
+/// HStack or VStack asks each child for its size at zero and infinite lengths
+/// to rank flexibility, and a ScrollView or List child answers by laying out
+/// its whole content, which made every page switch take 100–180 ms.
+struct LerroSplitLayout: Layout {
+    let axis: Axis
+    let firstLength: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 2 else {
+            assertionFailure("LerroSplitLayout takes exactly two children")
+            return
+        }
+        let first = min(firstLength, axis == .horizontal ? bounds.width : bounds.height)
+        switch axis {
+        case .horizontal:
+            subviews[0].place(
+                at: bounds.origin,
+                proposal: ProposedViewSize(width: first, height: bounds.height)
+            )
+            subviews[1].place(
+                at: CGPoint(x: bounds.minX + first, y: bounds.minY),
+                proposal: ProposedViewSize(width: bounds.width - first, height: bounds.height)
+            )
+        case .vertical:
+            subviews[0].place(
+                at: bounds.origin,
+                proposal: ProposedViewSize(width: bounds.width, height: first)
+            )
+            subviews[1].place(
+                at: CGPoint(x: bounds.minX, y: bounds.minY + first),
+                proposal: ProposedViewSize(width: bounds.width, height: bounds.height - first)
+            )
+        }
+    }
+}
+
+/// Equal-width columns, top aligned, as tall as the tallest child. Each child
+/// is measured once at its column width; an HStack of flexible cards first
+/// probes every card at zero and infinite widths.
+struct LerroEqualColumns: Layout {
+    var spacing: CGFloat = 12
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard !subviews.isEmpty else { return .zero }
+        let width = proposal.width ?? subviews.reduce(0) { $0 + $1.sizeThatFits(.unspecified).width }
+            + spacing * CGFloat(subviews.count - 1)
+        let column = columnWidth(in: width, count: subviews.count)
+        let height = subviews.map { $0.sizeThatFits(ProposedViewSize(width: column, height: nil)).height }.max() ?? 0
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let column = columnWidth(in: bounds.width, count: subviews.count)
+        for (index, subview) in subviews.enumerated() {
+            subview.place(
+                at: CGPoint(x: bounds.minX + CGFloat(index) * (column + spacing), y: bounds.minY),
+                proposal: ProposedViewSize(width: column, height: nil)
+            )
+        }
+    }
+
+    private func columnWidth(in width: CGFloat, count: Int) -> CGFloat {
+        max(0, (width - spacing * CGFloat(count - 1)) / CGFloat(count))
+    }
+}
+
+// MARK: Page lifecycle
+
+// All main-window pages stay alive in RootView. These modifiers read
+// `session.destination` inside their own body, so a page switch updates only
+// the gated control and not the page around it.
+
+private struct LerroPageTextInputModifier: ViewModifier {
+    let session: AppSession
+    let page: SidebarDestination
+
+    func body(content: Content) -> some View {
+        content.disabled(session.destination != page)
+    }
+}
+
+private struct LerroPageFocusableModifier: ViewModifier {
+    let session: AppSession
+    let page: SidebarDestination
+
+    func body(content: Content) -> some View {
+        content.focusable(session.destination == page)
+    }
+}
+
+private struct LerroPageVisibilityChangeModifier: ViewModifier {
+    let session: AppSession
+    let page: SidebarDestination
+    let action: (Bool) -> Void
+
+    func body(content: Content) -> some View {
+        content.onChange(of: session.destination == page, initial: true) { _, visible in
+            action(visible)
+        }
+    }
+}
+
+extension View {
+    /// For text fields: keeps a hidden page's field out of the Tab order.
+    func lerroPageTextInput(_ page: SidebarDestination, in session: AppSession) -> some View {
+        modifier(LerroPageTextInputModifier(session: session, page: page))
+    }
+
+    /// For lists: only the visible page's list can take keyboard focus.
+    func lerroPageFocusable(_ page: SidebarDestination, in session: AppSession) -> some View {
+        modifier(LerroPageFocusableModifier(session: session, page: page))
+    }
+
+    /// Runs `action` with the page's visibility on appear and on every change.
+    func onLerroPageVisibilityChange(
+        _ page: SidebarDestination,
+        in session: AppSession,
+        perform action: @escaping (Bool) -> Void
+    ) -> some View {
+        modifier(LerroPageVisibilityChangeModifier(session: session, page: page, action: action))
+    }
+}
+
+/// Top bar of a main-window page: the page title on the left and the page's
+/// controls on the right. The window has no title bar, so the empty part of
+/// this bar drags the window.
+struct LerroPageHeader<Trailing: View>: View {
+    let title: String
+    let trailing: Trailing
+
+    init(_ title: String, @ViewBuilder trailing: () -> Trailing) {
+        self.title = title
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(verbatim: title)
+                .font(LerroFont.pageTitle)
+                .foregroundStyle(LerroTheme.text)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 16)
+            trailing
+        }
+        .padding(.horizontal, LerroTheme.contentHorizontalPadding)
+        .frame(height: LerroTheme.pageHeaderHeight)
+        .background {
+            Color.clear
+                .contentShape(Rectangle())
+                .gesture(WindowDragGesture())
+        }
+    }
+}
+
+extension LerroPageHeader where Trailing == EmptyView {
+    init(_ title: String) {
+        self.init(title) { EmptyView() }
+    }
+}
+
+/// Search field for a page header.
+struct LerroSearchField: View {
+    @Binding var text: String
+    let prompt: String
+    @Environment(\.locale) private var locale
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(LerroTheme.tertiaryText)
+                .accessibilityHidden(true)
+            TextField(text: $text, prompt: Text(verbatim: localizedPrompt)) {
+                Text(verbatim: localizedPrompt)
+            }
+            .textFieldStyle(.plain)
+            .font(LerroFont.body)
+            .focused($focused)
+            .onExitCommand { text = "" }
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(LerroTheme.tertiaryText)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("清除"))
+            }
+        }
+        .padding(.horizontal, 9)
+        .frame(width: 200, height: 28)
+        .background(
+            LerroTheme.fillContainerThin,
+            in: RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: LerroTheme.controlRadius, style: .continuous)
+                .strokeBorder(focused ? LerroTheme.accent : LerroTheme.thinBorder, lineWidth: focused ? 1 : 0.5)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
+    }
+
+    private var localizedPrompt: String {
+        LerroInterfaceLocalization.string(prompt, locale: locale)
     }
 }

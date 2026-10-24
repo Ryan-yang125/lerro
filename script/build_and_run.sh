@@ -193,6 +193,10 @@ ditto "$project_dir/Sources/Lerro/Resources/PrivacyInfo.xcprivacy" "$resources_p
 while IFS= read -r -d $'\0' localization_path; do
     ditto "$localization_path" "$resources_path/$(basename "$localization_path")"
 done < <(find "$project_dir/Sources/Lerro/Resources" -mindepth 1 -maxdepth 1 -type d -name '*.lproj' -print0)
+# SwiftUI looks strings up with an explicit localization, which CoreFoundation re-parses on every lookup; binary plists parse about 8x faster.
+for strings_path in "$resources_path"/*.lproj/*.(strings|stringsdict)(N); do
+    plutil -convert binary1 "$strings_path"
+done
 while IFS= read -r -d $'\0' bundle_path; do
     bundle_name="$(basename "$bundle_path")"
     ditto "$bundle_path" "$resources_path/$bundle_name"

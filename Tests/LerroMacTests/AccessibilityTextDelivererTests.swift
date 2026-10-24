@@ -160,9 +160,9 @@ struct AccessibilityTextDelivererTests {
         #expect(writer.callCount == 2)
     }
 
-    @Test("Committed Command-V finalization survives caller cancellation")
+    @Test("Committed Command-V clipboard restore survives caller cancellation")
     @MainActor
-    func committedPasteFinalizationIsNonCancellable() async throws {
+    func committedPasteRestoreIsNonCancellable() async throws {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         _ = pasteboard.prepareForNewContents(with: [])
@@ -174,19 +174,20 @@ struct AccessibilityTextDelivererTests {
             pasteboard: pasteboard
         )
         let probe = CommittedDeliveryProbe()
-        let finalization = Task {
-            try await finalizeCommittedPasteDelivery(
+        let caller = Task {
+            scheduleCommittedPasteRestore(
                 waitForConsumption: { await probe.waitForConsumption() },
                 restorePasteboard: {
-                    _ = try await MainActor.run { try transaction.restoreIfOwned() }
+                    _ = try? await MainActor.run { try transaction.restoreIfOwned() }
                     await probe.recordRestore()
                 }
             )
         }
+        let restore = await caller.value
         await probe.waitUntilConsumptionStarted()
-        finalization.cancel()
+        caller.cancel()
         await probe.finishConsumption()
-        try await finalization.value
+        await restore.value
         #expect(await probe.restoreCount() == 1)
         #expect(original.matches(pasteboard))
     }

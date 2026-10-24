@@ -12,6 +12,13 @@ public enum CaptureMode: String, CaseIterable, Codable, Sendable, Identifiable {
     case translation
 
     public var id: String { rawValue }
+
+    /// History files written by older versions may hold modes that no longer exist
+    /// ("ask"). They decode as `.dictation`.
+    public init(from decoder: any Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: value) ?? .dictation
+    }
 }
 
 public enum CapturePhase: String, Codable, Sendable {

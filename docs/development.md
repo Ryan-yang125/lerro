@@ -28,7 +28,8 @@ signing, and is not a supported way to launch Lerro.
 ```
 
 The script assembles `dist/Lerro.app` (SwiftPM resource bundles, Sparkle framework,
-privacy manifest, terms, third-party licenses, app icon, `Assets.car`), checks the
+privacy manifest, terms, third-party licenses, app icon, `Assets.car`), converts
+`.strings` and `.stringsdict` to binary property lists, checks the
 resource accessor, arm64 slices, matching binary and dSYM UUIDs, plists, and the
 code signature, then signs according to the signing mode. Running the script
 terminates a running `Lerro` process before launching.

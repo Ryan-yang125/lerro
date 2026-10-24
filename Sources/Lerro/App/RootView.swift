@@ -8,23 +8,28 @@ struct RootView: View {
     @Environment(\.locale) private var locale
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
+    @State private var focusResetter = WindowFocusResetter()
 
     var body: some View {
         ZStack {
             if session.isPanelOnlyVisualFixture {
                 visualFixture
             } else {
-                NavigationSplitView {
+                // A fixed sidebar beside the page. The window has no title bar:
+                // the sidebar runs up under the traffic lights and each page
+                // draws its own header (LerroPageHeader).
+                LerroSplitLayout(axis: .horizontal, firstLength: LerroTheme.sidebarWidth) {
                     SidebarView(session: session)
-                        .navigationSplitViewColumnWidth(
-                            min: 200,
-                            ideal: LerroTheme.sidebarWidth,
-                            max: 260
-                        )
-                } detail: {
+                        .background(LerroTheme.sidebar)
+                        .overlay(alignment: .trailing) {
+                            Rectangle()
+                                .fill(LerroTheme.thinBorder)
+                                .frame(width: 0.5)
+                        }
                     detail
+                        .background(LerroTheme.main)
                 }
-                .navigationSplitViewStyle(.balanced)
+                .ignoresSafeArea(.container, edges: .top)
                 .tracking(LerroTheme.uiTracking)
                 .allowsHitTesting(!session.isOnboardingPresented)
                 .accessibilityHidden(session.isOnboardingPresented)
@@ -41,7 +46,6 @@ struct RootView: View {
             minWidth: LerroTheme.hubMinimumSize.width,
             minHeight: LerroTheme.hubMinimumSize.height
         )
-        .toolbarVisibility(session.isOnboardingPresented ? .hidden : .automatic, for: .windowToolbar)
         .tint(LerroTheme.accent)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: session.isOnboardingPresented)
         .onChange(of: session.visualFixturePresentation, initial: true) { _, presentation in
@@ -72,9 +76,24 @@ struct RootView: View {
         }
     }
 
-    @ViewBuilder
+    /// All four pages stay alive; switching only changes which one is visible.
+    /// The window title is set here once, because every page would otherwise
+    /// set its own.
     private var detail: some View {
-        switch session.destination {
+        ZStack {
+            ForEach(SidebarDestination.allCases, id: \.self) { destination in
+                page(destination)
+                    .lerroPageVisibility(destination == session.destination)
+            }
+        }
+        .navigationTitle(Text(verbatim: windowTitle))
+        .background(WindowFocusResetterView(resetter: focusResetter))
+        .onChange(of: session.destination) { _, _ in focusResetter.resetFocus() }
+    }
+
+    @ViewBuilder
+    private func page(_ destination: SidebarDestination) -> some View {
+        switch destination {
         case .home:
             HomeView(session: session)
         case .history:
@@ -83,6 +102,15 @@ struct RootView: View {
             DictionaryView(session: session)
         case .appTones:
             AppTonesView(session: session)
+        }
+    }
+
+    private var windowTitle: String {
+        switch session.destination {
+        case .home: LerroInterfaceLocalization.string("首页", locale: locale)
+        case .history: LerroInterfaceLocalization.string("历史", locale: locale)
+        case .dictionary: LerroInterfaceLocalization.string("词典", locale: locale)
+        case .appTones: LerroInterfaceLocalization.string("应用语气", locale: locale)
         }
     }
 
@@ -98,5 +126,56 @@ struct RootView: View {
                 MenuBarPanelView(session: session, drawsChrome: true)
             }
         }
+    }
+}
+
+private extension View {
+    /// A hidden page keeps its state but is invisible, ignores the pointer,
+    /// and is skipped by VoiceOver. Keyboard focus is gated per control; see
+    /// "Page lifecycle" in MainWindowComponents.
+    func lerroPageVisibility(_ isVisible: Bool) -> some View {
+        opacity(isVisible ? 1 : 0)
+            .allowsHitTesting(isVisible)
+            .accessibilityHidden(!isVisible)
+    }
+}
+
+/// Holds the window of the page area so a page switch can drop keyboard focus
+/// held by a control on the page being hidden.
+@MainActor
+private final class WindowFocusResetter {
+    weak var window: NSWindow?
+
+    func resetFocus() {
+        window?.makeFirstResponder(nil)
+    }
+}
+
+private struct WindowFocusResetterView: NSViewRepresentable {
+    let resetter: WindowFocusResetter
+
+    func makeNSView(context: Context) -> NSView {
+        WindowTrackingView(resetter: resetter)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+/// Records its window when it joins one; the view has no window when created.
+private final class WindowTrackingView: NSView {
+    private let resetter: WindowFocusResetter
+
+    init(resetter: WindowFocusResetter) {
+        self.resetter = resetter
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not used")
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        resetter.window = window
     }
 }

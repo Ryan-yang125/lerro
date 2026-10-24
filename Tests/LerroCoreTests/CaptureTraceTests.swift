@@ -262,7 +262,6 @@ struct CaptureTraceTests {
         #expect(timings.outcome == .completed)
         #expect(isClose(timings.milestones[.listening], to: 0.4))
         #expect(isClose(timings.milestones[.deliveryFinished], to: 2.0))
-        #expect(timings.milestones[.historySaved] == nil)
     }
 
     @Test("init(trace:outcome:) uses zero for phases that were not reached")

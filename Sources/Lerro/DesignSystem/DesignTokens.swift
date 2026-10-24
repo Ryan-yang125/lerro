@@ -167,6 +167,8 @@ enum LerroTheme {
 
     static let hubMinimumSize = CGSize(width: 988, height: 658)
     static let sidebarWidth: CGFloat = 220
+    /// Height of the page header row, level with the traffic lights.
+    static let pageHeaderHeight: CGFloat = 52
     static let contentHorizontalPadding: CGFloat = 28
     static let hudPanelSize = CGSize(width: 560, height: 120)
     static let hudContentBottomInset: CGFloat = 18

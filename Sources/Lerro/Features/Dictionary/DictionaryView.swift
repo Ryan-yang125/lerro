@@ -73,56 +73,54 @@ struct DictionaryView: View {
 
     var body: some View {
         let entries = displayedEntries
-        Group {
-            if entries.isEmpty {
-                LerroEmptyState(
-                    title: session.dictionarySearch.isEmpty ? "建立你的个人词典" : "没有匹配词语",
-                    hint: session.dictionarySearch.isEmpty
-                        ? "添加姓名、品牌、缩写与专业术语，让每次听写更准确。"
-                        : "尝试新的关键词，或清空当前搜索。"
-                )
-            } else {
-                list(entries)
+        LerroSplitLayout(axis: .vertical, firstLength: LerroTheme.pageHeaderHeight) {
+            LerroPageHeader(localized("词典")) {
+                HStack(spacing: 8) {
+                    Picker("词条来源", selection: $scope) {
+                        ForEach(DictionaryScope.allCases) { item in
+                            Text(verbatim: "\(localized(item.rawValue)) \(count(of: item))").tag(item)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    LerroSearchField(text: $session.dictionarySearch, prompt: "搜索词典")
+                        .lerroPageTextInput(.dictionary, in: session)
+                    Menu {
+                        Button("导入 CSV…") { Task { await importCSV() } }
+                        Button("导出 CSV…") { exportCSV() }
+                            .disabled(session.dictionaryEntries.isEmpty)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .accessibilityLabel(Text("更多"))
+                    }
+                    .menuIndicator(.hidden)
+                    .help("更多")
+                    Button {
+                        editorTarget = .new
+                    } label: {
+                        Label("新建", systemImage: "plus")
+                    }
+                    .buttonStyle(LerroButtonStyle(.primary))
+                }
+            }
+            Group {
+                if entries.isEmpty {
+                    LerroEmptyState(
+                        title: session.dictionarySearch.isEmpty ? "建立你的个人词典" : "没有匹配词语",
+                        hint: session.dictionarySearch.isEmpty
+                            ? "添加姓名、品牌、缩写与专业术语，让每次听写更准确。"
+                            : "尝试新的关键词，或清空当前搜索。"
+                    )
+                } else {
+                    list(entries)
+                        .lerroPageFocusable(.dictionary, in: session)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(LerroTheme.main)
-        .navigationTitle(Text(verbatim: localized("词典")))
-        .searchable(text: $session.dictionarySearch, prompt: Text("搜索词典"))
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Picker("词条来源", selection: $scope) {
-                    ForEach(DictionaryScope.allCases) { item in
-                        Text(verbatim: "\(localized(item.rawValue)) \(count(of: item))").tag(item)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
-            ToolbarItem {
-                Menu {
-                    Button("导入 CSV…") { Task { await importCSV() } }
-                    Button("导出 CSV…") { exportCSV() }
-                        .disabled(session.dictionaryEntries.isEmpty)
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .accessibilityLabel(Text("更多"))
-                }
-                .menuIndicator(.hidden)
-                .help("更多")
-            }
-            ToolbarItem {
-                Button {
-                    editorTarget = .new
-                } label: {
-                    Label("新建", systemImage: "plus")
-                }
-                .buttonStyle(LerroButtonStyle(.primary))
-            }
-            .sharedBackgroundVisibility(.hidden)
-        }
-        .task {
-            session.refreshAvailableApplications()
+        .onLerroPageVisibilityChange(.dictionary, in: session) { visible in
+            if visible { session.refreshAvailableApplications() }
         }
         .onChange(of: session.dictionaryEntries) { _, entries in
             selection.formIntersection(Set(entries.map(\.id)))
@@ -169,6 +167,7 @@ struct DictionaryView: View {
             }
         }
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
         .alternatingRowBackgrounds(.disabled)
         .contextMenu(forSelectionType: DictionaryEntry.ID.self) { ids in
             let targets = selectedEntries(for: ids)

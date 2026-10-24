@@ -66,7 +66,7 @@ struct HomeStatCards: View {
     var body: some View {
         let total = statistics.total
         let today = statistics.today
-        HStack(alignment: .top, spacing: 12) {
+        LerroEqualColumns(spacing: 12) {
             HomeStatCard(
                 parts: HomeFormat.duration(total.savedSeconds, locale: locale),
                 title: "比打字省下",
@@ -104,7 +104,6 @@ struct HomeStatCards: View {
                     : nil
             )
         }
-        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func todayLine(_ value: String) -> String {

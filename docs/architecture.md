@@ -47,7 +47,7 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 任意未提交阶段 -> cancelled -> idle        任意错误出口 -> failed
 ```
 
-主路径：快捷键开始，居中实时预览，同一快捷键结束，严格写入，HUD 在 commit point 淡出。
+主路径：快捷键开始，居中实时预览，同一快捷键结束，严格写入，HUD 在 commit point 淡出，session 同时回到 `idle`。
 
 1. **启动**：忽略设置或 onboarding 录制快捷键期间的触发；`transcribing`、`enhancing`、`inserting`
    阶段忽略重复开始或停止。检查麦克风、辅助功能和安全输入框；冻结目标应用、输入元素、完整文本值、
@@ -61,8 +61,8 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
    `remote` 模式下 Dictate 由 `PipelineIntelligenceService` 整理，Translate 翻译。Dictate 的模型失败回退原始 transcript，
    Translate 保持明确失败。DeepSeek 返回余额不足（HTTP 402）时，Dictate 回退原文，HUD 显示「DeepSeek 余额用完了，这次写的是原文」，
    Translate 以「DeepSeek 余额用完了」失败。
-5. **交付**：见下节。成功后保存历史（`historyRetention == .never` 时跳过），更新用量和词典使用次数，累计 AI 标出的专有名词，启动词典学习观察，
-   清空 session，回到 `idle`。
+5. **交付**：见下节。交付返回后启动词典学习观察，清空 session，回到 `idle`。随后在后台按提交顺序串行保存历史
+   （`historyRetention == .never` 时跳过），更新用量和词典使用次数，累计 AI 标出的专有名词；这些保存出错时使用 app 级提示。
 6. **取消**：取消信号贯穿启动、Speech、模型任务和 Command-V 提交前检查。统一清理：停止音频、释放 Core Audio
    静音快照并恢复输出音频、取消各类任务、删除未持久化录音、重置热键临时状态。
 
@@ -98,8 +98,9 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 1. `AccessibilityTextDeliverer` 在写入前确认 secure input 关闭，前台应用、focused element、role/subrole、完整 AX value
    与选区仍与 capture 时的指纹一致。任一漂移都停止写入。
 2. 事务保存剪贴板全部 item/type，写入 session marker、transient type 和最终文本，发布 Command-V down/up。
-   两个事件发布完成是 commit point；commit 前仍可取消，commit 后完成等待和恢复并忽略取消。
-3. 500 ms 后，session 仍拥有临时内容时恢复剪贴板快照；其他应用已写入新内容时保留新内容。
+   两个事件发布完成是 commit point；commit 前仍可取消，commit 后交付立即返回并忽略取消。
+3. commit 后在后台等待固定 500 ms，session 仍拥有临时内容时恢复剪贴板快照；其他应用已写入新内容时保留新内容。
+   下一次交付先等待上一次恢复结束，再保存剪贴板快照。
 4. 失败时 `PasteboardRecoveryTextCopier` 把最终文本留在剪贴板，历史保存 failed 记录和最终文本，HUD 显示含「再次复制」
    与「关闭」的恢复卡。
 
@@ -192,7 +193,7 @@ idle -> listening -> transcribing -> enhancing -> inserting -> success -> idle
 
 ## UI
 
-- 主窗口为 `NavigationSplitView`，侧栏为首页、历史、词典、应用语气；设置位于 `Settings` 场景（⌘,），标签为通用、听写、AI 整理、
+- 主窗口为隐藏标题栏的窗口，左侧是 220 pt 固定侧栏（首页、历史、词典、应用语气），每页顶部是 `LerroPageHeader`（[ADR 0017](decisions/0017-fixed-sidebar.md)）；设置位于 `Settings` 场景（⌘,），标签为通用、听写、AI 整理、
   隐私、关于；用量明细是 AI 整理页里的二级页面（`aiSettingsShowsUsage`）。`AppSession.openSettings(_:)` 选中标签并打开设置窗口。菜单栏面板单独呈现。决策见 [ADR 0014](decisions/0014-main-window-rebuild.md)。
 - HUD 是 40 pt 高的墨黑玻璃胶囊，宽度最大 480 pt，所有状态在同一胶囊内形变，由
   [`AppSession.currentHUDVisualState`](../Sources/Lerro/App/AppSession.swift) 与
