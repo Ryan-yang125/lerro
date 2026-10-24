@@ -61,10 +61,10 @@ bfd6f788e87b05392c7a6c831efcc954991f53075d6649416398fe4795423f33  ./exports/menu
 efd85a1e9556e889fcca5a0ff9ea04fcc51770b49a35430f00fd093025d4d60a  ./exports/menu-bar/lerro-menubar-processing-4.pdf
 c29a8f0a269bc953154c466b9502b04274ff0896ed881e376042579b626d8063  ./exports/menu-bar/lerro-menubar-processing-4.svg
 ba46c7f525bab77c73183048462f2e69e66730fa3440ffc2bde1a891cc0c37a5  ./exports/social/github-social-preview.png
-8116e11d6334a4a46aa79a2b2aab58ffd6026d7638040004433848a96798267e  ./guidelines/brand-guidelines.md
+fd107eabf9ad4675c3ac5b97dada281a8f1bcad2723eafb9e127a6dc47113d4f  ./guidelines/brand-guidelines.md
 85ed927d1b7123412846a8adf206414d9d05150ad43773b02ad00a28743158b9  ./guidelines/color-accessibility.md
 2f162069820d382932fb0d7ff6d10b01837841acf397630f8767e2110a8c4242  ./guidelines/logo-usage.md
-d45ef5f8203aa0487898eb329823a4f73a556c6b55a1cf018a6b652706c6da12  ./guidelines/motion.md
+56849ec62d37795124909cfdd210025dbc9e16f44bf5e352510b4a0eca4a4a57  ./guidelines/motion.md
 f6e04e7c09855fe957e9998499bf962d3dc02e25dd4990222819de23f502d786  ./guidelines/voice-and-copy.md
 e24e9e788f8ea3e53a05e2c37e753236a049824fcf518edf24463c9077fa2cce  ./licenses/ASSET-LICENSES.json
 262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a  ./licenses/Inter-OFL.txt
