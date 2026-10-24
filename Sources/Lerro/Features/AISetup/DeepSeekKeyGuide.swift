@@ -44,7 +44,7 @@ struct DeepSeekKeyGuide: View {
             stepRow(
                 number: 1,
                 title: "登录 DeepSeek 开放平台",
-                detail: "手机号就能注册",
+                detail: "支持手机号注册",
                 action: "打开网站",
                 url: DeepSeekLinks.platform
             )
@@ -52,16 +52,16 @@ struct DeepSeekKeyGuide: View {
             stepRow(
                 number: 2,
                 title: "充值 10 元",
-                detail: "每天说一百多次，一个月 2 块钱左右",
-                action: "去充值",
+                detail: "每天说一百多次，每月约 2 元",
+                action: "充值",
                 url: DeepSeekLinks.topUp
             )
             Divider()
             stepRow(
                 number: 3,
-                title: "创建 API Key，复制后粘贴到下面",
-                detail: "Key 只在创建时显示一次",
-                action: "去创建",
+                title: "创建 API Key，复制后粘贴到下方",
+                detail: "API Key 只在创建时显示一次",
+                action: "创建",
                 url: DeepSeekLinks.apiKeys,
                 done: state == .connected
             )
@@ -98,7 +98,7 @@ struct DeepSeekKeyGuide: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("三步拿到 DeepSeek Key")
+            Text("三步获取 DeepSeek API Key")
                 .font(LerroFont.bodyEmphasis)
                 .foregroundStyle(LerroTheme.text)
                 .accessibilityAddTraits(.isHeader)
@@ -220,16 +220,16 @@ struct DeepSeekKeyGuide: View {
         case .noBalance:
             statusRow(color: LerroTheme.warning, background: LerroTheme.warning.opacity(0.14)) {
                 Image(systemName: "exclamationmark.circle")
-                Text("Key 没问题，账户里还没有余额")
+                Text("API Key 有效，但账户还没有余额")
                 Spacer()
-                Button("去充值") { session.openURL(DeepSeekLinks.topUp) }
+                Button("充值") { session.openURL(DeepSeekLinks.topUp) }
                     .buttonStyle(.plain)
                     .foregroundStyle(LerroTheme.accentText)
             }
         case .invalidKey:
             statusRow(color: LerroTheme.danger, background: LerroTheme.danger.opacity(0.10)) {
                 Image(systemName: "exclamationmark.circle")
-                Text("这个 Key 用不了，检查一下是不是复制完整了")
+                Text("这个 API Key 无效，请检查是否复制完整")
             }
         case .failed(let message):
             statusRow(color: LerroTheme.danger, background: LerroTheme.danger.opacity(0.10)) {

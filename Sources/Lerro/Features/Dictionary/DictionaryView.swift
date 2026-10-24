@@ -5,8 +5,8 @@ import LerroCore
 
 private enum DictionaryScope: String, CaseIterable, Identifiable {
     case all = "全部"
-    case learned = "Lerro 学会的"
-    case manual = "你加的"
+    case learned = "自动记住"
+    case manual = "手动添加"
     var id: Self { self }
 
     func includes(_ entry: DictionaryEntry) -> Bool {
@@ -26,9 +26,9 @@ private enum DictionaryGroup: CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .recent: "本周新学会"
-        case .learned: "Lerro 学会的"
-        case .manual: "你加的"
+        case .recent: "本周新增"
+        case .learned: "自动记住"
+        case .manual: "手动添加"
         }
     }
 }
@@ -76,7 +76,7 @@ struct DictionaryView: View {
         Group {
             if entries.isEmpty {
                 LerroEmptyState(
-                    title: session.dictionarySearch.isEmpty ? "建立您的个人词典" : "没有匹配词语",
+                    title: session.dictionarySearch.isEmpty ? "建立你的个人词典" : "没有匹配词语",
                     hint: session.dictionarySearch.isEmpty
                         ? "添加姓名、品牌、缩写与专业术语，让每次听写更准确。"
                         : "尝试新的关键词，或清空当前搜索。"
@@ -200,7 +200,7 @@ struct DictionaryView: View {
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if showsLimitNote {
-                Text("发给 AI 的是用得最多的 40 个")
+                Text("只有最常用的 40 个词条会发给 AI")
                     .font(LerroFont.footnote)
                     .foregroundStyle(LerroTheme.metadataText)
             }
@@ -267,7 +267,7 @@ struct DictionaryView: View {
                 .lineLimit(1)
             } else if entry.phrase != entry.replacement {
                 Text(verbatim: LerroInterfaceLocalization.format(
-                    "你把「%@」改成了它",
+                    "由「%@」改正而来",
                     locale: locale,
                     arguments: entry.phrase
                 ))
@@ -350,7 +350,7 @@ struct DictionaryView: View {
     private var deletionTitle: String {
         pendingDeletion.count > 1
             ? LerroInterfaceLocalization.format("删除 %lld 个词条？", locale: locale, arguments: pendingDeletion.count)
-            : localized("删除这个词语？")
+            : localized("删除这个词条？")
     }
 
     // MARK: CSV

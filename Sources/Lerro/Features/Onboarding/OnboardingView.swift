@@ -15,7 +15,7 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
         case .welcome: "欢迎和权限"
         case .practice: "试一次"
         case .ai: "AI 整理"
-        case .start: "开始用"
+        case .start: "开始使用"
         }
     }
 }
@@ -286,7 +286,7 @@ struct OnboardingView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(LerroTheme.success)
             } else {
-                Button(LocalizedStringKey(permission == .microphone ? "允许" : "去打开")) {
+                Button(LocalizedStringKey(permission == .microphone ? "允许" : "打开")) {
                     request(permission)
                 }
                 .buttonStyle(LerroButtonStyle(.primary, compact: true))
@@ -314,7 +314,7 @@ struct OnboardingView: View {
                     .foregroundStyle(LerroTheme.warning)
                     .accessibilityHidden(true)
                 Text(verbatim: status.message.isEmpty
-                    ? localized("语音识别暂不可用")
+                    ? localized("语音识别暂不可用，请稍后重试")
                     : localized(status.message))
                 if status.state == .failed {
                     Button("重试") { session.prepareSpeechResources() }
@@ -368,7 +368,7 @@ struct OnboardingView: View {
                 .fixedSize()
                 .disabled(isCaptureBusy)
                 Spacer()
-                Button("换个快捷键") {
+                Button("更改快捷键") {
                     session.settingsTab = .dictation
                     openSettings()
                 }
@@ -454,7 +454,7 @@ struct OnboardingView: View {
 
     private var aiContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            heading("要不要开 AI 整理", lead: Text("AI 会去掉口头禅、改正听错的词、补好标点。"))
+            heading("要开启 AI 整理吗？", lead: Text("AI 会去掉口头禅、改正听错的词、补好标点。"))
 
             beforeAfter
 
@@ -468,7 +468,7 @@ struct OnboardingView: View {
                 DeepSeekKeyGuide(session: session, showsCostHint: false)
                     .padding(.top, 14)
             } else {
-                Text("之后想开，首页和设置里都能找到。")
+                Text("之后也可以在首页或设置中开启。")
                     .font(.system(size: 13))
                     .foregroundStyle(LerroTheme.secondaryText)
                     .padding(.horizontal, 16)
@@ -592,7 +592,7 @@ struct OnboardingView: View {
                 )
                 Divider()
                 shortcutRow(
-                    title: "粘贴上一次",
+                    title: "粘贴上次结果",
                     shortcut: hotkey(.pasteLastResult),
                     detail: "字没写进去时，用它再贴一次"
                 )
@@ -780,7 +780,7 @@ struct OnboardingView: View {
     private var primaryActionTitle: String {
         switch step {
         case .welcome, .practice: "继续"
-        case .ai: aiChoice == .raw || session.aiStatus == .ready ? "继续" : "先跳过"
+        case .ai: aiChoice == .raw || session.aiStatus == .ready ? "继续" : "稍后设置"
         case .start: "打开 Lerro"
         }
     }
@@ -814,8 +814,8 @@ struct OnboardingView: View {
 
     private var welcomeLead: String {
         let key = session.preferredDictationActivation == .hold
-            ? "按住 %@ 说话，松开后字就写到光标处。先打开两个权限。"
-            : "按一下 %@ 说话，再按一下，字就写到光标处。先打开两个权限。"
+            ? "按住 %@ 说话，松开后文字写到光标处。请先允许两项权限。"
+            : "按一下 %@ 开始说话，再按一下，文字写到光标处。请先允许两项权限。"
         return LerroInterfaceLocalization.format(key, locale: locale, arguments: dictationShortcutName)
     }
 

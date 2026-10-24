@@ -20,7 +20,7 @@ struct HomeHeaderView: View {
                 }
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-                Text("累计口述字数")
+                Text("累计听写字数")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(LerroTheme.metadataText)
             }
@@ -87,7 +87,7 @@ struct HomeStatCards: View {
             )
             HomeStatCard(
                 parts: HomeFormat.duration(total.totalDuration, locale: locale),
-                title: "口述时长",
+                title: "听写时长",
                 today: today.totalDuration > 0
                     ? todayLine("+" + HomeFormat.minutes(today.totalDuration, locale: locale))
                     : nil

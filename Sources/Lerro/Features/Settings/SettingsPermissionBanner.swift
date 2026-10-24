@@ -16,16 +16,16 @@ struct SettingsPermissionBanner: View {
 
         var message: String {
             switch self {
-            case .microphone: "麦克风权限被关掉了，听不到你说话"
-            case .accessibility: "辅助功能权限被关掉了，字写不进其他 App"
-            case .speechFailed: "语音资源没准备好"
+            case .microphone: "麦克风权限已关闭，Lerro 听不到你说话"
+            case .accessibility: "辅助功能权限已关闭，文字无法写入其他 App"
+            case .speechFailed: "语音资源尚未就绪"
             case .speechUnsupported: "这台 Mac 不支持当前的听写语言"
             }
         }
 
         var actionTitle: String? {
             switch self {
-            case .microphone, .accessibility: "去打开"
+            case .microphone, .accessibility: "打开"
             case .speechFailed: "重试"
             case .speechUnsupported: nil
             }

@@ -26,7 +26,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
 
         if request.mode == .raw {
             guard request.task == .polish else {
-                throw LerroError.modelUnavailable("翻译需要启用 AI")
+                throw LerroError.modelUnavailable("翻译需要开启 AI 整理")
             }
             return IntelligenceResult(
                 text: rawTranscript,
@@ -37,7 +37,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
 
         let invocation = try invocation(for: request)
         guard let remoteRuntime else {
-            throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
+            throw LerroError.remoteUnavailable("AI 整理尚未设置，请在设置中填入 API Key")
         }
         let timed = try await recordingUsage(
             feature: request.usageFeature,
@@ -104,10 +104,10 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
 
         let prompts = try dictionaryLearningComposer.prompts(for: request)
         guard let configuration = request.remoteProvider else {
-            throw LerroError.remoteUnavailable("远程模型配置缺失")
+            throw LerroError.remoteUnavailable("AI 整理设置不完整，请在设置中检查")
         }
         guard let remoteRuntime else {
-            throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
+            throw LerroError.remoteUnavailable("AI 整理尚未设置，请在设置中填入 API Key")
         }
         let generated = try await recordingUsage(
             feature: .dictionaryLearning,
@@ -136,7 +136,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         configuration: RemoteProviderConfiguration
     ) async throws -> RemoteConnectionTestOutcome {
         guard let remoteRuntime else {
-            throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
+            throw LerroError.remoteUnavailable("AI 整理尚未设置，请在设置中填入 API Key")
         }
         return try await recordingUsage(
             feature: .connectionTest,
@@ -153,7 +153,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         configuration: RemoteProviderConfiguration
     ) async throws -> DeepSeekBalance {
         guard let remoteRuntime else {
-            throw LerroError.remoteUnavailable("远程模型运行时尚未配置")
+            throw LerroError.remoteUnavailable("AI 整理尚未设置，请在设置中填入 API Key")
         }
         return try await remoteRuntime.balance(configuration: configuration)
     }
@@ -201,7 +201,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
 
     private func invocation(for request: IntelligenceRequest) throws -> Invocation {
         guard let configuration = request.remoteProvider else {
-            throw LerroError.remoteUnavailable("远程模型配置缺失")
+            throw LerroError.remoteUnavailable("AI 整理设置不完整，请在设置中检查")
         }
         let prompts = try cloudComposer.prompts(for: request)
         return Invocation(
@@ -224,7 +224,7 @@ public actor PipelineIntelligenceService: IntelligenceProcessing {
         if case .polish = task {
             return fallbackTranscript
         }
-        throw LerroError.remoteUnavailable("远程模型没有生成有效内容")
+        throw LerroError.remoteUnavailable("AI 没有返回有效内容")
     }
 
     private nonisolated static func sanitize(_ generated: String, fallback: String) -> String {

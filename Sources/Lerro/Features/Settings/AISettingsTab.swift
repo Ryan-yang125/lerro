@@ -146,7 +146,7 @@ struct AISettingsTab: View {
             }
         case .failed:
             HStack(spacing: 8) {
-                Text("读不到")
+                Text("读取失败")
                     .foregroundStyle(LerroTheme.secondaryText)
                 Button("重试") {
                     Task { await session.refreshDeepSeekBalance(force: true) }

@@ -82,9 +82,9 @@ struct DictationSettingsTab: View {
                 )
             }
 
-            LabeledContent("按法") {
-                Picker("按法", selection: dictationActivation) {
-                    Text("按一下开关").tag(ShortcutActivation.toggle)
+            LabeledContent("触发方式") {
+                Picker("触发方式", selection: dictationActivation) {
+                    Text("按一下开始或结束").tag(ShortcutActivation.toggle)
                     Text("按住说话").tag(ShortcutActivation.hold)
                 }
                 .pickerStyle(.segmented)
@@ -103,7 +103,7 @@ struct DictationSettingsTab: View {
         } header: {
             Text("听写")
         } footer: {
-            Button("再加一个快捷键") {
+            Button("添加快捷键") {
                 presentShortcutRecorder(for: .dictate, existing: nil)
             }
             .buttonStyle(.plain)
@@ -167,7 +167,7 @@ struct DictationSettingsTab: View {
         let definition = shortcuts(.pasteLastResult).first
         let configurationUnavailable = !session.shortcutConfigurationAvailable
 
-        return LabeledContent("粘贴上一次结果") {
+        return LabeledContent("粘贴上次结果") {
             HStack(spacing: 8) {
                 if let definition {
                     LerroShortcutKeys(displayName: definition.displayName)
@@ -181,7 +181,7 @@ struct DictationSettingsTab: View {
                 .buttonStyle(LerroButtonStyle(.secondary))
                 .disabled(configurationUnavailable)
                 .help(Text(verbatim: configurationUnavailable
-                    ? LerroInterfaceLocalization.string("完成当前语音输入后可以修改快捷键", locale: locale)
+                    ? LerroInterfaceLocalization.string("请在语音输入结束后再修改快捷键", locale: locale)
                     : LerroInterfaceLocalization.string("更改", locale: locale)))
             }
         }
@@ -240,7 +240,7 @@ struct DictationSettingsTab: View {
                 .buttonStyle(LerroButtonStyle(.secondary))
                 .disabled(configurationUnavailable)
                 .help(Text(verbatim: configurationUnavailable
-                    ? LerroInterfaceLocalization.string("完成当前语音输入后可以修改快捷键", locale: locale)
+                    ? LerroInterfaceLocalization.string("请在语音输入结束后再修改快捷键", locale: locale)
                     : LerroInterfaceLocalization.format("编辑 %@", locale: locale, arguments: definition.displayName)))
                 .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
                     "编辑%@快捷键 %@",
@@ -255,7 +255,7 @@ struct DictationSettingsTab: View {
                     .buttonStyle(LerroButtonStyle(.destructive))
                     .disabled(configurationUnavailable)
                     .help(Text(verbatim: configurationUnavailable
-                        ? LerroInterfaceLocalization.string("完成当前语音输入后可以修改快捷键", locale: locale)
+                        ? LerroInterfaceLocalization.string("请在语音输入结束后再修改快捷键", locale: locale)
                         : LerroInterfaceLocalization.format("删除 %@", locale: locale, arguments: definition.displayName)))
                     .accessibilityLabel(Text(verbatim: LerroInterfaceLocalization.format(
                         "删除%@快捷键 %@",
@@ -278,9 +278,9 @@ struct DictationSettingsTab: View {
     }
 
     private func addShortcutHelp(unavailable: Bool, reachedLimit: Bool) -> String {
-        if unavailable { return LerroInterfaceLocalization.string("完成当前语音输入后可以修改快捷键", locale: locale) }
+        if unavailable { return LerroInterfaceLocalization.string("请在语音输入结束后再修改快捷键", locale: locale) }
         if reachedLimit { return LerroInterfaceLocalization.string("每项功能最多设置四个快捷键", locale: locale) }
-        return LerroInterfaceLocalization.string("再加一个快捷键", locale: locale)
+        return LerroInterfaceLocalization.string("添加快捷键", locale: locale)
     }
 
     private var shortcutRecorderPresented: Binding<Bool> {
@@ -386,7 +386,7 @@ struct ShortcutCaptureSheet: View {
             } else {
                 ProgressView("正在准备按键检测…")
                     .frame(maxWidth: .infinity, minHeight: 200)
-                    .accessibilityHint("正在暂停生产快捷键并准备录制")
+                    .accessibilityHint("正在暂停当前快捷键并准备录制")
             }
 
             if !validationMessage.isEmpty {

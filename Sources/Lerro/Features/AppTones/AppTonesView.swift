@@ -478,10 +478,10 @@ private struct AppToneEditor: View {
                 .disabled(isPreviewing || trimmedDraft.isEmpty || trimmedSample.isEmpty)
             } else {
                 HStack(spacing: 10) {
-                    Text("需要先开启 AI")
+                    Text("需要先开启 AI 整理")
                         .font(LerroFont.body)
                         .foregroundStyle(LerroTheme.secondaryText)
-                    Button("启用 AI") {
+                    Button("开启 AI 整理") {
                         session.settingsTab = .ai
                         openSettings()
                     }

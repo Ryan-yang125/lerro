@@ -105,7 +105,7 @@ struct SidebarView: View {
                 title: localized("余额"),
                 detail: " " + balanceAmount(loadedBalance),
                 fill: LerroTheme.warning.opacity(0.14),
-                trailingLink: localized("去充值")
+                trailingLink: localized("充值")
             ) {
                 session.openURL(DeepSeekLinks.topUp)
             }

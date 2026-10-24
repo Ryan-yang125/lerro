@@ -97,8 +97,8 @@ enum CaptureHUDAnnouncement {
             case .translation: "正在翻译"
             }
         case .deliveredRawFallback: "AI 未响应，已写入原文"
-        case .error: errorMessage ?? "听写失败，可以重试"
-        case .recovery: "写入失败，内容已复制到剪贴板"
+        case .error: errorMessage ?? "听写失败，请重试"
+        case .recovery: "写入失败，已复制到剪贴板"
         case .dictionaryLearned: "已将修正加入词典"
         case .idleHidden where phase == .cancelled: "听写已取消"
         case .idleHidden where previous == .processing: "已写入"

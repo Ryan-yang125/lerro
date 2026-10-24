@@ -35,7 +35,7 @@ public actor AccessibilityTextDeliverer: TextDelivering {
         onCommit: @escaping TextDeliveryCommitHandler
     ) async throws -> TextDeliveryReceipt {
         guard activeTransactionIdentifier == nil else {
-            throw LerroError.insertionFailed("另一项文本写入仍在进行")
+            throw LerroError.insertionFailed("正在写入上一段文字，请稍候")
         }
         let transactionIdentifier = UUID()
         activeTransactionIdentifier = transactionIdentifier
@@ -287,32 +287,32 @@ private func validateExpectedFocus(
     case .secure:
         throw LerroError.secureField
     case .unavailable:
-        throw LerroError.insertionFailed("无法确认当前输入框的安全状态")
+        throw LerroError.insertionFailed("无法确认当前输入框是否为密码等安全输入框")
     }
 
     var hasExpectedIdentity = false
     if let expectedPID = context.processIdentifier {
         hasExpectedIdentity = true
         guard snapshot.processIdentifier == expectedPID else {
-            throw LerroError.insertionFailed("焦点已切换到其他应用，结果已保留在历史记录中")
+            throw LerroError.insertionFailed("已切换到其他 App，结果已保留在历史记录中")
         }
     }
     if let expectedBundle = context.bundleIdentifier {
         hasExpectedIdentity = true
         guard snapshot.bundleIdentifier == expectedBundle else {
-            throw LerroError.insertionFailed("焦点已切换到其他应用，结果已保留在历史记录中")
+            throw LerroError.insertionFailed("已切换到其他 App，结果已保留在历史记录中")
         }
     }
     guard hasExpectedIdentity else {
-        throw LerroError.insertionFailed("捕获上下文缺少输入应用身份")
+        throw LerroError.insertionFailed("开始录音时没有识别到当前 App")
     }
     if context.focusedElementAvailable {
         guard snapshot.focusedElementAvailable else {
-            throw LerroError.insertionFailed("无法确认当前输入框的焦点状态")
+            throw LerroError.insertionFailed("无法确认光标是否还在输入框中")
         }
         guard let expectedElement = context.focusedElementFingerprint,
               snapshot.focusedElementFingerprint == expectedElement else {
-            throw LerroError.insertionFailed("当前输入框已变化，结果已保留在历史记录中")
+            throw LerroError.insertionFailed("输入框已变化，结果已保留在历史记录中")
         }
         if let expectedValue = context.focusedValueFingerprint {
             guard snapshot.focusedValueFingerprint == expectedValue else {
@@ -339,7 +339,7 @@ private func resolveDeliveryTarget(
     context: CapturedContext
 ) throws -> ResolvedDeliveryTarget {
     guard let processIdentifier = snapshot.processIdentifier else {
-        throw LerroError.insertionFailed("无法确认当前输入应用的进程身份")
+        throw LerroError.insertionFailed("无法识别当前 App")
     }
     return ResolvedDeliveryTarget(
         processIdentifier: processIdentifier,
@@ -355,10 +355,10 @@ private func validatedFocusedElement(
         from: systemWide,
         attribute: kAXFocusedApplicationAttribute as CFString
     ) else {
-        throw LerroError.insertionFailed("无法确认当前输入应用")
+        throw LerroError.insertionFailed("无法确认当前 App")
     }
     guard axApplication(focusedApplication, matches: context) else {
-        throw LerroError.insertionFailed("焦点已切换到其他应用，结果已保留在历史记录中")
+        throw LerroError.insertionFailed("已切换到其他 App，结果已保留在历史记录中")
     }
     guard !IsSecureEventInputEnabled() else {
         throw LerroError.secureField
@@ -367,7 +367,7 @@ private func validatedFocusedElement(
         from: focusedApplication,
         attribute: kAXFocusedUIElementAttribute as CFString
     ) else {
-        throw LerroError.insertionFailed("无法确认当前输入框的焦点状态")
+        throw LerroError.insertionFailed("无法确认光标是否还在输入框中")
     }
     guard !axElementIsSecure(focusedElement) else {
         throw LerroError.secureField
@@ -524,7 +524,7 @@ func makeLerroPasteKeyEvents(
         virtualKey: keyCode,
         keyDown: false
     ) else {
-        throw LerroError.insertionFailed("无法生成粘贴事件")
+        throw LerroError.insertionFailed("无法模拟粘贴操作")
     }
     keyDown.flags = .maskCommand
     keyUp.flags = .maskCommand
@@ -551,7 +551,7 @@ private func submitPasteEvent(
         throw LerroError.permissionRequired("辅助功能")
     }
     guard targetIsFrontmostAndRunning(target) else {
-        throw LerroError.insertionFailed("焦点已切换到其他应用，结果已保留在历史记录中")
+        throw LerroError.insertionFailed("已切换到其他 App，结果已保留在历史记录中")
     }
     guard !IsSecureEventInputEnabled() else {
         throw LerroError.secureField
@@ -564,20 +564,20 @@ private func submitPasteEvent(
     let (keyDown, keyUp) = try makeLerroPasteKeyEvents()
     try Task.checkCancellation()
     guard targetIsFrontmostAndRunning(target) else {
-        throw LerroError.insertionFailed("焦点已切换到其他应用，结果已保留在历史记录中")
+        throw LerroError.insertionFailed("已切换到其他 App，结果已保留在历史记录中")
     }
     guard !IsSecureEventInputEnabled() else {
         throw LerroError.secureField
     }
     guard transaction.isOwned() else {
-        throw LerroError.insertionFailed("临时剪贴板已被其他应用更新")
+        throw LerroError.insertionFailed("剪贴板被其他 App 改动了")
     }
     try Task.checkCancellation()
     guard CGPreflightPostEventAccess() else {
         throw LerroError.permissionRequired("辅助功能")
     }
     guard targetIsFrontmostAndRunning(target) else {
-        throw LerroError.insertionFailed("焦点已切换到其他应用，结果已保留在历史记录中")
+        throw LerroError.insertionFailed("已切换到其他 App，结果已保留在历史记录中")
     }
     guard !IsSecureEventInputEnabled() else {
         throw LerroError.secureField
@@ -586,11 +586,11 @@ private func submitPasteEvent(
     if let focusedElement {
         let currentFocusedElement = try validatedFocusedElement(context: context)
         guard CFEqual(currentFocusedElement, focusedElement) else {
-            throw LerroError.insertionFailed("当前输入框已变化，结果已保留在历史记录中")
+            throw LerroError.insertionFailed("输入框已变化，结果已保留在历史记录中")
         }
     }
     guard transaction.isOwned() else {
-        throw LerroError.insertionFailed("临时剪贴板已被其他应用更新")
+        throw LerroError.insertionFailed("剪贴板被其他 App 改动了")
     }
     keyDown.post(tap: .cghidEventTap)
     keyUp.post(tap: .cghidEventTap)
@@ -699,7 +699,7 @@ struct PasteboardSnapshot: Sendable {
 
     static func capture(from pasteboard: NSPasteboard) throws -> PasteboardSnapshot {
         guard let pasteboardItems = pasteboard.pasteboardItems else {
-            throw LerroError.insertionFailed("无法读取当前剪贴板内容")
+            throw LerroError.insertionFailed("无法读取剪贴板内容")
         }
         var capturedItems: [Item] = []
         capturedItems.reserveCapacity(pasteboardItems.count)
@@ -728,7 +728,7 @@ struct PasteboardSnapshot: Sendable {
                     representation.data,
                     forType: NSPasteboard.PasteboardType(representation.rawType)
                 ) else {
-                    throw LerroError.insertionFailed("无法重建原剪贴板项目")
+                    throw LerroError.insertionFailed("无法恢复原来的剪贴板内容")
                 }
             }
             return item
@@ -798,7 +798,7 @@ struct PasteboardSnapshot: Sendable {
     }
 
     private func restorationFailure() -> LerroError {
-        LerroError.insertionFailed("文本可能已写入，但原剪贴板内容恢复失败")
+        LerroError.insertionFailed("文字可能已写入，但无法恢复原来的剪贴板内容")
     }
 }
 

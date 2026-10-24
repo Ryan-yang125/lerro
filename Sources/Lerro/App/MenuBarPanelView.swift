@@ -330,7 +330,7 @@ struct MenuBarPanelView: View {
         VStack(spacing: 0) {
             pickerRow(systemImage: "mic", title: "麦克风") {
                 Picker(selection: microphoneSelection) {
-                    Text(verbatim: localized("跟随系统默认")).tag(String?.none)
+                    Text(verbatim: localized("跟随系统")).tag(String?.none)
                     ForEach(session.audioInputDevices) { device in
                         Text(verbatim: device.name).tag(String?.some(device.uid))
                     }

@@ -280,7 +280,7 @@ struct UserPreferencesTests {
 
     @Test("The insufficient balance error names DeepSeek")
     func describesInsufficientBalance() {
-        #expect(LerroError.insufficientBalance.errorDescription == "DeepSeek 余额用完了")
+        #expect(LerroError.insufficientBalance.errorDescription == "DeepSeek 余额已用完，请充值后再用")
     }
 
     @Test("Secure field errors explain the privacy boundary")

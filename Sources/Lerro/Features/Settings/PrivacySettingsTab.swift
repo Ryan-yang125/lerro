@@ -30,7 +30,7 @@ struct PrivacySettingsTab: View {
                     HStack(spacing: 8) {
                         Text("这台 Mac")
                             .foregroundStyle(LerroTheme.secondaryText)
-                        Button("在 Finder 中显示", action: revealDataDirectory)
+                        Button("在访达中显示", action: revealDataDirectory)
                             .buttonStyle(LerroButtonStyle(.secondary))
                             .disabled(dataDirectory == nil)
                     }

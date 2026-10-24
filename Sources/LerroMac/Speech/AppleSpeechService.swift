@@ -346,7 +346,7 @@ public actor AppleSpeechService: SpeechTranscribing {
             compatibleWith: modules,
             considering: naturalFormat
         ) else {
-            throw LerroError.speechUnavailable("无法协商音频格式")
+            throw LerroError.speechUnavailable("麦克风的音频格式不受支持")
         }
         try requireCurrent(generation)
         milestones(.audioFormatNegotiated, .now)
@@ -416,7 +416,7 @@ public actor AppleSpeechService: SpeechTranscribing {
 
         if let converter {
             guard let tailBuffers = converter.drainTail() else {
-                throw LerroError.speechUnavailable("无法完成音频尾部格式转换")
+                throw LerroError.speechUnavailable("音频处理失败，请重试")
             }
             for tail in tailBuffers {
                 if case .dropped = inputPair.continuation.yield(AnalyzerInput(buffer: tail)) {
@@ -493,7 +493,7 @@ public actor AppleSpeechService: SpeechTranscribing {
                 throw LerroError.speechUnavailable("语音资源暂未就绪，请稍后重试。")
             }
         case .unsupported:
-            throw LerroError.speechUnavailable("语言资源不受支持")
+            throw LerroError.speechUnavailable("当前语言不受支持，请在设置中更换听写语言")
         @unknown default:
             throw LerroError.speechUnavailable("语言资源状态未知")
         }
@@ -512,7 +512,7 @@ public actor AppleSpeechService: SpeechTranscribing {
             return LanguageResourceStatus(
                 state: .ready,
                 sourceLanguageIdentifier: locale.identifier,
-                message: "语音资源已准备"
+                message: "语音资源已就绪"
             )
         }
         let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
@@ -521,7 +521,7 @@ public actor AppleSpeechService: SpeechTranscribing {
             return LanguageResourceStatus(
                 state: .ready,
                 sourceLanguageIdentifier: locale.identifier,
-                message: "语音资源已准备"
+                message: "语音资源已就绪"
             )
         case .supported:
             return LanguageResourceStatus(
@@ -607,7 +607,7 @@ public actor AppleSpeechService: SpeechTranscribing {
             return
         }
         guard let audioUnit = inputNode.audioUnit else {
-            throw LerroError.speechUnavailable("无法连接所选麦克风")
+            throw LerroError.speechUnavailable("无法连接所选麦克风，请检查设备或重新选择")
         }
         var mutableDeviceID = deviceID
         let status = AudioUnitSetProperty(

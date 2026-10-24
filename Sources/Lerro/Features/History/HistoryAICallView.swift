@@ -207,7 +207,7 @@ struct HistoryAICallView: View {
     // MARK: What the model saw
 
     private var seenBlock: some View {
-        block("AI 看到了什么") {
+        block("发给 AI 的内容") {
             Grid(alignment: .topLeading, horizontalSpacing: 8, verticalSpacing: 7) {
                 if let context {
                     seenRow(symbol: "mic", label: "你说的话") { valueText(context.transcript) }
@@ -230,7 +230,7 @@ struct HistoryAICallView: View {
                         seenRow(
                             symbol: "character.book.closed",
                             label: "词典",
-                            link: "去词典",
+                            link: "打开词典",
                             action: { session.destination = .dictionary }
                         ) {
                             AIChipFlow {
@@ -370,7 +370,7 @@ struct HistoryAICallView: View {
     private var costBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text("花了多少")
+                Text("费用")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(LerroTheme.secondaryText)
                     .accessibilityAddTraits(.isHeader)
@@ -380,7 +380,7 @@ struct HistoryAICallView: View {
                         showsCostDetail.toggle()
                     } label: {
                         HStack(spacing: 4) {
-                            Text("怎么算的")
+                            Text("计算方式")
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 9, weight: .semibold))
                                 .rotationEffect(.degrees(showsCostDetail ? 90 : 0))
@@ -412,7 +412,7 @@ struct HistoryAICallView: View {
             return HistoryPresentation.localized("DeepSeek 没有返回用量", locale: locale)
         }
         guard let cost else {
-            return HistoryPresentation.localized("这个模型没有价格记录，无法估算费用", locale: locale)
+            return HistoryPresentation.localized("未收录该模型的价格，无法估算费用", locale: locale)
         }
         let amount = Self.amount(cost.total, currency: cost.currency)
         guard cost.total > 0 else {
@@ -422,7 +422,7 @@ struct HistoryAICallView: View {
             .number.locale(locale).precision(.significantDigits(1...2))
         )
         return LerroInterfaceLocalization.format(
-            "约 %@，1 块钱大约能用 %@ 次。",
+            "约 %@，1 元约可用 %@ 次。",
             locale: locale,
             arguments: amount,
             uses

@@ -1004,7 +1004,7 @@ struct AppSessionCoreFlowTests {
 
         #expect(await harness.delivery.values() == ["raw transcript"])
         #expect(harness.session.hudDeliveryFeedback == .deliveredRawFallback)
-        #expect(harness.session.hudFallbackMessage == "DeepSeek 余额用完了，这次写的是原文")
+        #expect(harness.session.hudFallbackMessage == "DeepSeek 余额已用完，本次写入的是原文")
         #expect(harness.session.aiStatus == .outOfBalance)
     }
 
@@ -1038,7 +1038,7 @@ struct AppSessionCoreFlowTests {
         #expect(await waitUntil { harness.session.phase == .listening })
         harness.session.toggleCapture(.translation)
         #expect(await waitUntil { harness.session.phase == .failed })
-        #expect(harness.session.captureError == "DeepSeek 余额用完了")
+        #expect(harness.session.captureError == "DeepSeek 余额已用完，请充值后再用")
         #expect(await harness.delivery.values().isEmpty)
         #expect(harness.session.aiStatus == .outOfBalance)
     }

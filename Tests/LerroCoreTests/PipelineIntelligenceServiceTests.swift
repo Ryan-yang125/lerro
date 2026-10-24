@@ -55,7 +55,7 @@ struct PipelineIntelligenceServiceTests {
                 Issue.record("Received an unexpected error: \(error)")
                 return
             }
-            #expect(message == "远程模型没有生成有效内容")
+            #expect(message == "AI 没有返回有效内容")
         }
     }
 

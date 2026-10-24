@@ -32,7 +32,7 @@ public extension SpeechTranscribing {
         LanguageResourceStatus(
             state: .ready,
             sourceLanguageIdentifier: localeIdentifier,
-            message: "语音资源已准备"
+            message: "语音资源已就绪"
         )
     }
 

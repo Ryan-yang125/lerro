@@ -16,7 +16,7 @@ struct HomeLearningCard: View {
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
                 Button(action: openDictionary) {
-                    Text("去词典")
+                    Text("打开词典")
                         .font(LerroFont.caption)
                         .foregroundStyle(LerroTheme.accentText)
                 }
@@ -45,9 +45,9 @@ struct HomeLearningCard: View {
 
     private var title: String {
         summary.learnedTerms.isEmpty
-            ? LerroInterfaceLocalization.string("这周的识别纠正", locale: locale)
+            ? LerroInterfaceLocalization.string("本周识别纠正", locale: locale)
             : LerroInterfaceLocalization.format(
-                "这周 Lerro 学会了 %lld 个词",
+                "本周 Lerro 自动记住了 %lld 个词",
                 locale: locale,
                 arguments: summary.learnedTerms.count
             )

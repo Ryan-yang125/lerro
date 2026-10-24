@@ -361,7 +361,7 @@ final class AppSession {
         do {
             try await applyRetentionAndClean(preferences.historyRetention, now: .now)
         } catch {
-            currentError = userFacingError(error, context: "本地数据处理失败")
+            currentError = userFacingError(error, context: "本地数据处理失败，请重试")
         }
         await refreshData()
         await refreshLanguageResources()
@@ -466,7 +466,7 @@ final class AppSession {
                 speechResourceStatus = LanguageResourceStatus(
                     state: .failed,
                     sourceLanguageIdentifier: source,
-                    message: userFacingError(error, context: "语音识别暂不可用")
+                    message: userFacingError(error, context: "语音识别暂不可用，请稍后重试")
                 )
             }
             if speechPreparationRequestID == requestID {
@@ -670,7 +670,7 @@ final class AppSession {
                 && $0.displayName == displayName
         }
         guard confirmed else {
-            if currentError == nil { currentError = "快捷键保存后未通过本地校验" }
+            if currentError == nil { currentError = "快捷键无效，请重新设置" }
             return false
         }
         return true
@@ -835,7 +835,7 @@ final class AppSession {
         guard preferenceSaveQueue.confirmed.remoteProvider.apiKey == key,
               preferences.remoteProvider.apiKey == key,
               preferences.intelligenceMode == .remote else {
-            return .failed(currentError ?? localized("设置保存失败"))
+            return .failed(currentError ?? localized("设置保存失败，请重试"))
         }
 
         if let balance {
@@ -1030,7 +1030,7 @@ final class AppSession {
             do {
                 try await dependencies.recoveryText.copyForRecovery(recoveryPresentation.text)
             } catch {
-                currentError = userFacingError(error, context: "复制失败")
+                currentError = userFacingError(error, context: "复制失败，请重试")
             }
         }
     }
@@ -1079,7 +1079,7 @@ final class AppSession {
                 }
                 await refreshDictionaryAndUsage()
             } catch {
-                currentError = userFacingError(error, context: "撤销词典学习失败")
+                currentError = userFacingError(error, context: "撤销失败，请重试")
             }
         }
     }
@@ -1157,7 +1157,7 @@ final class AppSession {
                         try await applyRetentionAndClean(snapshot.historyRetention, now: .now)
                         await refreshHistoryAndUsage()
                     } catch {
-                        currentError = userFacingError(error, context: "本地数据处理失败")
+                        currentError = userFacingError(error, context: "本地数据处理失败，请重试")
                     }
                 }
                 if let next {
@@ -1293,7 +1293,7 @@ final class AppSession {
                 try await deleteAudioFile(relativePath: entry.audioRelativePath)
                 try await dependencies.history.delete(id: entry.id)
             } catch {
-                currentError = userFacingError(error, context: "本地数据处理失败")
+                currentError = userFacingError(error, context: "本地数据处理失败，请重试")
             }
             await refreshHistoryAndUsage()
         }
@@ -1310,7 +1310,7 @@ final class AppSession {
                 try await dependencies.termLearning.deleteAll()
                 termLearningState = .empty
             } catch {
-                currentError = userFacingError(error, context: "本地数据处理失败")
+                currentError = userFacingError(error, context: "本地数据处理失败，请重试")
             }
             await refreshHistoryAndUsage()
             await refreshHomeStatistics()
@@ -1321,7 +1321,7 @@ final class AppSession {
         do {
             return try await dependencies.aiUsage.records(since: since)
         } catch {
-            currentError = userFacingError(error, context: "本地数据处理失败")
+            currentError = userFacingError(error, context: "本地数据处理失败，请重试")
             return []
         }
     }
@@ -1330,7 +1330,7 @@ final class AppSession {
         do {
             try await dependencies.aiUsage.deleteAll()
         } catch {
-            currentError = userFacingError(error, context: "本地数据处理失败")
+            currentError = userFacingError(error, context: "本地数据处理失败，请重试")
         }
     }
 
@@ -1419,7 +1419,7 @@ final class AppSession {
             }
             try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
         } catch {
-            currentError = userFacingError(error, context: "音频导出失败")
+            currentError = userFacingError(error, context: "音频导出失败，请重试")
         }
     }
 
@@ -1447,7 +1447,7 @@ final class AppSession {
             hotkeyDispatchEpoch &+= 1
             isHotkeyMonitorStarted = false
             if reportError {
-                currentError = userFacingError(error, context: "快捷键服务启动失败")
+                currentError = userFacingError(error, context: "快捷键服务启动失败，请重新打开 Lerro")
             }
         }
     }
@@ -1668,7 +1668,7 @@ final class AppSession {
             return
         }
         guard dependencies.startupStorageError == nil else {
-            currentError = "本地数据目录尚未准备完成"
+            currentError = "本地存储尚未就绪，请稍后重试"
             return
         }
         guard !isCleaningCapture else { return }
@@ -1784,7 +1784,7 @@ final class AppSession {
             speechResourceStatus = LanguageResourceStatus(
                 state: .ready,
                 sourceLanguageIdentifier: preferences.recognitionLocaleIdentifier,
-                message: "语音资源已准备"
+                message: "语音资源已就绪"
             )
             let tone = resolvedTone(bundleIdentifier: context.bundleIdentifier)
             let session = CaptureSession(
@@ -1889,7 +1889,7 @@ final class AppSession {
                 do {
                     try await deleteAudioFile(relativePath: recordedAudioRelativePath)
                 } catch {
-                    currentError = userFacingError(error, context: "本地数据处理失败")
+                    currentError = userFacingError(error, context: "本地数据处理失败，请重试")
                 }
                 return
             }
@@ -1965,7 +1965,7 @@ final class AppSession {
                 if session.mode == .dictation {
                     usedRawFallback = true
                     if case LerroError.insufficientBalance = error {
-                        fallbackMessage = localized("DeepSeek 余额用完了，这次写的是原文")
+                        fallbackMessage = localized("DeepSeek 余额已用完，本次写入的是原文")
                     }
                     result = try rawResult(for: request, task: task)
                 } else {
@@ -2589,7 +2589,7 @@ final class AppSession {
                 referencedRelativePaths: Set(allEntries.compactMap(\.audioRelativePath))
             )
         } catch {
-            currentError = userFacingError(error, context: "本地数据处理失败")
+            currentError = userFacingError(error, context: "本地数据处理失败，请重试")
         }
     }
 
@@ -2720,7 +2720,7 @@ final class AppSession {
             hudDeliveryFeedback = .deliveredRawFallback
         case "hud-delivered-fallback-balance":
             activeSession = visualFixtureSession()
-            hudFallbackMessage = localized("DeepSeek 余额用完了，这次写的是原文")
+            hudFallbackMessage = localized("DeepSeek 余额已用完，本次写入的是原文")
             hudDeliveryFeedback = .deliveredRawFallback
         case "hud-error":
             phase = .failed

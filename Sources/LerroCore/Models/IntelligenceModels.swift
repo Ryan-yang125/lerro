@@ -222,7 +222,7 @@ public enum LerroError: LocalizedError, Sendable {
         case .speechUnavailable(let message):
             "语音识别暂不可用：\(message)"
         case .emptyTranscription:
-            "没有识别到语音"
+            "没有识别到语音，请重试"
         case .secureField:
             "为保护敏感信息，密码输入框中已停用语音输入"
         case .insertionFailed(let message):
@@ -234,9 +234,9 @@ public enum LerroError: LocalizedError, Sendable {
         case .remoteUnavailable(let message):
             "远程模型暂不可用：\(message)"
         case .insufficientBalance:
-            "DeepSeek 余额用完了"
+            "DeepSeek 余额已用完，请充值后再用"
         case .invalidAPIKey:
-            "API Key 无效或没有访问权限"
+            "API Key 无效或没有权限，请在设置中检查"
         case .cancelled:
             "已取消"
         }

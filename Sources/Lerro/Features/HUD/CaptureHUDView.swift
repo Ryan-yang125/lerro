@@ -413,16 +413,16 @@ struct CaptureHUDView: View {
             case .translation: "正在翻译"
             }
         case .deliveredRawFallback: session.hudFallbackMessage ?? "AI 未响应，已写入原文"
-        case .error: session.captureError ?? "听写失败，可以重试"
-        case .recovery: "写入失败，内容已复制到剪贴板"
+        case .error: session.captureError ?? "听写失败，请重试"
+        case .recovery: "写入失败，已复制到剪贴板"
         case .dictionaryLearned: "已将修正加入词典"
         }
     }
 
     private var handsFreeAccessibilityLabel: String {
         switch session.activeMode {
-        case .dictation: "已锁定，免按住听写进行中"
-        case .translation: "已锁定，免按住翻译进行中"
+        case .dictation: "免按住听写中"
+        case .translation: "免按住翻译中"
         }
     }
 

@@ -20,7 +20,7 @@ struct HomeAIOfferCard: View {
                     }
                     .buttonStyle(LerroButtonStyle(.primary, compact: true))
                     Button(action: dismiss) {
-                        Text("不用了")
+                        Text("暂不开启")
                     }
                     .buttonStyle(LerroButtonStyle(.secondary, compact: true))
                 }

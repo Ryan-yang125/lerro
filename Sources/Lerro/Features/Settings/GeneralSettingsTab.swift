@@ -24,7 +24,7 @@ struct GeneralSettingsTab: View {
 
             Section {
                 Toggle("提示音", isOn: $session.preferences.playsCaptureSounds)
-                Toggle("在 Dock 中显示", isOn: $session.preferences.showInDock)
+                Toggle("在程序坞中显示", isOn: $session.preferences.showInDock)
                 Toggle("登录时启动", isOn: $session.preferences.launchAtLogin)
             }
         }

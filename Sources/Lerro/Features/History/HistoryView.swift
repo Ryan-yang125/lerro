@@ -57,7 +57,7 @@ struct HistoryView: View {
                 Button("删除", role: .destructive) { delete(entry) }
                 Button("取消", role: .cancel) {}
             } message: { _ in
-                Text("这条记录和它的录音会被永久删除。")
+                Text("这条记录及其录音将被永久删除。")
             }
     }
 

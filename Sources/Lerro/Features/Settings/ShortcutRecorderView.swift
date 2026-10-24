@@ -44,7 +44,7 @@ enum ShortcutRecorderPolicy {
             return "单独字母、数字、空格和重音符会影响日常输入，请选择修饰键或组合键。"
         }
         if isSystemReserved(keyCode: keyCode, flags: primary) {
-            return "这个组合由 macOS 或常用编辑命令使用，请选择其他快捷键。"
+            return "这个组合已被系统或常用编辑操作占用，请选择其他快捷键。"
         }
         return nil
     }
@@ -455,7 +455,7 @@ struct ShortcutRecorderCard: View {
         VStack(alignment: .leading, spacing: 14) {
             Picker("触发方式", selection: activationBinding) {
                 Text("按住说话").tag(ShortcutActivation.hold)
-                Text("按一下开关").tag(ShortcutActivation.toggle)
+                Text("按一下开始或结束").tag(ShortcutActivation.toggle)
             }
             .pickerStyle(.segmented)
             .accessibilityHint(localized("选择松开后完成，或再次按下后完成"))
@@ -623,7 +623,7 @@ struct ShortcutRecorderCard: View {
         } else {
             state = localized("检测已暂停")
         }
-        let mode = localized(activation == .hold ? "按住说话" : "按一下开关")
+        let mode = localized(activation == .hold ? "按住说话" : "按一下开始或结束")
         return String(
             format: localized("快捷键状态：%@，%@，%@"),
             locale: locale,
